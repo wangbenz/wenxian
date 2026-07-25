@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+const backendTarget = process.env.VITE_DEV_API_PROXY ?? "http://127.0.0.1:18080";
+
 export default defineConfig({
   build: {
     outDir: "dist/client",
@@ -10,7 +12,7 @@ export default defineConfig({
     allowedHosts: ["terminal.local"],
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8080",
+        target: backendTarget,
         changeOrigin: true,
       },
     },

@@ -25,7 +25,7 @@
 - Keep the scene content vertically scrollable while the action composer and primary navigation remain fixed.
 - Use browser-native focus and keyboard behavior. When the composer is focused, hide the bottom navigation so it does not compete with the soft keyboard.
 - Every control must remain keyboard accessible and have an accessible name.
-- Preserve server persistence with graceful local fallback.
+- Preserve server persistence with a read-only browser cache when offline. Never run a local rules Agent in place of DeepSeek.
 
 ## Verification
 

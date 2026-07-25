@@ -1,6 +1,6 @@
 # 问仙录 H5 试玩
 
-响应式对话式修仙文字游戏 H5。页面直接占满浏览器视口，不使用手机设备套壳；快捷行动与自由输入都会推进统一世界时间，并同步角色、纪事和线索状态。
+响应式对话式修仙文字游戏 H5。世界观固定为「玄墟界」，玩家命名并选择种族后，由 DeepSeek V4 Pro 生成三种开局命格；之后通过快捷选择或自由输入推进自己的单人世界线。同一命卷保存连续 Agent 消息、统一世界状态和逐回合审计。
 
 ## 项目结构
 
@@ -13,12 +13,18 @@ wenxian/
 
 ## 本地运行
 
+应用运行时使用 MySQL 8。先创建 `wenxian` 数据库和独立应用账号，再复制 `backend/.env.example` 中的数据库变量，或在被 Git 忽略的 `backend/src/main/resources/application-secret.yml` 中配置连接。Spring Boot 启动时会执行 `schema.sql` 自动补齐表结构；不要把数据库密码提交到仓库。
+
 先启动 Java 后端：
 
 ```bash
 cd backend
 mvn spring-boot:run
 ```
+
+当前本地 DeepSeek 与 MySQL 配置位于被 Git 忽略的 `backend/src/main/resources/application-secret.yml`。也可以使用环境变量覆盖。密钥和数据库密码都不会下发给 H5。
+
+内部试玩默认邀请码为 `WENXIAN-LOCAL`，可通过 `WENXIAN_INVITE_CODE` 环境变量替换。首次使用邮箱和邀请码登记，之后该邮箱可以直接进入；这只是早期准入机制，不等同于邮箱所有权验证。
 
 再启动 H5 前端：
 
@@ -28,7 +34,7 @@ npm ci
 npm run dev -- --host 127.0.0.1 --port 4173
 ```
 
-前端通过 Vite 将 `/api` 代理到 `http://127.0.0.1:8080`。后端不可用时页面只展示浏览器缓存，不会在前端执行另一套规则。
+前端通过 Vite 将 `/api` 代理到 `http://127.0.0.1:18080`。如需更换开发端口，可在启动前设置 `VITE_DEV_API_PROXY`。后端不可用时页面只展示浏览器缓存，不会在前端执行另一套规则。
 
 ## 验证
 
@@ -45,4 +51,4 @@ npm run test:sites
 - [设定与玩法](docs/game-design.md)
 - [Agent 与数据架构](docs/architecture.md)
 
-试玩版使用 Java 规则 Agent：行动、时间推进、人物变化和存档均由 Spring Boot 后端裁决，数据写入 `backend/.data/game-saves.json`。后续可将规则 Agent 替换为模型 Agent，并将 JSON 存档替换为 PostgreSQL。
+试玩版使用 DeepSeek 作为唯一剧情 Agent；Spring Boot 负责登录、工具执行、输出校验、时间推进和权威存档。应用数据写入 MySQL；单元测试使用内存 H2，测试数据不会进入正式库。

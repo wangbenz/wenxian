@@ -1,73 +1,110 @@
 package com.wenxian.game.engine;
 
-import com.wenxian.game.model.ApiModels.Choice;
+import com.wenxian.game.model.ApiModels.BootstrapResponse;
+import com.wenxian.game.model.ApiModels.GoalView;
+import com.wenxian.game.model.ApiModels.RaceView;
 import com.wenxian.game.model.GameState;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public final class GameCatalog {
     private GameCatalog() {}
 
-    private static final Map<String, List<Choice>> CHOICES = Map.of(
-            "alley", List.of(
-                    new Choice("ask-credit", "请求赊药", "以三日为限，押上你的去路", "default"),
-                    new Choice("trade-intel", "交换北山情报", "把你父亲留下的秘密当作筹码", "default"),
-                    new Choice("leave", "离开后巷", "先回去确认妹妹的病情", "default")
-            ),
-            "bargain", List.of(
-                    new Choice("accept-job", "接下试药差事", "今夜去城南义庄，替许百川取一只药匣", "default"),
-                    new Choice("press-terms", "继续压价", "要求他先交出半株赤心草", "default"),
-                    new Choice("walk-away", "拒绝交易", "保住自己，但妹妹只剩两天", "default")
-            ),
-            "mountain", List.of(
-                    new Choice("follow-mark", "追查灰色印记", "它与父亲失踪那夜的车辙一致", "default"),
-                    new Choice("sell-map", "只卖地图", "换药后不再过问北山", "default"),
-                    new Choice("hide-clue", "收回情报", "许百川已经看出你有所隐瞒", "default")
-            ),
-            "home", List.of(
-                    new Choice("use-medicine", "先用旧药压病", "能拖半日，但会耗尽家中药材", "default"),
-                    new Choice("seek-doctor", "去请陈郎中", "需要十二文诊金", "default"),
-                    new Choice("return-alley", "折返赌坊后巷", "许百川或许还未离开", "default")
-            ),
-            "shrine", List.of(
-                    new Choice("open-box", "打开无名药匣", "匣内有活物般的敲击声", "danger"),
-                    new Choice("take-token", "只取义庄木牌", "以证据换药，不碰匣中之物", "default"),
-                    new Choice("retreat", "立刻退出义庄", "承认这不是凡人该碰的机缘", "default")
-            )
-    );
-
-    public static List<Choice> choicesFor(String sceneId) {
-        return CHOICES.getOrDefault(sceneId, CHOICES.get("alley"));
+    public static BootstrapResponse bootstrap() {
+        return new BootstrapResponse(
+                "问仙录", fixedWorld(),
+                List.of(
+                        new RaceView("HUMAN", "人族", "寿元短暂，却拥有最完整的宗门、丹道与传承体系。",
+                                List.of("传承选择丰富", "擅长组织与交易"), List.of("寿元最短", "凡俗身份束缚深"), "凡俗约六十至九十年"),
+                        new RaceView("DEMON", "妖族", "依靠血脉与漫长岁月成长，肉身强横，却常被人族视作材料与祸患。",
+                                List.of("肉身强横", "血脉可觉醒"), List.of("传承稀缺", "容易遭到猎杀"), "通常高于同境人族"),
+                        new RaceView("SPIRIT", "灵族", "由山川、草木或器物孕育，亲近天地规则，却难以离开本源之地。",
+                                List.of("规则感知敏锐", "天生灵性"), List.of("本源受限", "容易被炼化利用"), "因本源差异而异")
+                ),
+                List.of(
+                        new GoalView("LONGEVITY", "求长生", "不惜代价验证仙路是否真实存在。"),
+                        new GoalView("KINSHIP", "护亲友", "修行首先是为了守住不愿失去的人。"),
+                        new GoalView("POWER", "求力量", "不再任由宗门、家族或强者决定命运。"),
+                        new GoalView("TRUTH", "探仙路", "追查绝天之变与飞升断绝的真相。"),
+                        new GoalView("FREEDOM", "求自在", "不愿被血脉、契约或宗门定义一生。")
+                ),
+                List.of("凡俗", "引气", "筑基", "金丹", "元婴", "化神", "炼虚", "合道")
+        );
     }
 
-    public static GameState initialState() {
+    public static GameState.WorldProfile fixedWorld() {
+        GameState.WorldProfile world = new GameState.WorldProfile();
+        world.id = "xuanyu-world";
+        world.title = "玄墟界";
+        world.era = "绝天之变后三千年";
+        world.summary = "三千年前，最后一批飞升者在天门前失踪。此后再无人能证明仙界存在，宗门却仍以长生之名争夺灵脉、血脉与凡人性命。问仙录记录的不是天命之子，而是每一个曾向仙路发问的人。";
+        world.cultivationLaw = "修行需要资质、资源、传承与时间。境界提供下限，功法、心境、情报和克制关系决定生死。任何力量都必须有来源与代价。";
+        world.dangerRule = "世界不会等待主角。人物会衰老、突破、背叛和死亡；错失的机缘不会原地停留，死亡也不会自动回档。";
+        world.regions = List.of("东陆九州", "北荒妖原", "南溟群岛", "西境灵墟");
+        world.factions = List.of("九宗盟", "百妖庭", "灵墟古族", "问天司");
+        world.generatedBy = "fixed-canon:v0.1";
+        return world;
+    }
+
+    public static GameState start(GameState setup, String protagonistId) {
+        GameState.ProtagonistOption option = setup.protagonistOptions.stream()
+                .filter(candidate -> candidate.id.equals(protagonistId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("未知主角命格"));
+        GameState.OpeningSeed opening = option.opening;
         GameState state = new GameState();
-        state.sceneId = "alley";
-        state.minute = 14 * 60 + 20;
-        state.day = 6;
-        state.turn = 0;
-        state.narrative = List.of(
-                "许百川将半株赤心草收回药箱。",
-                "远处的叫喊越来越近，赌坊的人正在搜你。",
-                "妹妹的病情只能再拖两天。"
-        );
-        state.signals = List.of("商队已离镇", "赌坊警觉上升");
-        state.player = new GameState.PlayerState("林砚", "凡人", "寒骨未测", 68, 23, 7, 36);
-        state.characters = new java.util.ArrayList<>(List.of(
-                new GameState.CharacterRecord("xu-baichuan", "许百川", "行脚药商", "戒备，准备离镇", "赌坊后巷", "可交易", 14 * 60 + 20),
-                new GameState.CharacterRecord("lin-xiaohe", "林小禾", "妹妹", "寒症加重，最多再拖两天", "柳溪村西屋", "至亲", 13 * 60 + 40),
-                new GameState.CharacterRecord("zhou-liu", "周六", "长胜赌坊管事", "正在搜人", "柳溪村东街", "敌视", 14 * 60 + 10)
-        ));
-        state.events = new java.util.ArrayList<>(List.of(
-                new GameState.ChronicleEvent("event-0", "赤心草被收回", "许百川拒绝按原价卖药，妹妹的救命药再次落空。", 14 * 60 + 20, "risk"),
-                new GameState.ChronicleEvent("event--1", "赌坊开始搜人", "你在赌局中看穿骰盅，长胜赌坊认定你出了千。", 13 * 60 + 55, "world")
-        ));
-        state.threads = new java.util.ArrayList<>(List.of(
-                new GameState.QuestThread("medicine", "取得赤心草", "只剩两日", 72),
-                new GameState.QuestThread("gambling", "摆脱赌坊追查", "搜捕范围扩大", 61),
-                new GameState.QuestThread("mountain", "父亲与北山灰印", "线索未证实", 44)
-        ));
+        state.saveId = setup.saveId;
+        state.phase = "playing";
+        state.world = fixedWorld();
+        state.worldYear = 3001;
+        state.protagonistOptions = new ArrayList<>();
+        state.sceneId = opening.sceneId;
+        state.sceneTitle = opening.sceneTitle;
+        state.currentLocation = opening.location;
+        state.day = opening.day;
+        state.minute = opening.minute;
+        state.narrative = new ArrayList<>(opening.narrative);
+        state.signals = new ArrayList<>(opening.signals);
+        state.choices = new ArrayList<>(opening.choices);
+        state.player = new GameState.PlayerState(option.name, option.race, option.gender, option.age,
+                lifespanFor(option.race), option.identity, option.lifeGoal, option.goal, option.burden,
+                "凡俗", option.constitution, option.vitality, option.silver, option.insight, option.suspicion);
+        state.characters = new ArrayList<>(opening.characters);
+        state.threads = new ArrayList<>(opening.threads);
+        state.inventory = initialInventory(option);
+        state.abilities = initialAbilities(option);
+        state.events = new ArrayList<>(List.of(new GameState.ChronicleEvent(
+                "event-origin", "命卷开启 · " + option.name,
+                option.identity + "选择在" + opening.location + "面对自己的第一场因果。",
+                3001 * 360 * 1440 + Math.max(0, opening.day - 1) * 1440 + opening.minute, "world"
+        )));
         return state;
+    }
+
+    private static int lifespanFor(String race) {
+        return switch (race) {
+            case "DEMON" -> 160;
+            case "SPIRIT" -> 240;
+            default -> 75;
+        };
+    }
+
+    private static ArrayList<GameState.InventoryItem> initialInventory(GameState.ProtagonistOption option) {
+        ArrayList<GameState.InventoryItem> result = new ArrayList<>();
+        result.add(new GameState.InventoryItem("item-origin-token", "origin-token", "身世旧物", "KEY_ITEM",
+                "凡物", 1, "与这具身份的过去相连，价值尚未显现。", true));
+        if (option.silver > 0) {
+            result.add(new GameState.InventoryItem("item-copper", "copper-coin", "铜钱", "CURRENCY",
+                    "凡物", option.silver, "凡俗城镇通用的钱币。", false));
+        }
+        return result;
+    }
+
+    private static ArrayList<GameState.AbilityRecord> initialAbilities(GameState.ProtagonistOption option) {
+        ArrayList<GameState.AbilityRecord> result = new ArrayList<>();
+        result.add(new GameState.AbilityRecord("ability-origin-trait", "origin-trait", option.trait, "TALENT",
+                "初显", 1, "命格", "这不是无条件的优势，它会在合适的处境中产生作用。"));
+        return result;
     }
 }

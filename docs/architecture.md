@@ -1,83 +1,114 @@
 # Agent 与数据架构
 
-## 目标
-
-数据库维护真实世界，Agent 负责理解行动与演绎结果。叙事文本不是事实源，所有可持续变化必须来自结构化事件。
-
-试玩版本已拆成独立 React H5 与 Spring Boot 服务。前端只提交 `saveId + actionId/freeText`；Java 后端从磁盘读取权威状态、运行规则 Agent、推进统一时间，再把完整快照原子写入 `backend/.data/game-saves.json`。浏览器中的 `localStorage` 只是只读缓存，后端断开时不能继续裁决。
+## 职责边界
 
 ```text
-React H5 :4173
-      │ /api（Vite 开发代理）
-Spring Boot :8080
-      ├─ GameController：API 与输入校验
-      ├─ GameService：单轮事务边界
-      ├─ RuleAgentService：行动意图与剧情裁决
-      ├─ GameEngine：时间、事件、角色与任务补丁
-      └─ SaveStore：JSON 原子持久化
+React H5
+  └─ 展示页面、提交选择或自由行动
+
+Spring Boot
+  ├─ 邮箱/邀请码会话
+  ├─ 固定世界与姓名目录
+  ├─ 存档归属和统一时间
+  ├─ 输入、境界、物品与补丁校验
+  ├─ MySQL 8 权威数据库
+  └─ NarrativeAgent 接口
+       └─ DeepSeekGameplayAgentService
+            ├─ Prompt
+            ├─ AgentToolRegistry
+            └─ DeepSeek API
 ```
 
-## 单轮 Agent 合约
+Agent 不切换页面、不执行 SQL、不修改固定世界，也不能绕过 Java 直接提高境界或生成物品。它负责理解行动、读取必要状态、演绎 NPC、生成叙事、提出时间和结构化变化。
 
-输入至少包含：统一世界时间、当前场景、玩家状态、相关角色的玩家已知状态、相关历史事件、未解线索、玩家行动。
+## 数据持久化
 
-输出必须同时包含：
+当前应用数据库为 MySQL 8，单元测试使用隔离的内存 H2。已有表：
 
-```json
-{
-  "sceneId": "bargain",
-  "elapsed": 24,
-  "narrative": ["剧情正文"],
-  "signals": ["局势变化"],
-  "choices": [{ "id": "accept-job", "label": "接下差事" }],
-  "playerPatch": { "suspicion": 42 },
-  "event": { "title": "以命赊药", "kind": "decision" },
-  "characterPatch": { "id": "xu-baichuan", "state": "等待答复" },
-  "threadPatch": { "id": "medicine", "state": "得到一片药叶" }
+- `app_user`：试玩用户；
+- `invite_code`：邀请码、次数和状态；
+- `user_session`：HttpOnly Cookie 会话摘要；
+- `game_save`：用户唯一存档及结构化 JSON 快照；
+- `game_turn_request`：行动请求幂等记录。
+- `game_life_archive`：死亡后转世重开时封存的前世快照。
+- `agent_conversation`：一张命卷对应一个持续会话及滚动摘要；
+- `agent_message`：按顺序保存玩家与 Agent 的完整消息；
+- `game_turn`：保存行动、章节、选项、状态差量、Token 与延迟指标。
+
+测试服务器使用独立的 `wenxian` 数据库与最小权限应用账号。真实连接只保存在后端私有配置或部署环境变量中；生产/试玩运行不依赖本地 H2 文件，因此服务重启后数据仍由 MySQL 持久保存。
+
+快照保存当前权威状态，会话表负责叙事连续性，回合表负责审计与问题复现。上下文预算内会发送完整命卷消息；接近预算后，用权威状态和最近事件生成摘要并保留最近完整消息。DeepSeek 响应 ID 只用于诊断，不承担会话恢复。
+
+## 自定义 Agent Runtime
+
+第一阶段不引入 LangChain，核心接口为：
+
+```java
+public interface NarrativeAgent {
+    AgentTurn resolve(String action, GameState state, List&lt;Map&lt;String, Object&gt;&gt; history);
+    String mode();
 }
 ```
 
-后端应先校验时间、角色 ID、数值边界和历史冲突，再以事务写入；校验失败时让 Agent 修正，不直接把矛盾写进存档。
+DeepSeek V4 Pro 调用采用 OpenAI 兼容 Tool Calls。Java 会主动附带当前权威状态，常规回合通常一次模型请求完成；只有追查细节时才使用只读工具：
 
-## 建议的数据表
+- `get_player_state`
+- `get_inventory`
+- `get_abilities`
+- `get_character`
+- `get_recent_events`
+- `get_active_threads`
 
-第一版保持精简：
+工具执行时由 Java 隐式绑定当前用户和存档，Agent 无法读取其他玩家或尚未被玩家认识的人物。最终裁决以 JSON 返回，经过白名单和数值范围校验后才写入数据库。
 
-- `game_save`：存档与当前世界时间。
-- `character`：每个正式登场角色一条主档案。
-- `character_state_history`：境界、位置、伤势、身份等历史变化。
-- `world_event`：所有真实变化的事件源。
-- `event_character`：事件参与者与角色变化。
-- `player_knowledge`：玩家已经知道的事实，与真实状态隔离。
-- `quest_thread`：承诺、危机、任务和未解线索。
-- `relationship`：人物关系、信任与最后互动时间。
+后续接入 LangChain4j、Spring AI 或独立 LangChain 服务时，只替换 `NarrativeAgent` 实现；工具 JSON Schema、游戏接口、数据库校验和事务边界继续保留。
 
-## 统一时间线
+## 单轮流程
 
-Agent 只能返回 `elapsed`，不能直接决定最终日期。服务端负责：
+```text
+玩家行动
+→ 基础输入门控
+→ 检查存档归属、版本和 requestId
+→ 加载同一命卷历史与当前权威状态
+→ DeepSeek V4 Pro 生成完整小章节，按需调用只读工具
+→ 返回叙事和结构化补丁
+→ Java 校验角色 ID、境界跨度、数值、物品和天赋声明一致性
+→ 推进统一时间
+→ 原子写入事件、存档、会话消息和回合审计
+→ 返回新场景、选项及页面失效数据
+```
 
-1. 基于当前时间累加经过时长；
-2. 处理跨日、寿元与长期行动；
-3. 推进离场 NPC 的计划；
-4. 生成角色状态历史；
-5. 向叙事 Agent 提供「当前有效快照」。
+同一存档一次只处理一轮行动；`stateVersion` 防止旧页面覆盖新状态，`requestId` 防止网络重试造成重复生成。
 
-再次提到某角色时，先查询其主档案、上次确认时间、期间事件与玩家知识，再生成此刻的可见状态，避免人物因上下文切换而停滞或重置。
-
-## Agent 分层
-
-- 意图层：把自由文本转换为行动目标、对象、方式和约束。
-- 世界裁决层：读取数据、计算时间与结果，产出结构化补丁。
-- 叙事层：只依据裁决结果写剧情，不自行修改事实。
-- 校验层：检查境界、时间、死亡状态、物品归属与承诺冲突。
-
-生产版本可把当前规则 Agent 替换为模型 Agent；规则引擎仍保留，负责数值边界、时间计算和数据库事务。
+开局前三回合允许补完一项低阶先天天赋。Agent 若接受或修改玩家声明，必须同时提交 `abilityChange`；Java 拒绝“叙事承认但能力未落库”的裁决。受限能力记录次数、恢复规则、边界和代价，使用次数由 Java 扣减。
 
 ## 已实现 API
 
-- `GET /api/health`：Agent 与存储状态。
-- `GET /api/game?saveId=...`：读取或创建权威存档。
-- `POST /api/game/action`：提交行动，由服务端裁决并持久化。
-- `POST /api/game/reset`：重置当前试玩存档。
+```text
+POST   /api/v1/auth/login
+GET    /api/v1/auth/me
+POST   /api/v1/auth/logout
 
-当前 JSON 文件同时保存事件与最新快照，适合单机试玩。多人或线上环境下一步应替换为 PostgreSQL，并增加事务级行动幂等、角色历史表和玩家知识表。模型 Agent 只输出结构化补丁，仍不得直接操作数据库。
+GET    /api/v1/game/bootstrap
+POST   /api/v1/character-names/generate
+POST   /api/v1/character-names/validate
+
+POST   /api/v1/saves
+GET    /api/v1/saves/current
+GET    /api/v1/saves/{saveId}
+DELETE /api/v1/saves/{saveId}
+POST   /api/v1/saves/{saveId}/protagonist
+POST   /api/v1/saves/{saveId}/turns
+
+GET    /api/v1/saves/{saveId}/scene
+GET    /api/v1/saves/{saveId}/state
+GET    /api/v1/saves/{saveId}/character-sheet
+GET    /api/v1/saves/{saveId}/inventory
+GET    /api/v1/saves/{saveId}/abilities
+GET    /api/v1/saves/{saveId}/characters
+GET    /api/v1/saves/{saveId}/timeline
+GET    /api/v1/saves/{saveId}/threads
+GET    /api/v1/saves/{saveId}/world
+```
+
+DeepSeek API Key 只存在于后端配置。仓库中的 `application-secret.yml` 被 Git 忽略，H5 永远不会接收或保存该密钥。

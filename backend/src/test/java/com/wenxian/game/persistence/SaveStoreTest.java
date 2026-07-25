@@ -1,40 +1,62 @@
 package com.wenxian.game.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.wenxian.game.engine.GameEngine;
-import com.wenxian.game.engine.RuleAgentService;
-import com.wenxian.game.model.ApiModels.GameResponse;
-import com.wenxian.game.service.GameService;
+import com.wenxian.game.engine.GameCatalog;
+import com.wenxian.game.model.GameState;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 
-import java.nio.file.Path;
+import java.sql.Timestamp;
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SaveStoreTest {
-    @TempDir
-    Path tempDirectory;
-
     @Test
-    void persistsAndReloadsAuthoritativeSnapshot() throws Exception {
-        Path saveFile = tempDirectory.resolve("game-saves.json");
-        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-        GameEngine engine = new GameEngine(mapper);
-        SaveStore firstStore = new SaveStore(mapper, saveFile.toString());
-        firstStore.load();
-        GameService firstService = new GameService(firstStore, new RuleAgentService(), engine);
+    void persistsAndReloadsAuthoritativeSnapshot() {
+        EmbeddedDatabase database = new EmbeddedDatabaseBuilder()
+                .setType(EmbeddedDatabaseType.H2)
+                .addScript("schema-h2.sql")
+                .build();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            jdbc.update("""
+                    insert into app_user(id, email, status, registered_at, last_login_at)
+                    values ('user-test', 'test@example.com', 'ACTIVE', ?, ?)
+                    """, Timestamp.from(Instant.now()), Timestamp.from(Instant.now()));
+            ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+            SaveStore store = new SaveStore(jdbc, mapper);
+            AgentConversationStore conversations = new AgentConversationStore(jdbc, mapper);
+            GameState state = new GameState();
+            state.world = GameCatalog.fixedWorld();
+            state.phase = "playing";
+            state.sceneId = "persisted-scene";
+            store.put("persist-test-save", "user-test", state, 2);
+            String conversationId = conversations.ensure("persist-test-save", "deepseek-v4-pro");
+            conversations.append(conversationId, 0, "user", "选择命格", null, 0, 0);
+            conversations.append(conversationId, 0, "assistant", "命卷开启", "response-1", 10, 20);
 
-        GameResponse advanced = firstService.act("persist-test-save", "ask-credit", "");
-        assertEquals(1, advanced.revision());
+            assertEquals(2, conversations.loadHistory("persist-test-save", state).size());
+            assertTrue(conversationId.startsWith("conversation-"));
 
-        SaveStore restoredStore = new SaveStore(mapper, saveFile.toString());
-        restoredStore.load();
-        GameService restoredService = new GameService(restoredStore, new RuleAgentService(), engine);
-        GameResponse restored = restoredService.get("persist-test-save");
+            SaveStore.StoredSave restored = store.findOwned("persist-test-save", "user-test");
 
-        assertEquals("bargain", restored.state().sceneId);
-        assertEquals(1, restored.state().turn);
-        assertEquals(1, restored.revision());
+            assertEquals("persisted-scene", restored.state.sceneId);
+            assertEquals(2, restored.revision);
+            assertEquals("user-test", restored.userId);
+
+            restored.state.phase = "dead";
+            SaveStore.StoredSave dead = store.put("persist-test-save", "user-test", restored.state, 3);
+            store.archiveAndDelete(dead);
+
+            assertEquals(0, jdbc.queryForObject("select count(*) from game_save", Integer.class));
+            assertEquals(1, jdbc.queryForObject("select count(*) from game_life_archive", Integer.class));
+        } finally {
+            database.shutdown();
+        }
     }
 }

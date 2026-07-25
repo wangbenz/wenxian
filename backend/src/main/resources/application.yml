@@ -1,12 +1,39 @@
 server:
-  port: ${PORT:8080}
+  port: ${PORT:18080}
 
 spring:
   application:
     name: wenxian-game-backend
+  config:
+    import: optional:classpath:application-secret.yml
   jackson:
     default-property-inclusion: non_null
+  datasource:
+    url: ${GAME_DATABASE_URL:jdbc:mysql://127.0.0.1:3306/wenxian?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${GAME_DATABASE_USERNAME:wenxian_app}
+    password: ${GAME_DATABASE_PASSWORD:}
+    driver-class-name: ${GAME_DATABASE_DRIVER:com.mysql.cj.jdbc.Driver}
+    hikari:
+      connection-timeout: 10000
+      validation-timeout: 5000
+      maximum-pool-size: 5
+      minimum-idle: 1
+      idle-timeout: 180000
+      max-lifetime: 240000
+      keepalive-time: 60000
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
 
 game:
-  storage:
-    path: ${GAME_STORAGE_PATH:.data/game-saves.json}
+  invite:
+    bootstrap-code: ${WENXIAN_INVITE_CODE:WENXIAN-LOCAL}
+  auth:
+    session-days: ${WENXIAN_SESSION_DAYS:30}
+    secure-cookie: ${WENXIAN_SECURE_COOKIE:false}
+
+deepseek:
+  api-key: ${DEEPSEEK_API_KEY:}
+  base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+  model: ${DEEPSEEK_MODEL:deepseek-v4-pro}
