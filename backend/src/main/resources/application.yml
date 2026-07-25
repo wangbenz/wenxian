@@ -1,0 +1,12 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: wenxian-game-backend
+  jackson:
+    default-property-inclusion: non_null
+
+game:
+  storage:
+    path: ${GAME_STORAGE_PATH:.data/game-saves.json}
