@@ -43,7 +43,11 @@ const DEFAULT_DRAFT: CharacterDraft = {
 };
 
 function errorMessage(error: unknown) {
-  return error instanceof ApiError ? error.message : "连接后端失败，请稍后重试";
+  if (!(error instanceof ApiError)) return "命卷暂时无法响应，请稍后重试";
+  if ([502, 503, 504].includes(error.status) || /DeepSeek|Agent|Java|API|后端|模型/i.test(error.message)) {
+    return "天机暂时紊乱，本次变化没有写入命卷，请稍后重试";
+  }
+  return error.message;
 }
 
 function cacheSnapshot(snapshot: ApiSnapshot) {
@@ -101,7 +105,7 @@ function LoadingView() {
       <span className="ink-spinner" />
       <p className="eyebrow">READING THE JADE SLIP</p>
       <h1>正在检索命卷</h1>
-      <p>校验登录会话与服务器存档，不会在本地推演剧情。</p>
+      <p>正在核对身份与命卷归属，已有经历不会因此改变。</p>
     </section>
   );
 }
@@ -111,7 +115,7 @@ function DestinyLoadingOverlay({ stage }: { stage: AppStage }) {
     ? ["天机正在落笔", "为同一名字推演三种不同的凡俗人生"]
     : stage === "fate" ? ["命格已被选中", "正在从血脉、出身与所求中寻找先天灵光"]
       : ["天赋正在落印", "世界时间将从你入世的这一刻开始流动"];
-  return <div className="destiny-loading" role="status"><div className="destiny-orbit"><span /><i />问</div><p className="eyebrow">DEEPSEEK V4 PRO</p><strong>{copy[0]}</strong><small>{copy[1]}</small><div className="loading-ink-line"><i /></div></div>;
+  return <div className="destiny-loading" role="status"><div className="destiny-orbit"><span /><i />问</div><p className="eyebrow">FATE IS UNFOLDING</p><strong>{copy[0]}</strong><small>{copy[1]}</small><div className="loading-ink-line"><i /></div></div>;
 }
 
 function LoginView({
@@ -166,7 +170,7 @@ function LoginView({
           {isBusy ? "正在验明身份…" : "进入问仙录"}<ArrowRightIcon />
         </button>
       </form>
-      {(error || offline) && <p className="entry-error">{error || "后端暂时不可用，请启动 Java 服务后重试。"}</p>}
+      {(error || offline) && <p className="entry-error">{error || "命卷暂时无法开启，请稍后重试。"}</p>}
       <p className="entry-footnote">当前为小范围试玩准入，不会向该邮箱发送验证码或营销邮件。</p>
     </section>
   );
@@ -199,7 +203,7 @@ function CharacterCreationView({
         <p className="eyebrow">FIXED WORLD · SINGLE PLAYER</p>
         <div className="world-title-row">
           <div><h1>{bootstrap.world.title}</h1><span>{bootstrap.world.era}</span></div>
-          <i data-mode="deepseek">世界已定</i>
+          <i data-mode="fixed">世界已定</i>
         </div>
         <p className="world-summary">{bootstrap.world.summary}</p>
         <div className="world-pill-row">{bootstrap.world.regions.map((region) => <span key={region}>{region}</span>)}</div>
@@ -274,7 +278,7 @@ function CharacterCreationView({
           <textarea
             maxLength={160}
             onChange={(event) => onDraft({ preference: event.currentTarget.value })}
-            placeholder="例如：低起点、宗门线、重谋略；Agent 只会在固定世界内调整开局。"
+            placeholder="例如：低起点、宗门线、重谋略；命格只会在既定世界中展开。"
             rows={3}
             value={draft.preference}
           />
@@ -282,7 +286,7 @@ function CharacterCreationView({
 
         {error && <p className="entry-error">{error}</p>}
         <button className="primary-entry-button" disabled={isBusy || !draft.playerName.trim()} onClick={onCreate} type="button">
-          {isBusy ? "DeepSeek 正在推演三种命格…" : "生成三种命格"}<ArrowRightIcon />
+          {isBusy ? "天机正在推演三种命格…" : "生成三种命格"}<ArrowRightIcon />
         </button>
         <button className="text-button" disabled={isBusy} onClick={onLogout} type="button">退出当前邮箱</button>
       </section>
@@ -312,7 +316,7 @@ function FateSelectionView({
     <div className="onboarding-view">
       <section className="world-intro-card compact-world-card">
         <p className="eyebrow">THREE FATES · ONE TRUE TIMELINE</p>
-        <div className="world-title-row"><div><h1>{game.world.title}</h1><span>{game.world.era}</span></div><i data-mode="deepseek">DeepSeek 已推演</i></div>
+        <div className="world-title-row"><div><h1>{game.world.title}</h1><span>{game.world.era}</span></div><i data-mode="divined">命数已定</i></div>
         <p className="world-summary">姓名与种族已定，选择其中一段出身后，命卷才会正式开始流动。</p>
       </section>
       <section className="fate-selection" aria-labelledby="fate-title">
@@ -374,7 +378,7 @@ function AdventureView({ game, choices, isBusy, offline, error, onChoice }: { ga
           </button>
         ))}
       </section>
-      {offline && !isBusy && <div className="agent-thinking offline-note" role="status"><LightningBoltIcon /><span>当前为离线只读缓存，恢复后端后才能继续行动。</span></div>}
+      {offline && !isBusy && <div className="agent-thinking offline-note" role="status"><LightningBoltIcon /><span>命卷暂时无法续写，已有经历仍可查阅。</span></div>}
       {error && !isBusy && <p className="turn-error" role="alert">{error}</p>}
     </div>
   );
@@ -387,7 +391,7 @@ function AgentProgress() {
     const timer = window.setInterval(() => setPhase((current) => Math.min(phases.length - 1, current + 1)), 2200);
     return () => window.clearInterval(timer);
   }, []);
-  return <section className="chapter-generating" role="status"><span className="ink-spinner" /><div><small>V4 PRO · 命卷推演中</small><strong>{phases[phase]}</strong><p>本轮会推进一个完整小章节，完成后统一写入人物、天赋与世界时间。</p></div></section>;
+  return <section className="chapter-generating" role="status"><span className="ink-spinner" /><div><small>命卷推演中</small><strong>{phases[phase]}</strong><p>本轮会推进一个完整小章节，完成后统一写入人物、天赋与世界时间。</p></div></section>;
 }
 
 function CharacterView({ game }: { game: GameState }) {
@@ -421,7 +425,7 @@ function ChronicleView({ game }: { game: GameState }) {
   return (
     <div className="record-view">
       <div className="page-title-row"><div><p className="eyebrow">ONE WORLD · ONE TIMELINE</p><h1>纪事</h1></div><ClockIcon className="title-icon" /></div>
-      <section className="timeline-summary"><span>统一世界时</span><strong>{formatWorldTime(game.worldYear, game.day, game.minute)}</strong><p>所有人物状态、承诺与线索均由服务器沿同一时间轴保存。</p></section>
+      <section className="timeline-summary"><span>统一世界时</span><strong>{formatWorldTime(game.worldYear, game.day, game.minute)}</strong><p>所有人物状态、承诺与线索都沿着同一条世界时间线延续。</p></section>
       <section className="timeline" aria-label="事件时间线">{game.events.map((event, index) => <article className="timeline-event" data-kind={event.kind} key={event.id}><div className="timeline-time">{index === 0 ? "现在" : formatEventTime(event.at)}</div><div className="timeline-dot" /><div className="timeline-card"><h2>{event.title}</h2><p>{event.detail}</p><small>{event.kind === "risk" ? "风险变化" : event.kind === "gain" ? "获得线索" : event.kind === "decision" ? "玩家决策" : "世界事件"}</small></div></article>)}</section>
     </div>
   );
@@ -533,7 +537,7 @@ function WorldView({ game, syncMode, email, theme, onTheme, onReset, onLogout }:
       <section className="location-card"><div className="location-art" /><div className="location-copy"><span><SewingPinFilledIcon /> 当前位置</span><h2>{game.sceneTitle} · {game.currentLocation}</h2><p>{game.world.summary}</p></div></section>
       <section className="world-law-card"><p><strong>修行法则</strong>{game.world.cultivationLaw}</p><p><strong>生存法则</strong>{game.world.dangerRule}</p><div>{game.world.factions.map((faction) => <span key={faction}>{faction}</span>)}</div></section>
       <section className="record-section"><div className="section-label"><MagnifyingGlassIcon /><h2>未解线索</h2><span>{game.threads.length}</span></div><div className="thread-list">{game.threads.map((thread) => <article className="thread-card" key={thread.id}><div><h3>{thread.title}</h3><p>{thread.state}</p></div><span data-danger={thread.danger > 75 ? "high" : "normal"}>风险 {thread.danger}</span></article>)}</div></section>
-      <section className="agent-record-card"><span className="agent-dot" /><div><h2>{syncMode === "server" ? "DeepSeek Agent 已连接" : "离线只读"}</h2><p>{syncMode === "server" ? "Agent 负责叙事裁决，Java 负责规则、时间与存档。" : "缓存不会自行推进世界。"} 当前账号：{email || "未知"}</p></div></section>
+      <section className="agent-record-card"><span className="agent-dot" /><div><h2>{syncMode === "server" ? "本世命卷已同步" : "命卷暂时封存"}</h2><p>{syncMode === "server" ? "人物、纪事与未解线索均已妥善保存。" : "已有经历仍可查阅，暂时无法续写。"} 当前邮箱：{email || "未知"}</p></div></section>
       <section className="theme-card"><div><strong>阅读外观</strong><span>夜间模式采用月下宣纸，不改变游戏进度。</span></div><div className="theme-switch">{([["system", "跟随系统"], ["paper", "宣纸"], ["night", "月夜"]] as Array<[ThemeMode, string]>).map(([id, label]) => <button aria-pressed={theme === id} data-selected={theme === id} key={id} onClick={() => onTheme(id)} type="button">{label}</button>)}</div></section>
       <div className="world-actions"><button className="reset-button" onClick={onReset} type="button"><ReloadIcon />重开此世</button><button className="reset-button" onClick={onLogout} type="button">退出邮箱</button></div>
     </div>

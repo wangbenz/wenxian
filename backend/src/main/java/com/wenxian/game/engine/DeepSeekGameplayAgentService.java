@@ -48,7 +48,7 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
     @Override
     public AgentTurn resolve(String action, GameState state, List<Map<String, Object>> history) {
         if (!deepSeek.configured()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "DeepSeek Agent 尚未配置");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "命卷推演尚未开放");
         }
         long startedAt = System.nanoTime();
         Exception lastFailure = null;

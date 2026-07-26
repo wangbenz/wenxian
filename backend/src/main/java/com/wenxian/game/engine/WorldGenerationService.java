@@ -37,7 +37,7 @@ public class WorldGenerationService {
 
     public GameState generateFates(String saveId, String playerName, String race,
                                    String gender, String lifeGoal, String preference) {
-        if (!configured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "DeepSeek Agent 尚未配置");
+        if (!configured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "命卷推演尚未开放");
         try {
             String systemPrompt = """
                     你是《问仙录》的择命 Agent。只输出 JSON，不要 Markdown，不要解释。
@@ -74,7 +74,7 @@ public class WorldGenerationService {
         } catch (ResponseStatusException error) {
             throw error;
         } catch (Exception error) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "DeepSeek 命格生成失败", error);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "命格推演暂时中断，请稍后重试", error);
         }
     }
 
@@ -83,7 +83,7 @@ public class WorldGenerationService {
     }
 
     public List<GameState.AbilityRecord> generateTalentOptions(GameState state) {
-        if (!configured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "DeepSeek Agent 尚未配置");
+        if (!configured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "命卷推演尚未开放");
         try {
             int count = 1 + Math.floorMod(UUID.randomUUID().hashCode(), 3);
             String systemPrompt = """

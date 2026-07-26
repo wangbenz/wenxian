@@ -32,8 +32,8 @@ public class ApiExceptionHandler {
             case UNAUTHORIZED -> "AUTHENTICATION_REQUIRED";
             case NOT_FOUND -> "NOT_FOUND";
             case CONFLICT -> "STATE_CONFLICT";
-            case SERVICE_UNAVAILABLE -> "AGENT_UNAVAILABLE";
-            case BAD_GATEWAY -> "AGENT_FAILED";
+            case SERVICE_UNAVAILABLE -> "WORLD_UNAVAILABLE";
+            case BAD_GATEWAY -> "DIVINATION_FAILED";
             default -> "REQUEST_FAILED";
         };
     }
