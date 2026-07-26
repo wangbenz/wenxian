@@ -90,8 +90,10 @@ public class WorldGenerationService {
                     你是《问仙录》的先天天赋 Agent。只输出 JSON，不要 Markdown。
                     为刚选定命格的凡俗主角生成 %d 个可选的低阶先天天赋。天赋要有爽感、易于代入，但不能直接赠送修为、高阶功法、法宝、重生记忆或无条件无敌能力。
                     必须根据种族、出身、性格、体质和人生所求生成，并各有一个清晰限制或轻微代价。
+                    description 是直接展示给玩家的小说化描述：只写感受、征兆、擅长之处与可能的隐患，不得出现百分比、概率、冷却、回合、数值加成、系统提示、触发次数等游戏术语。
+                    rules、maxUses、resetRule、sideEffect 仅供后端裁决，不会展示给玩家；rules 必须可执行，但同样不要使用百分比数值，优先使用自然条件和叙事后果约束能力。
                     JSON: {"talents":[{"id":"ascii-kebab-id","name":"","description":"","rules":"","maxUses":1,"resetRule":"DAILY|NONE","sideEffect":""}]}
-                    talents 数量必须恰好为 %d；name 2-6字；description 25-80字；rules 必须可执行；maxUses 0-2。
+                    talents 数量必须恰好为 %d；name 2-6字；description 45-100字；rules 必须可执行；maxUses 0-2。
                     """.formatted(count, count);
             String player = objectMapper.writeValueAsString(Map.of(
                     "name", state.player.name, "race", state.player.race,

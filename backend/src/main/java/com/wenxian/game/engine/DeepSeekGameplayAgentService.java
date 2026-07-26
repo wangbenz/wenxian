@@ -152,6 +152,7 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 只有玩家明知高危仍选择自杀式行动，或生命值已归零且无合理脱身手段时，才能判定死亡。高危选项必须事先明示危险。
                 每轮写成一个完整章节：推进2至4个连续场景，自动处理赶路、寒暄、普通观察与低价值交流，只在会改变命运、资源、关系或风险的关键节点停下。
                 CONTINUE 时 narrative 必须10至16段，总计约1200至2000个简体中文字；保持小说感、具体感官与人物行动，不写流水账，不复述状态面板。
+                面向玩家的 narrative、signals、choices 和能力 description 必须保持小说语言，不得出现百分比、成功率、冷却时间、回合数、数值加成、系统提示或“触发判定”等 RPG 面板措辞。数值只用于 JSON 状态字段和后端裁决，不得写进正文。
                 playerPatch 使用更新后的绝对数值，不是增量。characterPatch/threadPatch 只能引用输入中已有 id；无变化时为 null。
                 境界只能使用：凡俗、引气、筑基、金丹、元婴、化神、炼虚、合道。境界属于 player.realm，不是功法或天赋；不得创建名为“练气一层/筑基境”等境界状态的 abilityChange。
                 只要剧情明确完成突破，必须在同一裁决的 playerPatch.realm 写入新境界；修炼尝试、获得功法或短暂借力不等于突破。

@@ -348,9 +348,9 @@ function TalentSelectionView({ game, selectedId, isBusy, error, onSelect, onEnte
       <p className="eyebrow">AWAKENING · OPTIONAL GIFT</p><h1>灵光初醒</h1>
       <p className="world-summary">命格与血脉在入世前显出一缕异象。你可携带一种天赋，也可以一身轻松地走入人间。</p>
     </section>
-    <section className="fate-selection"><div className="section-heading-copy"><p className="eyebrow">CHOOSE ONE OR NONE</p><h2>择一道天赋</h2><span>天赋会成长，也有边界与代价。</span></div>
+    <section className="fate-selection"><div className="section-heading-copy"><p className="eyebrow">CHOOSE ONE OR NONE</p><h2>择一道天赋</h2><span>它只是命途的一缕偏向，得失要在入世之后才会显明。</span></div>
       <div className="talent-grid">{game.talentOptions.map((talent, index) => <button aria-pressed={selectedId === talent.id} className="talent-card" data-selected={selectedId === talent.id} key={talent.id} onClick={() => onSelect(talent.id)} type="button">
-        <span className="talent-sigil">{["观", "听", "悟"][index] ?? "灵"}</span><div><h3>{talent.name}</h3><p>{talent.description}</p><small>规则：{talent.rules}</small><em>代价：{talent.sideEffect}</em></div>
+        <span className="talent-sigil">{["观", "听", "悟"][index] ?? "灵"}</span><div><h3>{talent.name}</h3><p>{talent.description}</p><small>此中玄妙，尚待你亲自印证。</small></div>
       </button>)}</div>
     </section>
     {error && <p className="entry-error">{error}</p>}
@@ -405,7 +405,7 @@ function CharacterView({ game }: { game: GameState }) {
         <article><small>追查</small><strong>{player.suspicion}%</strong><i className="danger-meter" style={{ width: `${player.suspicion}%` }} /></article>
       </section>
       <section className="record-section"><div className="section-label"><LightningBoltIcon /><h2>天赋与功法</h2><span>{game.abilities.length}</span></div><div className="ability-list">
-        {game.abilities.map((ability) => <article className="ability-row" key={ability.id}><div><h3>{ability.name}<small>{ability.type} · {ability.stage}</small></h3><p>{ability.description}</p>{ability.rules && <p className="ability-rules">限制：{ability.rules}{ability.sideEffect && ability.sideEffect !== "无" ? ` · 代价：${ability.sideEffect}` : ""}</p>}<span>来源：{ability.source} · 熟练 {ability.mastery}%{ability.maxUses > 0 ? ` · 今余 ${ability.remainingUses}/${ability.maxUses}` : ""}</span></div></article>)}
+        {game.abilities.map((ability) => <article className="ability-row" key={ability.id}><div><h3>{ability.name}<small>{ability.type === "TALENT" ? "天赋" : ability.type === "TECHNIQUE" ? "功法" : ability.type === "SPELL" ? "术法" : "异能"} · {ability.stage}</small></h3><p>{ability.description}</p><span>缘起：{ability.source}</span></div></article>)}
       </div></section>
       <section className="record-section"><div className="section-label"><BackpackIcon /><h2>行囊</h2><span>{game.inventory.length}</span></div><div className="inventory-list">
         {game.inventory.map((item) => <article className="inventory-item" key={item.id}><div><h3>{item.name}<small>{item.quality} · ×{item.quantity}</small></h3><p>{item.description}</p></div></article>)}
