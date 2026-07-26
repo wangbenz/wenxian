@@ -88,3 +88,18 @@ test("keeps implementation details out of player-facing copy", async () => {
     assert.equal(prototype.includes(copy) || html.includes(copy), false, `player copy leaked: ${copy}`);
   }
 });
+
+test("keeps adjudication numbers out of the narrative character UI", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+  const forbiddenFragments = [
+    "fate-stats",
+    'className="stat-grid"',
+    "体力 {option.vitality}",
+    "风险 {thread.danger}",
+    "体力 ${game.player.vitality}",
+  ];
+
+  for (const fragment of forbiddenFragments) {
+    assert.equal(prototype.includes(fragment), false, `numeric player UI leaked: ${fragment}`);
+  }
+});

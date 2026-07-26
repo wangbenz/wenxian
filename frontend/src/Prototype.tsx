@@ -93,6 +93,21 @@ function formatEventTime(at: number) {
   return `${year}年·${day}日 ${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 }
 
+function conditionName(vitality: number) {
+  if (vitality <= 0) return "命数已尽";
+  if (vitality <= 25) return "气息虚弱";
+  if (vitality <= 45) return "疲惫难支";
+  if (vitality <= 70) return "气息尚稳";
+  return "精神尚佳";
+}
+
+function dangerName(danger: number) {
+  if (danger <= 30) return "风平浪静";
+  if (danger <= 55) return "暗流渐起";
+  if (danger <= 75) return "危机逼近";
+  return "凶险万分";
+}
+
 function TabIcon({ id }: { id: TabId }) {
   const icons = { adventure: HomeIcon, character: PersonIcon, chronicle: ReaderIcon, world: GlobeIcon };
   const Icon = icons[id];
@@ -328,7 +343,6 @@ function FateSelectionView({
               <div className="fate-name"><strong>{option.name}</strong><small>{option.age}岁 · {option.identity}</small></div>
               <p>{option.origin}</p>
               <dl><div><dt>异处</dt><dd>{option.trait}</dd></div><div><dt>所求</dt><dd>{option.goal}</dd></div><div><dt>旧债</dt><dd>{option.burden}</dd></div></dl>
-              <span className="fate-stats">体力 {option.vitality} · 悟性 {option.insight} · 银钱 {option.silver}文</span>
             </button>
           ))}
         </div>
@@ -402,12 +416,6 @@ function CharacterView({ game }: { game: GameState }) {
       <div className="page-title-row"><div><p className="eyebrow">CHARACTER RECORD</p><h1>角色</h1></div><span className="turn-badge">第 {game.turn + 1} 回</span></div>
       <section className="hero-card"><div className="hero-avatar"><PersonIcon /></div><div><h2>{player.name}</h2><p>{player.identity} · {player.realm} · {player.constitution}</p><small>{player.age}/{player.lifespan}岁 · {player.race}</small></div><span className="realm-stamp">{player.realm}</span></section>
       <section className="life-purpose-card"><p><strong>此生所求</strong>{player.goal}</p><p><strong>未偿旧债</strong>{player.burden}</p></section>
-      <section className="stat-grid" aria-label="角色属性">
-        <article><small>体力</small><strong>{player.vitality}</strong><i style={{ width: `${player.vitality}%` }} /></article>
-        <article><small>悟性</small><strong>{player.insight}/10</strong><i style={{ width: `${player.insight * 10}%` }} /></article>
-        <article><small>银钱</small><strong>{player.silver}文</strong><i style={{ width: `${Math.min(100, player.silver * 3)}%` }} /></article>
-        <article><small>追查</small><strong>{player.suspicion}%</strong><i className="danger-meter" style={{ width: `${player.suspicion}%` }} /></article>
-      </section>
       <section className="record-section"><div className="section-label"><LightningBoltIcon /><h2>天赋与功法</h2><span>{game.abilities.length}</span></div><div className="ability-list">
         {game.abilities.map((ability) => <article className="ability-row" key={ability.id}><div><h3>{ability.name}<small>{ability.type === "TALENT" ? "天赋" : ability.type === "TECHNIQUE" ? "功法" : ability.type === "SPELL" ? "术法" : "异能"} · {ability.stage}</small></h3><p>{ability.description}</p><span>缘起：{ability.source}</span></div></article>)}
       </div></section>
@@ -536,7 +544,7 @@ function WorldView({ game, syncMode, email, theme, onTheme, onReset, onLogout }:
       <div className="page-title-row"><div><p className="eyebrow">KNOWN WORLD</p><h1>世界</h1></div><GlobeIcon className="title-icon" /></div>
       <section className="location-card"><div className="location-art" /><div className="location-copy"><span><SewingPinFilledIcon /> 当前位置</span><h2>{game.sceneTitle} · {game.currentLocation}</h2><p>{game.world.summary}</p></div></section>
       <section className="world-law-card"><p><strong>修行法则</strong>{game.world.cultivationLaw}</p><p><strong>生存法则</strong>{game.world.dangerRule}</p><div>{game.world.factions.map((faction) => <span key={faction}>{faction}</span>)}</div></section>
-      <section className="record-section"><div className="section-label"><MagnifyingGlassIcon /><h2>未解线索</h2><span>{game.threads.length}</span></div><div className="thread-list">{game.threads.map((thread) => <article className="thread-card" key={thread.id}><div><h3>{thread.title}</h3><p>{thread.state}</p></div><span data-danger={thread.danger > 75 ? "high" : "normal"}>风险 {thread.danger}</span></article>)}</div></section>
+      <section className="record-section"><div className="section-label"><MagnifyingGlassIcon /><h2>未解线索</h2><span>{game.threads.length}</span></div><div className="thread-list">{game.threads.map((thread) => <article className="thread-card" key={thread.id}><div><h3>{thread.title}</h3><p>{thread.state}</p></div><span data-danger={thread.danger > 75 ? "high" : "normal"}>{dangerName(thread.danger)}</span></article>)}</div></section>
       <section className="agent-record-card"><span className="agent-dot" /><div><h2>{syncMode === "server" ? "本世命卷已同步" : "命卷暂时封存"}</h2><p>{syncMode === "server" ? "人物、纪事与未解线索均已妥善保存。" : "已有经历仍可查阅，暂时无法续写。"} 当前邮箱：{email || "未知"}</p></div></section>
       <section className="theme-card"><div><strong>阅读外观</strong><span>夜间模式采用月下宣纸，不改变游戏进度。</span></div><div className="theme-switch">{([["system", "跟随系统"], ["paper", "宣纸"], ["night", "月夜"]] as Array<[ThemeMode, string]>).map(([id, label]) => <button aria-pressed={theme === id} data-selected={theme === id} key={id} onClick={() => onTheme(id)} type="button">{label}</button>)}</div></section>
       <div className="world-actions"><button className="reset-button" onClick={onReset} type="button"><ReloadIcon />重开此世</button><button className="reset-button" onClick={onLogout} type="button">退出邮箱</button></div>
@@ -767,7 +775,7 @@ export default function Prototype() {
   return (
     <div className="game-shell" data-composer-focused={isComposerFocused} data-entry={!showGameChrome} data-keyboard-open={keyboardOffset > 80} data-theme={actualTheme} onFocusCapture={(event) => { const target = event.target; if (target instanceof HTMLElement && target.matches("input, textarea, select") && !target.closest(".action-composer")) revealFormControl(target); }} style={{ "--keyboard-offset": `${keyboardOffset}px` } as CSSProperties}>
       <div className="paper-background" aria-hidden="true" />
-      <header className="game-header"><div className="game-header-inner"><div className="brand-lockup"><strong>问仙录</strong><span>浮生一卷</span></div><div className="world-clock"><span>{headerText}</span><small><SewingPinFilledIcon />{game?.phase === "playing" && game.player ? `${game.currentLocation} · ${game.player.realm} · 体力 ${game.player.vitality}` : game?.phase === "dead" && game.player ? `${game.currentLocation} · ${game.player.realm} · 已故` : syncMode === "offline" ? "离线只读" : "单机世界 · 云端命卷"}</small></div></div></header>
+      <header className="game-header"><div className="game-header-inner"><div className="brand-lockup"><strong>问仙录</strong><span>浮生一卷</span></div><div className="world-clock"><span>{headerText}</span><small><SewingPinFilledIcon />{game?.phase === "playing" && game.player ? `${game.currentLocation} · ${game.player.realm} · ${conditionName(game.player.vitality)}` : game?.phase === "dead" && game.player ? `${game.currentLocation} · ${game.player.realm} · 已故` : syncMode === "offline" ? "命卷暂封" : "单机世界 · 命卷待启"}</small></div></div></header>
       <div className="game-scroll" data-phase={game?.phase ?? stage} key={`${stage}-${tab}-${game?.turn ?? 0}`}><main className="screen-content" data-testid="game-content">
         {stage === "loading" && <LoadingView />}
         {stage === "login" && <LoginView error={error} isBusy={isBusy} offline={syncMode === "offline"} onLogin={login} />}

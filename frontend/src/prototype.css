@@ -400,8 +400,6 @@
 .fate-card dl div { display: grid; grid-template-columns: 42px 1fr; gap: 7px; }
 .fate-card dt { color: var(--ink-faint); font-size: 9px; }
 .fate-card dd { margin: 0; font-family: var(--display); font-size: 12px; line-height: 1.45; }
-.fate-stats { grid-column: 1 / -1; padding-top: 8px; color: var(--ink-faint); border-top: 1px solid rgba(73, 69, 57, 0.12); font-size: 9px; }
-
 .open-scroll-button {
   display: flex;
   align-items: center;
@@ -681,7 +679,7 @@
 .game-shell[data-theme="night"] .paper-background { background-image: linear-gradient(rgba(7, 12, 11, .7), rgba(7, 12, 11, .86)), url("/assets/game/xuan-paper-night.png"); filter: saturate(.58) contrast(1.02); opacity: .84; }
 .game-shell[data-theme="night"] .game-header { background: linear-gradient(180deg, rgba(15, 20, 19, .99), rgba(15, 20, 19, .96) 78%, rgba(15, 20, 19, .82)); }
 .game-shell[data-theme="night"] .brand-lockup strong { color: #f3eddb; }
-.game-shell[data-theme="night"] :is(.entry-card, .world-intro-card, .creation-card, .fate-card, .talent-card, .choice-card, .hero-card, .life-purpose-card, .stat-grid article, .ability-row, .inventory-item, .character-row, .timeline-summary, .timeline-card, .location-card, .world-law-card, .thread-card, .agent-record-card, .theme-card, .death-card, .ink-dialog) { color: var(--ink); background: linear-gradient(145deg, rgba(33, 42, 39, .97), rgba(20, 27, 25, .95)); border-color: var(--line); box-shadow: 0 10px 28px rgba(0, 0, 0, .12); }
+.game-shell[data-theme="night"] :is(.entry-card, .world-intro-card, .creation-card, .fate-card, .talent-card, .choice-card, .hero-card, .life-purpose-card, .ability-row, .inventory-item, .character-row, .timeline-summary, .timeline-card, .location-card, .world-law-card, .thread-card, .agent-record-card, .theme-card, .death-card, .ink-dialog) { color: var(--ink); background: linear-gradient(145deg, rgba(33, 42, 39, .97), rgba(20, 27, 25, .95)); border-color: var(--line); box-shadow: 0 10px 28px rgba(0, 0, 0, .12); }
 .game-shell[data-theme="night"] :is(input, textarea, .action-composer textarea) { color: var(--ink); background: rgba(20, 27, 25, .99); border-color: rgba(218, 212, 191, .44); caret-color: var(--celadon); }
 .game-shell[data-theme="night"] :is(input, textarea)::placeholder { color: #b3b3a8; opacity: 1; }
 .game-shell[data-theme="night"] .bottom-nav { background: rgba(14, 20, 18, .99); border-top-color: rgba(225, 220, 200, .26); }
@@ -1073,27 +1071,6 @@
 .world-law-card strong { color: var(--celadon-dark); font-size: 10px; font-weight: 500; }
 .world-law-card div { display: flex; gap: 6px; padding-top: 7px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .world-law-card div span { padding: 4px 7px; color: var(--celadon-dark); background: var(--celadon-pale); font-size: 9px; }
-
-.stat-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin: 10px 0 19px;
-}
-
-.stat-grid article {
-  position: relative;
-  overflow: hidden;
-  min-height: 64px;
-  padding: 11px 12px;
-  background: rgba(249, 246, 237, 0.74);
-  border: 1px solid var(--line);
-}
-
-.stat-grid small { display: block; color: var(--ink-faint); font-size: 10px; }
-.stat-grid strong { display: block; margin-top: 3px; font-family: var(--display); font-size: 20px; }
-.stat-grid i { position: absolute; bottom: 0; left: 0; display: block; height: 3px; background: var(--celadon); }
-.stat-grid i.danger-meter { background: var(--cinnabar); }
 
 .record-section { margin-top: 18px; }
 
