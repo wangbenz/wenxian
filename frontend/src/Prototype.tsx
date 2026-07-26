@@ -59,6 +59,13 @@ function readCachedSnapshot(): ApiSnapshot | null {
   }
 }
 
+function revealFormControl(target: HTMLElement, delay = 280) {
+  window.setTimeout(() => {
+    if (!target.isConnected || typeof target.scrollIntoView !== "function") return;
+    target.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, delay);
+}
+
 function periodName(minute: number) {
   if (minute < 360) return "夜深";
   if (minute < 540) return "清晨";
@@ -628,7 +635,10 @@ export default function Prototype() {
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
-    const update = () => setKeyboardOffset(Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop));
+    const update = () => {
+      const layoutHeight = Math.max(window.innerHeight, document.documentElement.clientHeight);
+      setKeyboardOffset(Math.max(0, layoutHeight - viewport.height - viewport.offsetTop));
+    };
     viewport.addEventListener("resize", update);
     viewport.addEventListener("scroll", update);
     update();
@@ -751,7 +761,7 @@ export default function Prototype() {
   }, [bootstrap, game]);
 
   return (
-    <div className="game-shell" data-composer-focused={isComposerFocused} data-entry={!showGameChrome} data-theme={actualTheme} style={{ "--keyboard-offset": `${keyboardOffset}px` } as CSSProperties}>
+    <div className="game-shell" data-composer-focused={isComposerFocused} data-entry={!showGameChrome} data-keyboard-open={keyboardOffset > 80} data-theme={actualTheme} onFocusCapture={(event) => { const target = event.target; if (target instanceof HTMLElement && target.matches("input, textarea, select") && !target.closest(".action-composer")) revealFormControl(target); }} style={{ "--keyboard-offset": `${keyboardOffset}px` } as CSSProperties}>
       <div className="paper-background" aria-hidden="true" />
       <header className="game-header"><div className="game-header-inner"><div className="brand-lockup"><strong>问仙录</strong><span>浮生一卷</span></div><div className="world-clock"><span>{headerText}</span><small><SewingPinFilledIcon />{game?.phase === "playing" && game.player ? `${game.currentLocation} · ${game.player.realm} · 体力 ${game.player.vitality}` : game?.phase === "dead" && game.player ? `${game.currentLocation} · ${game.player.realm} · 已故` : syncMode === "offline" ? "离线只读" : "单机世界 · 云端命卷"}</small></div></div></header>
       <div className="game-scroll" data-phase={game?.phase ?? stage} key={`${stage}-${tab}-${game?.turn ?? 0}`}><main className="screen-content" data-testid="game-content">
@@ -767,7 +777,7 @@ export default function Prototype() {
         {stage === "game" && game?.phase === "dead" && tab !== "chronicle" && <DeathView game={game} isBusy={isBusy} onChronicle={() => setTab("chronicle")} onLogout={() => void logout()} onRebirth={resetGame} />}
         {stage === "game" && game?.phase === "dead" && tab === "chronicle" && <div className="death-chronicle"><ChronicleView game={game} /><button className="reset-button" onClick={() => setTab("adventure")} type="button">返回终局结算</button></div>}
       </main></div>
-      {stage === "game" && game?.phase === "playing" && tab === "adventure" && <form className="action-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void takeTurn("TEXT", { content: draft.trim() }); }}><textarea aria-label="自由行动" maxLength={300} onBlur={() => window.setTimeout(() => setIsComposerFocused(false), 120)} onChange={(event) => setDraft(event.currentTarget.value)} onFocus={(event) => { const target = event.currentTarget; setIsComposerFocused(true); window.setTimeout(() => target.scrollIntoView({ block: "nearest", behavior: "smooth" }), 120); }} placeholder="可输入：使用物品、施展天赋或描述行动…" rows={1} value={draft} />{draft && <button aria-label="清空输入" className="clear-draft" onClick={() => setDraft("")} type="button"><Cross2Icon /></button>}<button className="act-button" disabled={!draft.trim() || isBusy || syncMode !== "server"} type="submit"><span>行动</span><EnterIcon /></button></form>}
+      {stage === "game" && game?.phase === "playing" && tab === "adventure" && <form className="action-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void takeTurn("TEXT", { content: draft.trim() }); }}><textarea aria-label="自由行动" maxLength={300} onBlur={() => window.setTimeout(() => setIsComposerFocused(false), 120)} onChange={(event) => setDraft(event.currentTarget.value)} onFocus={(event) => { const target = event.currentTarget; setIsComposerFocused(true); revealFormControl(target, 160); }} placeholder="可输入：使用物品、施展天赋或描述行动…" rows={1} value={draft} />{draft && <button aria-label="清空输入" className="clear-draft" onClick={() => setDraft("")} type="button"><Cross2Icon /></button>}<button className="act-button" disabled={!draft.trim() || isBusy || syncMode !== "server"} type="submit"><span>行动</span><EnterIcon /></button></form>}
       {stage === "game" && game?.phase === "playing" && !isComposerFocused && <nav className="bottom-nav" aria-label="主要导航">{([["adventure", "历练"], ["character", "角色"], ["chronicle", "纪事"], ["world", "世界"]] as Array<[TabId, string]>).map(([id, label]) => <button aria-current={tab === id ? "page" : undefined} key={id} onClick={() => { setError(""); setTab(id); }} type="button"><TabIcon id={id} /><span>{label}</span></button>)}</nav>}
       {resetIntent && game && <ResetConfirmDialog game={game} intent={resetIntent} isBusy={isBusy} onCancel={() => setResetIntent(null)} onConfirm={() => { setResetIntent(null); void recreate(); }} />}
       {isBusy && (stage === "create" || stage === "fate" || stage === "talent") && <DestinyLoadingOverlay stage={stage} />}

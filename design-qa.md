@@ -41,3 +41,24 @@
 - P3: once a dedicated Chinese webfont is selected for production licensing/performance, replace platform-dependent Kaiti/Song fallbacks for even closer cross-device typography.
 
 final result: passed
+
+## 追加回归：夜间可读性与移动输入
+
+状态：**通过**
+
+对比依据：用户提供的 iPhone 夜间模式截图，与本地 `390 × 844` 移动视口构建截图。浏览器截图按设备像素密度输出，已归一化后并排检查：[对比图](./design-qa-comparison.jpg)。
+
+## 检查结果
+
+- 四个主页面标题、剧情正文、卡片正文和底部导航在月夜背景上恢复清晰层级。
+- 背景宣纸图降噪加深，正文区域增加独立深色阅读层，不再与山水纹理争夺对比度。
+- 禁用状态的「行动」按钮仍可识别，但不会误导为可点击状态。
+- 邮箱和邀请码改用系统无衬线字体，数字、`@` 与英文域名不再使用楷体造型。
+- 移动输入采用 `visualViewport` 计算键盘占用空间；输入框聚焦时滚入可视区域，首页行动框随键盘上移。
+- `390 × 844` 视口下未发现标题裁切、正文横向溢出或操作区遮挡。
+
+## 自动验证
+
+- `npm run build`：通过
+- `npm run test:sites`：4/4 通过
+- `git diff --check`：通过
