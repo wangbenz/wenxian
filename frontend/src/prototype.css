@@ -29,6 +29,10 @@
   font-family: var(--serif);
 }
 
+/* The mobile runtime ships a generic gray paragraph color. Game copy must inherit
+   the active scroll theme unless a component deliberately supplies another tone. */
+.game-shell p { color: inherit; }
+
 .paper-background {
   position: absolute;
   inset: 0;
@@ -1309,3 +1313,61 @@
 .game-shell select {
   font-size: 16px;
 }
+
+/* Night compatibility pass. Keep this block after all component rules so new
+   light-theme surfaces cannot silently win the cascade in moonlit mode. */
+.game-shell[data-theme="night"] { color-scheme: dark; }
+
+.game-shell[data-theme="night"] :is(.world-summary, .entry-lead) { color: var(--ink-soft); }
+
+.game-shell[data-theme="night"] :is(
+  .race-grid button,
+  .segmented-control button,
+  .goal-grid button,
+  .world-remix,
+  .world-title-row i,
+  .world-pill-row span,
+  .death-card blockquote,
+  .death-stats div,
+  .ink-dialog-cancel,
+  .reset-button
+) {
+  color: var(--ink-soft);
+  background: rgba(20, 28, 25, .96);
+  border-color: rgba(225, 220, 200, .26);
+  box-shadow: none;
+}
+
+.game-shell[data-theme="night"] :is(
+  .race-grid button[data-selected="true"],
+  .goal-grid button[data-selected="true"],
+  .segmented-control button[data-selected="true"]
+) {
+  color: var(--ink);
+  background: rgba(55, 80, 68, .96);
+  border-color: var(--celadon);
+  box-shadow: inset 3px 0 var(--celadon);
+}
+
+.game-shell[data-theme="night"] :is(.race-grid p, .world-summary, .character-row p) { color: var(--ink-soft); }
+.game-shell[data-theme="night"] :is(.race-grid small, .goal-grid small, .world-title-row span) { color: var(--ink-faint); }
+.game-shell[data-theme="night"] :is(.name-field-row button, .world-remix button) { color: var(--celadon-dark); background: var(--celadon-pale); }
+.game-shell[data-theme="night"] .world-title-row i[data-mode="fallback"] { color: var(--ink-soft); background: rgba(45, 45, 40, .92); }
+.game-shell[data-theme="night"] .world-laws div { border-top-color: var(--line); }
+
+.game-shell[data-theme="night"] .death-card blockquote { color: var(--ink); border-left-color: var(--cinnabar); }
+.game-shell[data-theme="night"] .death-stats { background: rgba(225, 220, 200, .22); }
+.game-shell[data-theme="night"] .rebirth-button { color: #e5a095; background: rgba(112, 43, 39, .22); border-color: rgba(212, 134, 119, .62); }
+.game-shell[data-theme="night"] .ink-dialog-note { background: rgba(212, 134, 119, .12); }
+.game-shell[data-theme="night"] .ink-dialog-cancel { color: var(--ink); }
+.game-shell[data-theme="night"] .reset-button { color: var(--ink-soft); }
+
+.game-shell[data-theme="night"] :is(.primary-entry-button, .open-scroll-button):disabled {
+  color: rgba(242, 236, 220, .72);
+  background: rgba(61, 91, 79, .88);
+  border-color: rgba(133, 181, 157, .52);
+  opacity: 1;
+}
+
+.game-shell[data-theme="night"] .talent-secondary-actions button:disabled { opacity: .68; }
+.game-shell[data-theme="night"] .text-button { color: var(--ink-soft); }
