@@ -5,7 +5,7 @@ spring:
   application:
     name: wenxian-game-backend
   config:
-    import: optional:classpath:application-secret.yml
+    import: optional:file:./src/main/resources/application-secret.yml
   jackson:
     default-property-inclusion: non_null
   datasource:

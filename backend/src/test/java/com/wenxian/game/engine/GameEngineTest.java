@@ -42,4 +42,18 @@ class GameEngineTest {
         assertEquals("剑下亡魂", dead.death.title);
         assertEquals(1, dead.death.turn);
     }
+
+    @Test
+    void repairsLegacyRealmWhenAnAbilityContainsExplicitBreakthroughEvidence() {
+        GameState state = new GameState();
+        state.player = new GameState.PlayerState("宁临渊", "HUMAN", "MALE", 16, 75,
+                "乞儿", "LONGEVITY", "求长生", "身无分文", "凡俗", "凡胎", 28, 0, 10, 72);
+        state.abilities.add(new GameState.AbilityRecord("qi-stage", "qi-stage", "练气一层（冥草旁门）",
+                "TECHNIQUE", "巅峰", 2, "药力炼化", "已炼化第一缕灵气",
+                "持续运转", 0, 0, "NONE", 0, "经脉刺痛"));
+
+        assertTrue(RealmProgression.repairLegacyState(state));
+        assertEquals("引气", state.player.realm);
+        assertTrue(!RealmProgression.repairLegacyState(state));
+    }
 }

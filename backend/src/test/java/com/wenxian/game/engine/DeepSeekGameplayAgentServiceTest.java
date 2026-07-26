@@ -67,4 +67,56 @@ class DeepSeekGameplayAgentServiceTest {
 
         assertThrows(IllegalArgumentException.class, () -> agent.sanitize(raw, state));
     }
+
+    @Test
+    void completesMissingRealmPatchFromExplicitBreakthroughEvidence() {
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        WorldGenerationService client = new WorldGenerationService(
+                mapper, RestClient.builder(), "test-key", "https://api.deepseek.com", "deepseek-v4-pro");
+        DeepSeekGameplayAgentService agent = new DeepSeekGameplayAgentService(mapper, client, new AgentToolRegistry(mapper));
+        GameState state = new GameState();
+        state.phase = "playing";
+        state.sceneId = "cave";
+        state.sceneTitle = "石洞";
+        state.currentLocation = "东陆边城";
+        state.player = new GameState.PlayerState("宁临渊", "HUMAN", "MALE", 16, 75,
+                "乞儿", "LONGEVITY", "求长生", "身无分文", "凡俗", "凡胎", 28, 0, 10, 72);
+
+        AgentResult raw = new AgentResult("breach", "初次引气", "石洞", 240, "CONTINUE",
+                List.of("药力沿经脉散开。", "你忍住剧痛。", "第一缕灵气被纳入丹田。", "周围尘埃缓缓落下。", "你的气息终于稳定。", "你已踏入引气。"),
+                List.of("突破引气成功"),
+                List.of(new GameState.StoryChoice("rest", "稳固气息", "先处理体内暗伤", "default"),
+                        new GameState.StoryChoice("leave", "离开石洞", "冒险避开追兵", "danger")),
+                Map.of("vitality", 28), new AgentResult.EventDraft("初次引气", "你完成第一次引气。", "gain"),
+                null, null, null,
+                new AgentResult.AbilityChange("LEARN", "qi-stage", "qi-stage", "练气一层（旁门）",
+                        "TECHNIQUE", "入门", 1, "药力", "炼化第一缕灵气", "运转灵气", 0, 0, "NONE", "经脉刺痛"),
+                new AgentResult.DeclarationResolution("NONE", "NOT_APPLICABLE", "无声明"));
+
+        AgentResult safe = agent.sanitize(raw, state);
+
+        assertEquals("引气", safe.playerPatch().get("realm"));
+    }
+
+    @Test
+    void normalizesCommonQiCultivationAliasToCanonicalRealm() {
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        WorldGenerationService client = new WorldGenerationService(
+                mapper, RestClient.builder(), "test-key", "https://api.deepseek.com", "deepseek-v4-pro");
+        DeepSeekGameplayAgentService agent = new DeepSeekGameplayAgentService(mapper, client, new AgentToolRegistry(mapper));
+        GameState state = new GameState();
+        state.phase = "playing";
+        state.player = new GameState.PlayerState("宁临渊", "HUMAN", "MALE", 16, 75,
+                "乞儿", "LONGEVITY", "求长生", "身无分文", "凡俗", "凡胎", 28, 0, 10, 72);
+
+        AgentResult raw = new AgentResult("breach", "初次引气", "石洞", 240, "CONTINUE",
+                List.of("一", "二", "三", "四", "五", "六"), List.of("境界稳固"),
+                List.of(new GameState.StoryChoice("rest", "稳固", "先稳住气息", "default"),
+                        new GameState.StoryChoice("leave", "离开", "立即离开", "danger")),
+                Map.of("realm", "练气一层"), new AgentResult.EventDraft("初次引气", "你完成第一次引气。", "gain"),
+                null, null, null, null,
+                new AgentResult.DeclarationResolution("NONE", "NOT_APPLICABLE", "无声明"));
+
+        assertEquals("引气", agent.sanitize(raw, state).playerPatch().get("realm"));
+    }
 }

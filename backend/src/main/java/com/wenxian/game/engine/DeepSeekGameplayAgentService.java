@@ -117,6 +117,8 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 每轮写成一个完整的小章节：推进1至3个连续场景，自动处理赶路、寒暄、普通观察等低价值步骤，只在会改变命运、资源、关系或风险的关键节点停下。
                 CONTINUE 时 narrative 必须6至10段，总计约700至1200个简体中文字；保持小说感、具体感官与人物行动，不写流水账，不复述状态面板。
                 playerPatch 使用更新后的绝对数值，不是增量。characterPatch/threadPatch 只能引用输入中已有 id；无变化时为 null。
+                境界只能使用：凡俗、引气、筑基、金丹、元婴、化神、炼虚、合道。境界属于 player.realm，不是功法或天赋；不得创建名为“练气一层/筑基境”等境界状态的 abilityChange。
+                只要剧情明确完成突破，必须在同一裁决的 playerPatch.realm 写入新境界；修炼尝试、获得功法或短暂借力不等于突破。
                 elapsed 为经过分钟，范围 1-2880，并与章节实际经过时间一致。outcome 只能是 CONTINUE 或 DEAD。
                 只有主角被明确判定死亡时才能返回 DEAD；此时 playerPatch.vitality 必须为 0，choices 必须为空数组。
                 CONTINUE 时 signals 1-3 条，choices 2-4 个；选择必须是有实质差异的关键方向。不得用梦境、回档、轮回或重生撤销死亡。
@@ -160,15 +162,18 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
             throw new IllegalArgumentException("Agent 事件缺失");
         }
         String kind = Set.of("decision", "risk", "gain", "world").contains(event.kind()) ? event.kind() : "world";
+        AgentResult.AbilityChange abilityChange = sanitizeAbility(raw.abilityChange(), state);
+        Map<String, Object> playerPatch = RealmProgression.completePatch(state,
+                sanitizeMap(raw.playerPatch(), PLAYER_KEYS), narrative, signals, abilityChange);
         return new AgentResult(
                 safeId(raw.sceneId(), state.sceneId), value(raw.sceneTitle(), state.sceneTitle),
                 value(raw.currentLocation(), state.currentLocation), clamp(raw.elapsed(), 1, 2880),
                 outcome, narrative, signals, "DEAD".equals(outcome) ? List.of() : choices,
-                sanitizeMap(raw.playerPatch(), PLAYER_KEYS),
+                playerPatch,
                 new AgentResult.EventDraft(event.title().strip(), event.detail().strip(), kind),
                 sanitizeEntity(raw.characterPatch(), state.characters.stream().map(character -> character.id).toList(), CHARACTER_KEYS),
                 sanitizeEntity(raw.threadPatch(), state.threads.stream().map(thread -> thread.id).toList(), THREAD_KEYS),
-                sanitizeInventory(raw.inventoryChange(), state), sanitizeAbility(raw.abilityChange(), state),
+                sanitizeInventory(raw.inventoryChange(), state), abilityChange,
                 sanitizeDeclaration(raw.declarationResolution(), raw.abilityChange())
         );
     }

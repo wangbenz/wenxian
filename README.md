@@ -22,7 +22,7 @@ cd backend
 mvn spring-boot:run
 ```
 
-当前本地 DeepSeek 与 MySQL 配置位于被 Git 忽略的 `backend/src/main/resources/application-secret.yml`。也可以使用环境变量覆盖。密钥和数据库密码都不会下发给 H5。
+当前本地 DeepSeek 与 MySQL 配置位于被 Git 忽略的 `backend/src/main/resources/application-secret.yml`。该文件已从 Maven 资源中明确排除，不会进入 JAR；服务器应通过环境变量或外置 Spring 配置加载密钥。密钥和数据库密码都不会下发给 H5。
 
 内部试玩默认邀请码为 `WENXIAN-LOCAL`，可通过 `WENXIAN_INVITE_CODE` 环境变量替换。首次使用邮箱和邀请码登记，之后该邮箱可以直接进入；这只是早期准入机制，不等同于邮箱所有权验证。
 

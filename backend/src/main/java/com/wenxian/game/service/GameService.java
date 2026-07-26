@@ -5,6 +5,7 @@ import com.wenxian.game.engine.GameCatalog;
 import com.wenxian.game.engine.GameEngine;
 import com.wenxian.game.engine.AgentTurn;
 import com.wenxian.game.engine.NarrativeAgent;
+import com.wenxian.game.engine.RealmProgression;
 import com.wenxian.game.engine.WorldGenerationService;
 import com.wenxian.game.model.ApiModels.CharacterSheetResponse;
 import com.wenxian.game.model.ApiModels.CreateSaveRequest;
@@ -73,7 +74,7 @@ public class GameService {
     }
 
     public CurrentSaveResponse current(UserIdentity user) {
-        SaveStore.StoredSave save = saveStore.findCurrentForUser(user.userId());
+        SaveStore.StoredSave save = repairProgression(saveStore.findCurrentForUser(user.userId()));
         return new CurrentSaveResponse(save != null, save == null ? null : response(save));
     }
 
@@ -187,7 +188,16 @@ public class GameService {
     private SaveStore.StoredSave requireOwned(UserIdentity user, String saveId) {
         SaveStore.StoredSave save = saveStore.findOwned(saveId, user.userId());
         if (save == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "存档不存在");
-        return save;
+        return repairProgression(save);
+    }
+
+    private SaveStore.StoredSave repairProgression(SaveStore.StoredSave save) {
+        if (save == null) return null;
+        synchronized (lock(save.id)) {
+            GameState repaired = gameEngine.copy(save.state);
+            if (!RealmProgression.repairLegacyState(repaired)) return save;
+            return saveStore.put(save.id, save.userId, repaired, save.revision);
+        }
     }
 
     private SaveStore.StoredSave requirePlaying(UserIdentity user, String saveId) {
