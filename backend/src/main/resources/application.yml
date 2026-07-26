@@ -27,6 +27,8 @@ spring:
       encoding: UTF-8
 
 game:
+  cors:
+    allowed-origin-patterns: ${WENXIAN_CORS_ALLOWED_ORIGIN_PATTERNS:http://127.0.0.1:*,http://localhost:*,http://192.168.*:*,http://10.*:*,http://172.*:*}
   invite:
     bootstrap-code: ${WENXIAN_INVITE_CODE:WENXIAN-LOCAL}
   auth:

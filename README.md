@@ -26,6 +26,8 @@ mvn spring-boot:run
 
 当前本地 DeepSeek 与 MySQL 配置位于被 Git 忽略的 `backend/src/main/resources/application-secret.yml`。该文件已从 Maven 资源中明确排除，不会进入 JAR；服务器应通过环境变量或外置 Spring 配置加载密钥。密钥和数据库密码都不会下发给 H5。
 
+部署到公网域名或 IP 时，还需通过 `WENXIAN_CORS_ALLOWED_ORIGIN_PATTERNS` 配置允许访问 API 的 H5 来源，例如 `http://your-public-host:*`。该白名单用于带 Cookie 的登录请求，不应配置成任意来源 `*`。
+
 内部试玩默认邀请码为 `WENXIAN-LOCAL`，可通过 `WENXIAN_INVITE_CODE` 环境变量替换。首次使用邮箱和邀请码登记，之后该邮箱可以直接进入；这只是早期准入机制，不等同于邮箱所有权验证。
 
 再启动 H5 前端：
