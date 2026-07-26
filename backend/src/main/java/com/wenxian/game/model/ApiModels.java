@@ -45,6 +45,8 @@ public final class ApiModels {
 
     public record SelectProtagonistRequest(@NotBlank @Size(max = 80) String candidateId) {}
 
+    public record SelectTalentRequest(@NotBlank @Size(max = 80) String talentId) {}
+
     public record TurnRequest(
             @NotBlank @Size(max = 80) String requestId,
             long stateVersion,

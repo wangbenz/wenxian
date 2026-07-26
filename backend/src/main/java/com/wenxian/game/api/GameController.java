@@ -11,6 +11,7 @@ import com.wenxian.game.model.ApiModels.GameResponse;
 import com.wenxian.game.model.ApiModels.GenerateNameRequest;
 import com.wenxian.game.model.ApiModels.GenerateNameResponse;
 import com.wenxian.game.model.ApiModels.SelectProtagonistRequest;
+import com.wenxian.game.model.ApiModels.SelectTalentRequest;
 import com.wenxian.game.model.ApiModels.TurnRequest;
 import com.wenxian.game.model.ApiModels.ValidateNameRequest;
 import com.wenxian.game.model.ApiModels.ValidateNameResponse;
@@ -106,6 +107,28 @@ public class GameController {
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
             @Valid @RequestBody SelectProtagonistRequest request) {
         return gameService.start(user(token), saveId, request.candidateId());
+    }
+
+    @PostMapping("/saves/{saveId}/talents/reroll")
+    public GameResponse rerollTalents(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
+            @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId) {
+        return gameService.rerollTalents(user(token), saveId);
+    }
+
+    @PostMapping("/saves/{saveId}/talents/select")
+    public GameResponse selectTalent(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
+            @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
+            @Valid @RequestBody SelectTalentRequest request) {
+        return gameService.selectTalent(user(token), saveId, request.talentId());
+    }
+
+    @PostMapping("/saves/{saveId}/talents/skip")
+    public GameResponse skipTalent(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
+            @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId) {
+        return gameService.skipTalent(user(token), saveId);
     }
 
     @PostMapping("/saves/{saveId}/turns")

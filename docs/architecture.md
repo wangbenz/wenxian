@@ -34,6 +34,7 @@ Agent 不切换页面、不执行 SQL、不修改固定世界，也不能绕过 
 - `agent_conversation`：一张命卷对应一个持续会话及滚动摘要；
 - `agent_message`：按顺序保存玩家与 Agent 的完整消息；
 - `game_turn`：保存行动、章节、选项、状态差量、Token 与延迟指标。
+- `agent_execution`：独立记录每次 DeepSeek 推演尝试的成败、模型、响应 ID、延迟与经脱敏的失败原因，主事务回滚时仍保留。
 
 测试服务器使用独立的 `wenxian` 数据库与最小权限应用账号。真实连接只保存在后端私有配置或部署环境变量中；生产/试玩运行不依赖本地 H2 文件，因此服务重启后数据仍由 MySQL 持久保存。
 
@@ -71,6 +72,7 @@ DeepSeek V4 Pro 调用采用 OpenAI 兼容 Tool Calls。Java 会主动附带当�
 → 检查存档归属、版本和 requestId
 → 加载同一命卷历史与当前权威状态
 → DeepSeek V4 Pro 生成完整小章节，按需调用只读工具
+→ JSON、状态同步或章节长度失败时自动携带修复约束重试一次
 → 返回叙事和结构化补丁
 → Java 校验角色 ID、境界跨度、数值、物品和天赋声明一致性
 → 推进统一时间
@@ -98,6 +100,9 @@ GET    /api/v1/saves/current
 GET    /api/v1/saves/{saveId}
 DELETE /api/v1/saves/{saveId}
 POST   /api/v1/saves/{saveId}/protagonist
+POST   /api/v1/saves/{saveId}/talents/reroll
+POST   /api/v1/saves/{saveId}/talents/select
+POST   /api/v1/saves/{saveId}/talents/skip
 POST   /api/v1/saves/{saveId}/turns
 
 GET    /api/v1/saves/{saveId}/scene

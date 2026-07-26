@@ -15,6 +15,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class WorldGenerationService {
@@ -79,6 +80,46 @@ public class WorldGenerationService {
 
     public boolean configured() {
         return !apiKey.isBlank();
+    }
+
+    public List<GameState.AbilityRecord> generateTalentOptions(GameState state) {
+        if (!configured()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "DeepSeek Agent 尚未配置");
+        try {
+            int count = 1 + Math.floorMod(UUID.randomUUID().hashCode(), 3);
+            String systemPrompt = """
+                    你是《问仙录》的先天天赋 Agent。只输出 JSON，不要 Markdown。
+                    为刚选定命格的凡俗主角生成 %d 个可选的低阶先天天赋。天赋要有爽感、易于代入，但不能直接赠送修为、高阶功法、法宝、重生记忆或无条件无敌能力。
+                    必须根据种族、出身、性格、体质和人生所求生成，并各有一个清晰限制或轻微代价。
+                    JSON: {"talents":[{"id":"ascii-kebab-id","name":"","description":"","rules":"","maxUses":1,"resetRule":"DAILY|NONE","sideEffect":""}]}
+                    talents 数量必须恰好为 %d；name 2-6字；description 25-80字；rules 必须可执行；maxUses 0-2。
+                    """.formatted(count, count);
+            String player = objectMapper.writeValueAsString(Map.of(
+                    "name", state.player.name, "race", state.player.race,
+                    "identity", state.player.identity, "lifeGoal", state.player.lifeGoal,
+                    "goal", state.player.goal, "burden", state.player.burden,
+                    "constitution", state.player.constitution));
+            TalentDraft draft = objectMapper.readValue(requestJson(systemPrompt, player, 1800, 0.9), TalentDraft.class);
+            if (draft == null || draft.talents == null || draft.talents.size() < count) {
+                throw new IllegalArgumentException("天赋候选不足");
+            }
+            LinkedHashSet<String> ids = new LinkedHashSet<>();
+            List<GameState.AbilityRecord> result = new ArrayList<>();
+            for (int index = 0; index < count; index++) {
+                TalentOption option = draft.talents.get(index);
+                String id = uniqueId(ids, safeId(option.id, "innate-talent-" + (index + 1)));
+                int uses = clamp(option.maxUses, 0, 2);
+                String reset = uses > 0 && "DAILY".equals(option.resetRule) ? "DAILY" : "NONE";
+                result.add(new GameState.AbilityRecord(id, id, required(option.name, "灵觉"), "TALENT", "初醒", 1,
+                        "命格觉醒", required(option.description, "对周遭异常比常人更敏锐。"),
+                        required(option.rules, "需要主动集中精神才能发挥。"), uses, uses, reset, state.day,
+                        required(option.sideEffect, "过度使用会精神疲惫。")));
+            }
+            return result;
+        } catch (ResponseStatusException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "天赋推演暂时中断，请重新推演", error);
+        }
     }
 
     public String mode() {
@@ -258,5 +299,21 @@ public class WorldGenerationService {
     public static class FateDraft {
         public List<GameState.ProtagonistOption> protagonists;
         public FateDraft() {}
+    }
+
+    public static class TalentDraft {
+        public List<TalentOption> talents;
+        public TalentDraft() {}
+    }
+
+    public static class TalentOption {
+        public String id;
+        public String name;
+        public String description;
+        public String rules;
+        public int maxUses;
+        public String resetRule;
+        public String sideEffect;
+        public TalentOption() {}
     }
 }

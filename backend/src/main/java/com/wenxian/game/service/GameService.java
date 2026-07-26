@@ -91,16 +91,57 @@ public class GameService {
             }
             try {
                 GameState started = GameCatalog.start(current.state, protagonistId);
+                started.talentOptions = fateGenerationService.generateTalentOptions(started);
                 SaveStore.StoredSave saved = saveStore.put(saveId, user.userId(), started, current.revision + 1);
                 String conversationId = conversationStore.ensure(saveId, fateGenerationService.model());
                 conversationStore.append(conversationId, 0, "user", "我选择命格：" + protagonistId, null, 0, 0);
-                conversationStore.append(conversationId, 0, "assistant", "命卷开场：" + conversationStore.json(Map.of(
-                        "narrative", started.narrative, "choices", started.choices, "player", started.player)),
+                conversationStore.append(conversationId, 0, "assistant", "命卷与候选天赋：" + conversationStore.json(Map.of(
+                        "narrative", started.narrative, "talents", started.talentOptions, "player", started.player)),
                         null, 0, 0);
                 return response(saved);
             } catch (IllegalArgumentException error) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error.getMessage());
             }
+        }
+    }
+
+    @Transactional
+    public GameResponse rerollTalents(UserIdentity user, String saveId) {
+        synchronized (lock(saveId)) {
+            SaveStore.StoredSave current = requireTalentPhase(user, saveId);
+            if (current.state.talentRerolled) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "本世的免费重新推演已经使用");
+            }
+            GameState next = gameEngine.copy(current.state);
+            next.talentOptions = fateGenerationService.generateTalentOptions(next);
+            next.talentRerolled = true;
+            return response(saveStore.put(saveId, user.userId(), next, current.revision + 1));
+        }
+    }
+
+    @Transactional
+    public GameResponse selectTalent(UserIdentity user, String saveId, String talentId) {
+        synchronized (lock(saveId)) {
+            SaveStore.StoredSave current = requireTalentPhase(user, saveId);
+            try {
+                GameState next = gameEngine.copy(current.state);
+                GameCatalog.enterWorld(next, talentId);
+                appendTalentDecision(saveId, next, "我选择先天天赋：" + talentId);
+                return response(saveStore.put(saveId, user.userId(), next, current.revision + 1));
+            } catch (IllegalArgumentException error) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error.getMessage());
+            }
+        }
+    }
+
+    @Transactional
+    public GameResponse skipTalent(UserIdentity user, String saveId) {
+        synchronized (lock(saveId)) {
+            SaveStore.StoredSave current = requireTalentPhase(user, saveId);
+            GameState next = gameEngine.copy(current.state);
+            GameCatalog.enterWorldWithoutTalent(next);
+            appendTalentDecision(saveId, next, "我选择不携带先天天赋");
+            return response(saveStore.put(saveId, user.userId(), next, current.revision + 1));
         }
     }
 
@@ -206,6 +247,21 @@ public class GameService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "命卷尚未开启");
         }
         return save;
+    }
+
+    private SaveStore.StoredSave requireTalentPhase(UserIdentity user, String saveId) {
+        SaveStore.StoredSave save = requireOwned(user, saveId);
+        if (!"talent".equals(save.state.phase)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前命卷不在天赋觉醒阶段");
+        }
+        return save;
+    }
+
+    private void appendTalentDecision(String saveId, GameState state, String action) {
+        String conversationId = conversationStore.ensure(saveId, fateGenerationService.model());
+        conversationStore.append(conversationId, 0, "user", action, null, 0, 0);
+        conversationStore.append(conversationId, 0, "assistant", "正式入世：" + conversationStore.json(Map.of(
+                "narrative", state.narrative, "choices", state.choices, "abilities", state.abilities)), null, 0, 0);
     }
 
     private Object lock(String saveId) {

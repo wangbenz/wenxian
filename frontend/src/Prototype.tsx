@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowRightIcon,
   BackpackIcon,
@@ -29,9 +29,11 @@ import {
 } from "./game-api";
 
 type TabId = "adventure" | "character" | "chronicle" | "world";
-type AppStage = "loading" | "login" | "create" | "fate" | "game";
+type AppStage = "loading" | "login" | "create" | "fate" | "talent" | "game";
+type ThemeMode = "system" | "paper" | "night";
 
 const CACHE_KEY = "wenxian-readonly-cache-v2";
+const THEME_KEY = "wenxian-theme";
 const DEFAULT_DRAFT: CharacterDraft = {
   playerName: "",
   race: "HUMAN",
@@ -95,6 +97,14 @@ function LoadingView() {
       <p>校验登录会话与服务器存档，不会在本地推演剧情。</p>
     </section>
   );
+}
+
+function DestinyLoadingOverlay({ stage }: { stage: AppStage }) {
+  const copy = stage === "create"
+    ? ["天机正在落笔", "为同一名字推演三种不同的凡俗人生"]
+    : stage === "fate" ? ["命格已被选中", "正在从血脉、出身与所求中寻找先天灵光"]
+      : ["天赋正在落印", "世界时间将从你入世的这一刻开始流动"];
+  return <div className="destiny-loading" role="status"><div className="destiny-orbit"><span /><i />问</div><p className="eyebrow">DEEPSEEK V4 PRO</p><strong>{copy[0]}</strong><small>{copy[1]}</small><div className="loading-ink-line"><i /></div></div>;
 }
 
 function LoginView({
@@ -321,6 +331,27 @@ function FateSelectionView({
   );
 }
 
+function TalentSelectionView({ game, selectedId, isBusy, error, onSelect, onEnter, onReroll, onSkip }: {
+  game: GameState; selectedId: string; isBusy: boolean; error: string;
+  onSelect: (id: string) => void; onEnter: () => void; onReroll: () => void; onSkip: () => void;
+}) {
+  const selected = game.talentOptions.find((talent) => talent.id === selectedId);
+  return <div className="onboarding-view talent-view">
+    <section className="world-intro-card compact-world-card talent-intro">
+      <p className="eyebrow">AWAKENING · OPTIONAL GIFT</p><h1>灵光初醒</h1>
+      <p className="world-summary">命格与血脉在入世前显出一缕异象。你可携带一种天赋，也可以一身轻松地走入人间。</p>
+    </section>
+    <section className="fate-selection"><div className="section-heading-copy"><p className="eyebrow">CHOOSE ONE OR NONE</p><h2>择一道天赋</h2><span>天赋会成长，也有边界与代价。</span></div>
+      <div className="talent-grid">{game.talentOptions.map((talent, index) => <button aria-pressed={selectedId === talent.id} className="talent-card" data-selected={selectedId === talent.id} key={talent.id} onClick={() => onSelect(talent.id)} type="button">
+        <span className="talent-sigil">{["观", "听", "悟"][index] ?? "灵"}</span><div><h3>{talent.name}</h3><p>{talent.description}</p><small>规则：{talent.rules}</small><em>代价：{talent.sideEffect}</em></div>
+      </button>)}</div>
+    </section>
+    {error && <p className="entry-error">{error}</p>}
+    <button className="open-scroll-button" disabled={!selected || isBusy} onClick={onEnter} type="button">{isBusy ? "命卷正在落印…" : selected ? `携「${selected.name}」入世` : "先选择一种天赋"}<ArrowRightIcon /></button>
+    <div className="talent-secondary-actions"><button disabled={isBusy || game.talentRerolled} onClick={onReroll} type="button"><ReloadIcon />{game.talentRerolled ? "本世已重新推演" : "免费重新推演一次"}</button><button disabled={isBusy} onClick={onSkip} type="button">不携天赋，直接入世</button></div>
+  </div>;
+}
+
 function AdventureView({ game, choices, isBusy, offline, error, onChoice }: { game: GameState; choices: Choice[]; isBusy: boolean; offline: boolean; error: string; onChoice: (id: string) => void }) {
   return (
     <div className="adventure-view">
@@ -352,7 +383,7 @@ function AgentProgress() {
   return <section className="chapter-generating" role="status"><span className="ink-spinner" /><div><small>V4 PRO · 命卷推演中</small><strong>{phases[phase]}</strong><p>本轮会推进一个完整小章节，完成后统一写入人物、天赋与世界时间。</p></div></section>;
 }
 
-function CharacterView({ game, disabled, onUseItem, onUseAbility, onPractice }: { game: GameState; disabled: boolean; onUseItem: (id: string) => void; onUseAbility: (id: string) => void; onPractice: (id: string) => void }) {
+function CharacterView({ game }: { game: GameState }) {
   const player = game.player;
   if (!player) return null;
   return (
@@ -367,10 +398,10 @@ function CharacterView({ game, disabled, onUseItem, onUseAbility, onPractice }: 
         <article><small>追查</small><strong>{player.suspicion}%</strong><i className="danger-meter" style={{ width: `${player.suspicion}%` }} /></article>
       </section>
       <section className="record-section"><div className="section-label"><LightningBoltIcon /><h2>天赋与功法</h2><span>{game.abilities.length}</span></div><div className="ability-list">
-        {game.abilities.map((ability) => <article className="ability-row" key={ability.id}><div><h3>{ability.name}<small>{ability.type} · {ability.stage}</small></h3><p>{ability.description}</p>{ability.rules && <p className="ability-rules">限制：{ability.rules}{ability.sideEffect && ability.sideEffect !== "无" ? ` · 代价：${ability.sideEffect}` : ""}</p>}<span>来源：{ability.source} · 熟练 {ability.mastery}%{ability.maxUses > 0 ? ` · 今余 ${ability.remainingUses}/${ability.maxUses}` : ""}</span></div><div className="ability-actions">{ability.maxUses > 0 && <button disabled={disabled || ability.remainingUses <= 0} onClick={() => onUseAbility(ability.id)} type="button">施展</button>}{ability.type !== "TALENT" && <button disabled={disabled} onClick={() => onPractice(ability.id)} type="button">研习</button>}</div></article>)}
+        {game.abilities.map((ability) => <article className="ability-row" key={ability.id}><div><h3>{ability.name}<small>{ability.type} · {ability.stage}</small></h3><p>{ability.description}</p>{ability.rules && <p className="ability-rules">限制：{ability.rules}{ability.sideEffect && ability.sideEffect !== "无" ? ` · 代价：${ability.sideEffect}` : ""}</p>}<span>来源：{ability.source} · 熟练 {ability.mastery}%{ability.maxUses > 0 ? ` · 今余 ${ability.remainingUses}/${ability.maxUses}` : ""}</span></div></article>)}
       </div></section>
       <section className="record-section"><div className="section-label"><BackpackIcon /><h2>行囊</h2><span>{game.inventory.length}</span></div><div className="inventory-list">
-        {game.inventory.map((item) => <article className="inventory-item" key={item.id}><div><h3>{item.name}<small>{item.quality} · ×{item.quantity}</small></h3><p>{item.description}</p></div>{!item.keyItem && item.category !== "CURRENCY" && <button disabled={disabled} onClick={() => onUseItem(item.id)} type="button">使用</button>}</article>)}
+        {game.inventory.map((item) => <article className="inventory-item" key={item.id}><div><h3>{item.name}<small>{item.quality} · ×{item.quantity}</small></h3><p>{item.description}</p></div></article>)}
       </div></section>
       <section className="record-section"><div className="section-label"><IdCardIcon /><h2>已登场角色</h2><span>{game.characters.length}</span></div><div className="character-list">
         {game.characters.map((character) => <article className="character-row" key={character.id}><div className="mini-avatar">{character.name.slice(0, 1)}</div><div><h3>{character.name}<small>{character.identity}</small></h3><p>{character.state}</p><span>{character.location} · {character.relation}</span></div></article>)}
@@ -488,7 +519,7 @@ function ResetConfirmDialog({
   );
 }
 
-function WorldView({ game, syncMode, email, onReset, onLogout }: { game: GameState; syncMode: SyncMode; email: string; onReset: () => void; onLogout: () => void }) {
+function WorldView({ game, syncMode, email, theme, onTheme, onReset, onLogout }: { game: GameState; syncMode: SyncMode; email: string; theme: ThemeMode; onTheme: (theme: ThemeMode) => void; onReset: () => void; onLogout: () => void }) {
   return (
     <div className="record-view">
       <div className="page-title-row"><div><p className="eyebrow">KNOWN WORLD</p><h1>世界</h1></div><GlobeIcon className="title-icon" /></div>
@@ -496,6 +527,7 @@ function WorldView({ game, syncMode, email, onReset, onLogout }: { game: GameSta
       <section className="world-law-card"><p><strong>修行法则</strong>{game.world.cultivationLaw}</p><p><strong>生存法则</strong>{game.world.dangerRule}</p><div>{game.world.factions.map((faction) => <span key={faction}>{faction}</span>)}</div></section>
       <section className="record-section"><div className="section-label"><MagnifyingGlassIcon /><h2>未解线索</h2><span>{game.threads.length}</span></div><div className="thread-list">{game.threads.map((thread) => <article className="thread-card" key={thread.id}><div><h3>{thread.title}</h3><p>{thread.state}</p></div><span data-danger={thread.danger > 75 ? "high" : "normal"}>风险 {thread.danger}</span></article>)}</div></section>
       <section className="agent-record-card"><span className="agent-dot" /><div><h2>{syncMode === "server" ? "DeepSeek Agent 已连接" : "离线只读"}</h2><p>{syncMode === "server" ? "Agent 负责叙事裁决，Java 负责规则、时间与存档。" : "缓存不会自行推进世界。"} 当前账号：{email || "未知"}</p></div></section>
+      <section className="theme-card"><div><strong>阅读外观</strong><span>夜间模式采用月下宣纸，不改变游戏进度。</span></div><div className="theme-switch">{([["system", "跟随系统"], ["paper", "宣纸"], ["night", "月夜"]] as Array<[ThemeMode, string]>).map(([id, label]) => <button aria-pressed={theme === id} data-selected={theme === id} key={id} onClick={() => onTheme(id)} type="button">{label}</button>)}</div></section>
       <div className="world-actions"><button className="reset-button" onClick={onReset} type="button"><ReloadIcon />重开此世</button><button className="reset-button" onClick={onLogout} type="button">退出邮箱</button></div>
     </div>
   );
@@ -511,6 +543,10 @@ export default function Prototype() {
   const [characterDraft, setCharacterDraft] = useState<CharacterDraft>(DEFAULT_DRAFT);
   const [nameAlternatives, setNameAlternatives] = useState<string[]>([]);
   const [selectedFate, setSelectedFate] = useState("");
+  const [selectedTalent, setSelectedTalent] = useState("");
+  const [theme, setTheme] = useState<ThemeMode>(() => (window.localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "system");
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [isBusy, setIsBusy] = useState(false);
   const busyRef = useRef(false);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
@@ -522,7 +558,8 @@ export default function Prototype() {
   const game = snapshot?.state ?? null;
   const choices = snapshot?.choices ?? game?.choices ?? [];
   const email = auth?.user?.email ?? "";
-  const showGameChrome = stage === "fate" || stage === "game";
+  const showGameChrome = stage === "fate" || stage === "talent" || stage === "game";
+  const actualTheme = theme === "system" ? (systemDark ? "night" : "paper") : theme;
 
   const storeSnapshot = (next: ApiSnapshot) => {
     setSnapshot(next);
@@ -543,7 +580,7 @@ export default function Prototype() {
       if (current.exists && current.game) {
         storeSnapshot(current.game);
         setTab("adventure");
-        setStage(current.game.state.phase === "setup" ? "fate" : "game");
+        setStage(current.game.state.phase === "setup" ? "fate" : current.game.state.phase === "talent" ? "talent" : "game");
         return;
       }
     }
@@ -571,13 +608,31 @@ export default function Prototype() {
         setSyncMode("offline");
         if (cached) {
           setSnapshot(cached);
-          setStage(cached.state.phase === "setup" ? "fate" : "game");
+          setStage(cached.state.phase === "setup" ? "fate" : cached.state.phase === "talent" ? "talent" : "game");
         } else {
           setStage("login");
         }
       }
     })();
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(THEME_KEY, theme);
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => setSystemDark(media.matches);
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, [theme]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => setKeyboardOffset(Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop));
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    update();
+    return () => { viewport.removeEventListener("resize", update); viewport.removeEventListener("scroll", update); };
   }, []);
 
   useEffect(() => {
@@ -627,12 +682,33 @@ export default function Prototype() {
     if (!game || !selectedFate) return;
     const started = await gameApi.chooseFate(game.saveId, selectedFate);
     storeSnapshot(started);
-    setStage("game");
-    setTab("adventure");
-    setToast("命卷开启，世界时间开始流动");
+    setSelectedTalent("");
+    setStage("talent");
+    setToast("命格已定，先天灵光正在显现");
   });
 
-  const takeTurn = (inputType: "CHOICE" | "TEXT" | "USE_ITEM" | "USE_ABILITY" | "PRACTICE", payload: { choiceId?: string; targetId?: string; content?: string }) => runBusy(async () => {
+  const rerollTalents = () => runBusy(async () => {
+    if (!game) return;
+    const next = await gameApi.rerollTalents(game.saveId);
+    storeSnapshot(next);
+    setSelectedTalent("");
+  });
+
+  const enterWithTalent = () => runBusy(async () => {
+    if (!game || !selectedTalent) return;
+    const next = await gameApi.selectTalent(game.saveId, selectedTalent);
+    storeSnapshot(next); setStage("game"); setTab("adventure");
+    setToast("天赋已入命，世界时间开始流动");
+  });
+
+  const enterWithoutTalent = () => runBusy(async () => {
+    if (!game) return;
+    const next = await gameApi.skipTalent(game.saveId);
+    storeSnapshot(next); setStage("game"); setTab("adventure");
+    setToast("一身清净，正式入世");
+  });
+
+  const takeTurn = (inputType: "CHOICE" | "TEXT", payload: { choiceId?: string; content?: string }) => runBusy(async () => {
     if (!game || !snapshot) return;
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     setIsComposerFocused(false);
@@ -675,7 +751,7 @@ export default function Prototype() {
   }, [bootstrap, game]);
 
   return (
-    <div className="game-shell" data-composer-focused={isComposerFocused} data-entry={!showGameChrome}>
+    <div className="game-shell" data-composer-focused={isComposerFocused} data-entry={!showGameChrome} data-theme={actualTheme} style={{ "--keyboard-offset": `${keyboardOffset}px` } as CSSProperties}>
       <div className="paper-background" aria-hidden="true" />
       <header className="game-header"><div className="game-header-inner"><div className="brand-lockup"><strong>问仙录</strong><span>浮生一卷</span></div><div className="world-clock"><span>{headerText}</span><small><SewingPinFilledIcon />{game?.phase === "playing" && game.player ? `${game.currentLocation} · ${game.player.realm} · 体力 ${game.player.vitality}` : game?.phase === "dead" && game.player ? `${game.currentLocation} · ${game.player.realm} · 已故` : syncMode === "offline" ? "离线只读" : "单机世界 · 云端命卷"}</small></div></div></header>
       <div className="game-scroll" data-phase={game?.phase ?? stage} key={`${stage}-${tab}-${game?.turn ?? 0}`}><main className="screen-content" data-testid="game-content">
@@ -683,16 +759,18 @@ export default function Prototype() {
         {stage === "login" && <LoginView error={error} isBusy={isBusy} offline={syncMode === "offline"} onLogin={login} />}
         {stage === "create" && bootstrap && <CharacterCreationView alternatives={nameAlternatives} bootstrap={bootstrap} draft={characterDraft} error={error} isBusy={isBusy} onCreate={createCharacter} onDraft={(patch) => setCharacterDraft((current) => ({ ...current, ...patch }))} onGenerateName={generateName} onLogout={() => void logout()} />}
         {stage === "fate" && game && <FateSelectionView error={error} game={game} isBusy={isBusy} onRecreate={() => setResetIntent("FATES")} onSelect={setSelectedFate} onStart={chooseFate} selectedId={selectedFate} />}
+        {stage === "talent" && game && <TalentSelectionView error={error} game={game} isBusy={isBusy} onEnter={enterWithTalent} onReroll={rerollTalents} onSelect={setSelectedTalent} onSkip={enterWithoutTalent} selectedId={selectedTalent} />}
         {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView choices={choices} error={error} game={game} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} />}
-        {stage === "game" && game?.phase === "playing" && tab === "character" && <CharacterView disabled={isBusy || syncMode !== "server"} game={game} onPractice={(targetId) => void takeTurn("PRACTICE", { targetId })} onUseAbility={(targetId) => void takeTurn("USE_ABILITY", { targetId })} onUseItem={(targetId) => void takeTurn("USE_ITEM", { targetId })} />}
+        {stage === "game" && game?.phase === "playing" && tab === "character" && <CharacterView game={game} />}
         {stage === "game" && game?.phase === "playing" && tab === "chronicle" && <ChronicleView game={game} />}
-        {stage === "game" && game?.phase === "playing" && tab === "world" && <WorldView email={email} game={game} onLogout={() => void logout()} onReset={resetGame} syncMode={syncMode} />}
+        {stage === "game" && game?.phase === "playing" && tab === "world" && <WorldView email={email} game={game} onLogout={() => void logout()} onReset={resetGame} onTheme={setTheme} syncMode={syncMode} theme={theme} />}
         {stage === "game" && game?.phase === "dead" && tab !== "chronicle" && <DeathView game={game} isBusy={isBusy} onChronicle={() => setTab("chronicle")} onLogout={() => void logout()} onRebirth={resetGame} />}
         {stage === "game" && game?.phase === "dead" && tab === "chronicle" && <div className="death-chronicle"><ChronicleView game={game} /><button className="reset-button" onClick={() => setTab("adventure")} type="button">返回终局结算</button></div>}
       </main></div>
-      {stage === "game" && game?.phase === "playing" && tab === "adventure" && <form className="action-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void takeTurn("TEXT", { content: draft.trim() }); }}><textarea aria-label="自由行动" maxLength={300} onBlur={() => setIsComposerFocused(false)} onChange={(event) => setDraft(event.currentTarget.value)} onFocus={() => setIsComposerFocused(true)} placeholder="描述你接下来想做什么…" rows={1} value={draft} />{draft && <button aria-label="清空输入" className="clear-draft" onClick={() => setDraft("")} type="button"><Cross2Icon /></button>}<button className="act-button" disabled={!draft.trim() || isBusy || syncMode !== "server"} type="submit"><span>行动</span><EnterIcon /></button></form>}
+      {stage === "game" && game?.phase === "playing" && tab === "adventure" && <form className="action-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void takeTurn("TEXT", { content: draft.trim() }); }}><textarea aria-label="自由行动" maxLength={300} onBlur={() => window.setTimeout(() => setIsComposerFocused(false), 120)} onChange={(event) => setDraft(event.currentTarget.value)} onFocus={(event) => { const target = event.currentTarget; setIsComposerFocused(true); window.setTimeout(() => target.scrollIntoView({ block: "nearest", behavior: "smooth" }), 120); }} placeholder="可输入：使用物品、施展天赋或描述行动…" rows={1} value={draft} />{draft && <button aria-label="清空输入" className="clear-draft" onClick={() => setDraft("")} type="button"><Cross2Icon /></button>}<button className="act-button" disabled={!draft.trim() || isBusy || syncMode !== "server"} type="submit"><span>行动</span><EnterIcon /></button></form>}
       {stage === "game" && game?.phase === "playing" && !isComposerFocused && <nav className="bottom-nav" aria-label="主要导航">{([["adventure", "历练"], ["character", "角色"], ["chronicle", "纪事"], ["world", "世界"]] as Array<[TabId, string]>).map(([id, label]) => <button aria-current={tab === id ? "page" : undefined} key={id} onClick={() => { setError(""); setTab(id); }} type="button"><TabIcon id={id} /><span>{label}</span></button>)}</nav>}
       {resetIntent && game && <ResetConfirmDialog game={game} intent={resetIntent} isBusy={isBusy} onCancel={() => setResetIntent(null)} onConfirm={() => { setResetIntent(null); void recreate(); }} />}
+      {isBusy && (stage === "create" || stage === "fate" || stage === "talent") && <DestinyLoadingOverlay stage={stage} />}
       {toast && <div className="save-toast" role="status"><span className="agent-dot" />{toast}</div>}
     </div>
   );

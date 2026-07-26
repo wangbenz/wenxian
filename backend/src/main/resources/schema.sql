@@ -100,3 +100,17 @@ create table if not exists game_life_archive (
     index idx_life_archive_user (user_id, ended_at),
     constraint fk_life_archive_user foreign key (user_id) references app_user(id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+
+create table if not exists agent_execution (
+    id varchar(80) primary key,
+    save_id varchar(80) not null,
+    turn_number integer not null,
+    model varchar(80) not null,
+    attempt_number integer not null,
+    status varchar(24) not null,
+    detail text not null,
+    response_id varchar(128),
+    latency_ms bigint not null default 0,
+    created_at timestamp(6) not null,
+    index idx_agent_execution_save (save_id, turn_number, created_at)
+) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;

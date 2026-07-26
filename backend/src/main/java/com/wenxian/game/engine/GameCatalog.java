@@ -55,7 +55,7 @@ public final class GameCatalog {
         GameState.OpeningSeed opening = option.opening;
         GameState state = new GameState();
         state.saveId = setup.saveId;
-        state.phase = "playing";
+        state.phase = "talent";
         state.world = fixedWorld();
         state.worldYear = 3001;
         state.protagonistOptions = new ArrayList<>();
@@ -74,12 +74,42 @@ public final class GameCatalog {
         state.threads = new ArrayList<>(opening.threads);
         state.inventory = initialInventory(option);
         state.abilities = initialAbilities(option);
+        state.talentOptions = new ArrayList<>();
+        state.talentRerolled = false;
         state.events = new ArrayList<>(List.of(new GameState.ChronicleEvent(
                 "event-origin", "命卷开启 · " + option.name,
                 option.identity + "选择在" + opening.location + "面对自己的第一场因果。",
                 3001 * 360 * 1440 + Math.max(0, opening.day - 1) * 1440 + opening.minute, "world"
         )));
         return state;
+    }
+
+    public static GameState enterWorld(GameState selected, String talentId) {
+        if (!"talent".equals(selected.phase)) throw new IllegalArgumentException("当前命卷不在天赋选择阶段");
+        GameState.AbilityRecord talent = selected.talentOptions.stream()
+                .filter(option -> option.id.equals(talentId))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("未知天赋"));
+        selected.abilities.add(talent);
+        selected.talentOptions = new ArrayList<>();
+        selected.phase = "playing";
+        selected.events.add(0, new GameState.ChronicleEvent(
+                "event-awakening", "天赋初醒 · " + talent.name,
+                "入世之初，" + selected.player.name + "选择承认自身的异处：" + talent.description,
+                selected.worldYear * 360 * 1440 + Math.max(0, selected.day - 1) * 1440 + selected.minute, "gain"
+        ));
+        return selected;
+    }
+
+    public static GameState enterWorldWithoutTalent(GameState selected) {
+        if (!"talent".equals(selected.phase)) throw new IllegalArgumentException("当前命卷不在天赋选择阶段");
+        selected.talentOptions = new ArrayList<>();
+        selected.phase = "playing";
+        selected.events.add(0, new GameState.ChronicleEvent(
+                "event-no-awakening", "凡骨入世",
+                selected.player.name + "没有强求额外天赋，只凭命格与选择踏入此世。",
+                selected.worldYear * 360 * 1440 + Math.max(0, selected.day - 1) * 1440 + selected.minute, "decision"
+        ));
+        return selected;
     }
 
     private static int lifespanFor(String race) {

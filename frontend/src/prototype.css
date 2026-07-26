@@ -621,7 +621,74 @@
 }
 
 .game-shell[data-composer-focused="true"] .action-composer {
-  bottom: calc(8px + var(--bottom-safe));
+  bottom: calc(var(--keyboard-offset, 0px) + 8px);
+}
+
+.talent-view { padding-bottom: 40px; }
+.talent-intro h1 { margin: 4px 0 8px; font-family: var(--display); font-size: clamp(30px, 8vw, 44px); }
+.talent-grid { display: grid; gap: 12px; }
+.talent-card { display: grid; grid-template-columns: 52px 1fr; gap: 14px; width: 100%; padding: 18px; color: var(--ink); text-align: left; background: rgba(248, 245, 235, .82); border: 1px solid var(--line); }
+.talent-card[data-selected="true"] { background: rgba(223, 232, 222, .9); border-color: var(--celadon); box-shadow: inset 3px 0 var(--celadon); }
+.talent-sigil { display: grid; place-items: center; width: 46px; height: 46px; color: var(--celadon-dark); border: 1px solid var(--celadon); border-radius: 50%; font-family: var(--display); font-size: 21px; }
+.talent-card h3 { margin: 0 0 6px; font-family: var(--display); font-size: 21px; }
+.talent-card p { margin: 0 0 8px; color: var(--ink-soft); font-size: 12px; line-height: 1.7; }
+.talent-card small, .talent-card em { display: block; color: var(--ink-faint); font-size: 10px; line-height: 1.6; font-style: normal; }
+.talent-card em { color: var(--cinnabar); }
+.talent-secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; width: min(100%, 520px); margin: 9px auto 0; }
+.talent-secondary-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px; color: var(--ink-soft); background: rgba(245, 240, 227, .66); border: 1px solid var(--line); font-family: var(--display); }
+.talent-secondary-actions button:disabled { opacity: .48; }
+.theme-card { margin-top: 14px; padding: 16px; background: rgba(248, 245, 235, .72); border: 1px solid var(--line); }
+.theme-card > div:first-child { display: flex; flex-direction: column; gap: 4px; }
+.theme-card strong { font-family: var(--display); font-size: 17px; }
+.theme-card span { color: var(--ink-faint); font-size: 10px; line-height: 1.5; }
+.theme-switch { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 12px; border: 1px solid var(--line); }
+.theme-switch button { min-height: 38px; color: var(--ink-soft); background: transparent; border: 0; font-family: var(--display); }
+.theme-switch button + button { border-left: 1px solid var(--line); }
+.theme-switch button[data-selected="true"] { color: var(--paper); background: var(--celadon); }
+.destiny-loading { position: absolute; z-index: 30; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 28px; text-align: center; background: rgba(239, 234, 219, .92); backdrop-filter: blur(10px); }
+.destiny-orbit { position: relative; display: grid; place-items: center; width: 78px; height: 78px; margin-bottom: 18px; color: var(--celadon-dark); border: 1px solid var(--celadon); border-radius: 50%; font-family: var(--display); font-size: 23px; }
+.destiny-orbit span, .destiny-orbit i { position: absolute; inset: -8px; border: 1px solid transparent; border-top-color: var(--cinnabar); border-radius: 50%; animation: destiny-spin 2.6s linear infinite; }
+.destiny-orbit i { inset: 8px; border-top-color: var(--celadon); animation-direction: reverse; animation-duration: 1.8s; }
+.destiny-loading strong { margin: 6px 0 9px; font-family: var(--display); font-size: 24px; font-weight: 500; }
+.destiny-loading small { max-width: 300px; color: var(--ink-soft); line-height: 1.75; }
+.loading-ink-line { width: min(220px, 70vw); height: 1px; margin-top: 24px; overflow: hidden; background: var(--line); }
+.loading-ink-line i { display: block; width: 38%; height: 100%; background: var(--celadon); animation: ink-travel 1.7s ease-in-out infinite; }
+@keyframes destiny-spin { to { transform: rotate(360deg); } }
+@keyframes ink-travel { 0% { transform: translateX(-110%); } 55%, 100% { transform: translateX(290%); } }
+
+/* Moonlit xuan-paper theme: a separate visual system, not a color inversion. */
+.game-shell[data-theme="night"] {
+  --paper: #191e1d;
+  --paper-strong: #242a27;
+  --ink: #eee7d5;
+  --ink-soft: #c5c0af;
+  --ink-faint: #918f84;
+  --celadon: #79a58f;
+  --celadon-dark: #a4c6b4;
+  --celadon-pale: #283a33;
+  --cinnabar: #c77b6d;
+  --line: rgba(216, 211, 190, .18);
+  background: #151a19;
+}
+.game-shell[data-theme="night"] .paper-background { background-image: linear-gradient(rgba(10, 14, 14, .2), rgba(10, 14, 14, .5)), url("/assets/game/xuan-paper-night.png"); filter: saturate(.72) contrast(1.03); opacity: .8; }
+.game-shell[data-theme="night"] .game-header { background: linear-gradient(180deg, rgba(20, 25, 24, .98), rgba(20, 25, 24, .86) 78%, rgba(20, 25, 24, .45)); }
+.game-shell[data-theme="night"] .brand-lockup strong { color: #f3eddb; }
+.game-shell[data-theme="night"] :is(.entry-card, .world-intro-card, .creation-card, .fate-card, .talent-card, .choice-card, .hero-card, .life-purpose-card, .stat-grid article, .ability-row, .inventory-item, .character-row, .timeline-summary, .timeline-card, .location-card, .world-law-card, .thread-card, .agent-record-card, .theme-card, .death-card, .ink-dialog) { color: var(--ink); background: linear-gradient(145deg, rgba(35, 42, 39, .89), rgba(24, 30, 29, .82)); border-color: var(--line); box-shadow: none; }
+.game-shell[data-theme="night"] :is(input, textarea, .action-composer textarea) { color: var(--ink); background: rgba(27, 33, 31, .96); border-color: rgba(203, 198, 178, .32); }
+.game-shell[data-theme="night"] :is(input, textarea)::placeholder { color: #797d76; }
+.game-shell[data-theme="night"] .bottom-nav { background: rgba(20, 25, 24, .96); }
+.game-shell[data-theme="night"] .bottom-nav button { color: #aaa99e; }
+.game-shell[data-theme="night"] .bottom-nav button[aria-current="page"] { color: #a7ceb9; }
+.game-shell[data-theme="night"] .signal-strip, .game-shell[data-theme="night"] .chapter-generating { background: rgba(33, 48, 42, .62); }
+.game-shell[data-theme="night"] .talent-card[data-selected="true"], .game-shell[data-theme="night"] .fate-card[data-selected="true"] { background: rgba(48, 70, 60, .82); }
+.game-shell[data-theme="night"] .talent-secondary-actions button { color: var(--ink-soft); background: rgba(25, 31, 29, .78); }
+.game-shell[data-theme="night"] .theme-switch button[data-selected="true"] { color: #15201b; background: #89b39d; }
+.game-shell[data-theme="night"] .ink-dialog-backdrop { background: rgba(4, 7, 7, .72); }
+.game-shell[data-theme="night"] .destiny-loading { background: rgba(17, 22, 21, .94); }
+.game-shell[data-theme="night"] .location-art { background-image: linear-gradient(rgba(16, 24, 22, .3), rgba(16, 24, 22, .72)), url("/assets/game/xuan-paper-night.png"); background-position: center 30%; filter: saturate(.72) contrast(1.02); }
+
+@media (max-width: 420px) {
+  .talent-secondary-actions { grid-template-columns: 1fr; }
 }
 
 .action-composer textarea {

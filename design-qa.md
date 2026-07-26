@@ -1,71 +1,43 @@
-# Design QA
+# Product Design QA — 月下宣纸
 
-## Evidence
+- Source visual truth: `/Users/ben/.codex/generated_images/019f9715-313f-7790-a6d4-54af2cb4b645/exec-1fe322ad-d4fb-4cc4-ae18-31317b2071a1.png`
+- Implementation screenshot: `qa/implementation-night-character-mobile.png`
+- Normalized comparison: `qa/night-character-comparison.jpg`
+- Viewport: 390 × 844 CSS px; browser capture device scale factor 0.75.
+- Pixel dimensions: source 853 × 1844; raw implementation 520 × 1125 from the in-app browser capture provider; both comparison panes normalized to 390 × 844.
+- State: signed-in existing save, character record, `data-theme="night"`.
 
-- Source visual truth: `/Users/ben/.codex/generated_images/019f9715-313f-7790-a6d4-54af2cb4b645/call_czDdWnC3fO2vpgwjbvaO0uMv.png`
-- Final implementation screenshot: `/Users/ben/Documents/修仙世界游戏demo/h5-demo/implementation-mobile-screen-final.png`
-- Final side-by-side comparison: `/Users/ben/Documents/修仙世界游戏demo/h5-demo/design-comparison-final.png`
-- Browser-rendered full preview: `/Users/ben/Documents/修仙世界游戏demo/h5-demo/implementation-full-v4.png`
-- Legacy comparison viewport: `393 × 852` CSS pixels. The current runtime is a responsive H5 and no longer renders inside a device frame.
-- Current responsive checks: narrow viewport and wide viewport; page shell fills the viewport, has no horizontal overflow, and readable content is capped at `760px` on wide screens.
-- State: new save, `赌坊后巷`, keyboard closed, `历练` selected.
+**Findings**
 
-## Full-view Comparison Evidence
+- No remaining P0/P1/P2 issue. The implementation preserves the selected visual's warm-charcoal xuan-paper ground, ivory display typography, celadon state accents, fine low-contrast rules, restrained red details and square translucent record cards.
+- Fonts and typography: the existing Song/Kaiti stack remains consistent with the light product and the selected mock. Titles, metadata and body copy retain distinct optical hierarchy; long choice labels and descriptions wrap instead of truncating.
+- Spacing and layout rhythm: mobile content stays inside the 390 px viewport without horizontal overflow; persistent header and bottom navigation remain stable; record cards use the same compact vertical cadence as the reference.
+- Colors and visual tokens: the night token set is independently defined rather than inverted. Foreground/background contrast remains readable while avoiding pure white and pure black.
+- Image quality and asset fidelity: `xuan-paper-night.png` is a project-owned raster asset generated for the selected moonlit direction. It retains a quiet center for reading and places moon/mountain/alley detail at the edge; no placeholder illustration or code-drawn substitute remains.
+- Copy and content: theme labels, read-only record terminology and natural-language action hint match the actual game behavior.
 
-The final comparison shows the same core composition as the selected source: warm xuan-paper background, ink-wash alley on the right, compact title/time header, scene heading, literary narrative, two-tone consequence strip, three stacked actions, free-action composer, and four-item bottom navigation.
+**Focused region evidence**
 
-The selected visual hierarchy is now rendered directly into the browser viewport. There is no iPhone bezel, camera cutout, simulated status bar, device picker, or simulated keyboard.
+- Character abilities and inventory were inspected in the rendered DOM: both contain zero action buttons, confirming the secondary page is view-only.
+- Adventure choice cards were inspected at mobile width: complete label and hint text wrap naturally, with zero horizontal-overflow elements.
+- Composer focus was tested: bottom navigation is removed while focused, the composer uses the visual-viewport keyboard offset, and the draft is retained until a successful action response.
 
-## Required Fidelity Surfaces
+**Comparison history**
 
-- Fonts and typography: Chinese display text uses local Kaiti fallbacks and body text uses Songti fallbacks. Hierarchy, wrapping, and line height match the literary source. The exact brush font differs slightly because the source lettering is image-generated; this is acceptable P3 drift.
-- Spacing and layout rhythm: final capture keeps all three decisions fully visible above the fixed composer. Header, narrative, consequence strip, choices, composer, and navigation remain clearly separated.
-- Colors and visual tokens: warm ivory paper, celadon actions, gray ink, and cinnabar danger states match the selected direction with sufficient contrast.
-- Image quality and asset fidelity: the visible paper and alley are a dedicated generated raster asset at `852 × 1846`; no placeholder, CSS illustration, handcrafted SVG, emoji, or screenshot-stretch substitute is used.
-- Copy and content: scene title, narrative, consequences, action labels, composer placeholder, and navigation match the selected source. Short action hints are an intentional product addition for decision clarity.
+1. Initial browser pass found a P2 light-scene strip on the night World page and a P1 focus callback error caused by reading a released React event target.
+2. Fixed the World scene art to use the moonlit raster asset and captured the textarea node before the delayed `scrollIntoView` callback.
+3. Post-fix browser pass: 390 × 844 and 900 × 900 CSS layouts reported no horizontal overflow; a fresh tab reported no console errors and no native JavaScript dialog.
 
-## Focused Region Comparison
+**Primary interactions tested**
 
-A separate focused crop was not needed: the normalized `393 × 852` side-by-side board keeps header, narrative, all action labels, composer, and navigation readable in a single view. The action-list region was nevertheless checked explicitly for obstruction after the first pass.
+- Adventure/character/world tab navigation.
+- System/paper/moon-night theme controls and persisted moon-night state.
+- Character and inventory read-only behavior.
+- Mobile composer focus, draft entry, navigation hiding and keyboard-offset positioning.
+- Wide responsive layout.
 
-## Comparison History
+**Follow-up Polish**
 
-### Pass 1 — blocked
+- P3: once a dedicated Chinese webfont is selected for production licensing/performance, replace platform-dependent Kaiti/Song fallbacks for even closer cross-device typography.
 
-- [P1] The third action was partially hidden behind the fixed composer.
-- [P2] The ink-wash alley was too dark and competed with narrative text.
-
-Fixes made:
-
-- Reduced header and vertical section heights, tightened narrative rhythm, and lowered action-card height so all three decisions fit above the composer.
-- Reduced background art opacity from `0.80` to `0.62`.
-- Added scroll remounting per tab/turn and keyboard blur handling so the initial state returns to the top with the keyboard closed.
-
-Post-fix evidence: `implementation-full-v4.png`, `implementation-mobile-screen-final.png`, and `design-comparison-final.png`.
-
-### Pass 2 — passed as visual prototype
-
-No actionable P0/P1/P2 visual mismatch remained, but the page was still embedded in a phone mockup.
-
-### Pass 3 — responsive H5 correction
-
-- Removed `MobileRuntime` / `PhoneFrame` from the app entry.
-- Replaced simulated scrolling and text input with native browser behavior.
-- Added safe-area handling, `100dvh` viewport sizing, mobile full-width layout, and a centered `760px` wide-screen content column.
-- Verified the DOM contains zero phone bezel, camera, or device-picker elements.
-- Verified focusing the free-action input hides the bottom navigation and produces no console errors.
-
-## Primary Interactions Tested
-
-- Clicked `请求赊药`; verified scene changed to `一纸药约` and save synchronization toast appeared.
-- Opened `角色`; verified 许百川’s state changed to `等待你的答复`.
-- Opened `纪事`; verified `以命赊药` appeared on the unified timeline.
-- Submitted free action `先回家照看妹妹`; verified scene changed to `西屋灯冷`.
-- Opened `世界` and used `重开这一局`; verified the new save returned to `赌坊后巷`.
-- Browser console warnings/errors checked: none.
-
-## Follow-up Polish
-
-- [P3] A licensed or custom brush-calligraphy font could match the generated title more exactly.
-
-final result: passed as responsive H5
+final result: passed

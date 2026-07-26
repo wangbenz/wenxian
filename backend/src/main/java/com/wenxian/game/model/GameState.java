@@ -18,6 +18,8 @@ public class GameState {
     public List<StoryChoice> choices = new ArrayList<>();
     public WorldProfile world;
     public List<ProtagonistOption> protagonistOptions = new ArrayList<>();
+    public List<AbilityRecord> talentOptions = new ArrayList<>();
+    public boolean talentRerolled;
     public PlayerState player;
     public List<CharacterRecord> characters = new ArrayList<>();
     public List<ChronicleEvent> events = new ArrayList<>();

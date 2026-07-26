@@ -87,6 +87,19 @@ create table game_turn (
     constraint fk_game_turn_conversation foreign key (conversation_id) references agent_conversation(id) on delete cascade
 );
 
+create table agent_execution (
+    id varchar(80) primary key,
+    save_id varchar(80) not null,
+    turn_number integer not null,
+    model varchar(80) not null,
+    attempt_number integer not null,
+    status varchar(24) not null,
+    detail clob not null,
+    response_id varchar(128),
+    latency_ms bigint not null default 0,
+    created_at timestamp(6) not null
+);
+
 create table game_life_archive (
     id varchar(80) primary key,
     user_id varchar(64) not null,

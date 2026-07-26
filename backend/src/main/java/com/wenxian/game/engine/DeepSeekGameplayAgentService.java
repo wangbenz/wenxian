@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.wenxian.game.model.GameState;
+import com.wenxian.game.persistence.AgentExecutionAuditStore;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,12 +29,20 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
     private final ObjectMapper objectMapper;
     private final WorldGenerationService deepSeek;
     private final AgentToolRegistry toolRegistry;
+    private final AgentExecutionAuditStore auditStore;
 
+    @Autowired
     public DeepSeekGameplayAgentService(ObjectMapper objectMapper, WorldGenerationService deepSeek,
-                                        AgentToolRegistry toolRegistry) {
+                                        AgentToolRegistry toolRegistry, AgentExecutionAuditStore auditStore) {
         this.objectMapper = objectMapper;
         this.deepSeek = deepSeek;
         this.toolRegistry = toolRegistry;
+        this.auditStore = auditStore;
+    }
+
+    DeepSeekGameplayAgentService(ObjectMapper objectMapper, WorldGenerationService deepSeek,
+                                 AgentToolRegistry toolRegistry) {
+        this(objectMapper, deepSeek, toolRegistry, null);
     }
 
     @Override
@@ -41,7 +51,8 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "DeepSeek Agent 尚未配置");
         }
         long startedAt = System.nanoTime();
-        try {
+        Exception lastFailure = null;
+        for (int attempt = 1; attempt <= 2; attempt++) try {
             List<Map<String, Object>> messages = new ArrayList<>();
             messages.add(Map.of("role", "system", "content", systemPrompt()));
             if (history != null) messages.addAll(history);
@@ -58,6 +69,11 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                     权威状态已经完整提供。只有追查特殊细节时才调用工具，避免重复读取。完成判断后只输出约定的 JSON 裁决。
                     """.formatted(objectMapper.writeValueAsString(state), state.sceneTitle, state.currentLocation,
                     state.worldYear, state.day, state.minute / 60, state.minute % 60, action, state.turn)));
+            if (attempt > 1) messages.add(Map.of("role", "user", "content", """
+                    上一次裁决因 JSON 结构、状态同步或章节长度不合格而被服务器拒绝。
+                    请完整重写本轮裁决：严格满足 JSON 字段，CONTINUE 章节不少于 900 个汉字、10段，若承认新天赋必须同步 abilityChange。
+                    不要解释修复过程，只输出完整裁决 JSON。
+                    """));
 
             int promptTokens = 0;
             int completionTokens = 0;
@@ -91,6 +107,11 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 String content = message.path("content").asText();
                 if (content.isBlank()) throw new IllegalArgumentException("Agent 未返回裁决");
                 AgentResult result = sanitize(objectMapper.readValue(content, AgentResult.class), state);
+                int narrativeLength = result.narrative().stream().mapToInt(String::length).sum();
+                if ("CONTINUE".equals(result.outcome()) && (result.narrative().size() < 10 || narrativeLength < 900)) {
+                    throw new IllegalArgumentException("Agent 章节过短：" + result.narrative().size() + "段/" + narrativeLength + "字");
+                }
+                audit(state, attempt, "SUCCESS", "", responseId, (System.nanoTime() - startedAt) / 1_000_000L);
                 return new AgentTurn(result, content, responseId, promptTokens, completionTokens,
                         (System.nanoTime() - startedAt) / 1_000_000L);
             }
@@ -98,8 +119,22 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
         } catch (ResponseStatusException error) {
             throw error;
         } catch (Exception error) {
-            LOGGER.error("DeepSeek 行动裁决失败: {}", error.getMessage(), error);
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "DeepSeek 行动裁决失败", error);
+            lastFailure = error;
+            LOGGER.warn("DeepSeek 行动裁决第 {} 次失败: {}", attempt, error.getMessage());
+            audit(state, attempt, "FAILED", error.getClass().getSimpleName() + ": " + error.getMessage(), null,
+                    (System.nanoTime() - startedAt) / 1_000_000L);
+        }
+        LOGGER.error("DeepSeek 行动裁决两次均失败", lastFailure);
+        throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "本章推演暂时中断，命卷没有发生变化，请重新推演", lastFailure);
+    }
+
+    private void audit(GameState state, int attempt, String status, String detail, String responseId, long latencyMs) {
+        if (auditStore == null) return;
+        try {
+            auditStore.record(state.saveId, state.turn + 1, deepSeek.model(), attempt, status, detail, responseId, latencyMs);
+        } catch (Exception error) {
+            LOGGER.warn("Agent 审计日志写入失败: {}", error.getMessage());
         }
     }
 
@@ -110,12 +145,13 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
 
     private String systemPrompt() {
         return """
-                你是残酷修仙文字游戏的唯一世界裁决 Agent。必须只输出 JSON，不要 Markdown，不要解释。
+                你是休闲沉浸式修仙文字游戏的唯一世界裁决 Agent。必须只输出 JSON，不要 Markdown，不要解释。
                 Java数据库和工具返回内容是唯一事实源。你只能推进世界，不能推翻既有历史、复活已死角色或凭空赠送高阶力量。
                 不得假设背包、功法、人物状态或旧事件；需要这些信息时先调用对应读取工具。
-                NPC 有独立目标；时间、伤势、银钱、追查与危险必须产生真实代价。
-                每轮写成一个完整的小章节：推进1至3个连续场景，自动处理赶路、寒暄、普通观察等低价值步骤，只在会改变命运、资源、关系或风险的关键节点停下。
-                CONTINUE 时 narrative 必须6至10段，总计约700至1200个简体中文字；保持小说感、具体感官与人物行动，不写流水账，不复述状态面板。
+                NPC 有独立目标；时间、伤势、银钱、追查与危险会产生合理代价，但前6回合属于新手保护期，失败优先转化为受伤、失败、新债务或错失机缘。
+                只有玩家明知高危仍选择自杀式行动，或生命值已归零且无合理脱身手段时，才能判定死亡。高危选项必须事先明示危险。
+                每轮写成一个完整章节：推进2至4个连续场景，自动处理赶路、寒暄、普通观察与低价值交流，只在会改变命运、资源、关系或风险的关键节点停下。
+                CONTINUE 时 narrative 必须10至16段，总计约1200至2000个简体中文字；保持小说感、具体感官与人物行动，不写流水账，不复述状态面板。
                 playerPatch 使用更新后的绝对数值，不是增量。characterPatch/threadPatch 只能引用输入中已有 id；无变化时为 null。
                 境界只能使用：凡俗、引气、筑基、金丹、元婴、化神、炼虚、合道。境界属于 player.realm，不是功法或天赋；不得创建名为“练气一层/筑基境”等境界状态的 abilityChange。
                 只要剧情明确完成突破，必须在同一裁决的 playerPatch.realm 写入新境界；修炼尝试、获得功法或短暂借力不等于突破。
@@ -150,7 +186,7 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
     AgentResult sanitize(AgentResult raw, GameState state) {
         if (raw == null) throw new IllegalArgumentException("Agent 裁决为空");
         String outcome = "DEAD".equalsIgnoreCase(raw.outcome()) ? "DEAD" : "CONTINUE";
-        List<String> narrative = strings(raw.narrative(), "DEAD".equals(outcome) ? 3 : 6, 10);
+        List<String> narrative = strings(raw.narrative(), "DEAD".equals(outcome) ? 3 : 6, 16);
         List<String> signals = strings(raw.signals(), 1, 3);
         List<GameState.StoryChoice> choices = sanitizeChoices(raw.choices());
         if (narrative.size() < 2 || signals.isEmpty()

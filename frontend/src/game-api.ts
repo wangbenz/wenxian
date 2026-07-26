@@ -105,7 +105,7 @@ export type ProtagonistOption = {
 export type QuestThread = { id: string; title: string; state: string; danger: number };
 
 export type GameState = {
-  phase: "setup" | "playing" | "dead";
+  phase: "setup" | "talent" | "playing" | "dead";
   saveId: string;
   sceneId: string;
   sceneTitle: string;
@@ -119,6 +119,8 @@ export type GameState = {
   choices: Choice[];
   world: WorldProfile;
   protagonistOptions: ProtagonistOption[];
+  talentOptions: AbilityRecord[];
+  talentRerolled: boolean;
   player?: PlayerState | null;
   characters: CharacterRecord[];
   events: ChronicleEvent[];
@@ -251,6 +253,12 @@ export const gameApi = {
     `/api/v1/saves/${encodeURIComponent(saveId)}/protagonist`,
     { method: "POST", body: JSON.stringify({ candidateId }) },
   ),
+  rerollTalents: (saveId: string) => request<ApiSnapshot>(`/api/v1/saves/${encodeURIComponent(saveId)}/talents/reroll`, { method: "POST" }),
+  selectTalent: (saveId: string, talentId: string) => request<ApiSnapshot>(
+    `/api/v1/saves/${encodeURIComponent(saveId)}/talents/select`,
+    { method: "POST", body: JSON.stringify({ talentId }) },
+  ),
+  skipTalent: (saveId: string) => request<ApiSnapshot>(`/api/v1/saves/${encodeURIComponent(saveId)}/talents/skip`, { method: "POST" }),
   turn: (
     saveId: string,
     stateVersion: number,
