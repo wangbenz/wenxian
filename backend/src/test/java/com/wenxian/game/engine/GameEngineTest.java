@@ -30,6 +30,7 @@ class GameEngineTest {
                 List.of(new GameState.StoryChoice("impossible", "继续", "不应保留", "default")),
                 Map.of("vitality", 0), new AgentResult.EventDraft("剑下亡魂", "你被一剑封喉。", "risk"),
                 null, null, null, null,
+                new AgentResult.ActionResolution("ACCEPTED", "", "", List.of()),
                 new AgentResult.DeclarationResolution("NONE", "NOT_APPLICABLE", "无声明")
         );
 

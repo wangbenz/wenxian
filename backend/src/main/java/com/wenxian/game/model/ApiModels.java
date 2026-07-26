@@ -61,7 +61,12 @@ public final class ApiModels {
             long revision,
             Instant updatedAt,
             List<GameState.StoryChoice> choices,
-            Map<String, Object> agent
+            Map<String, Object> agent,
+            ActionResolutionView actionResolution
+    ) {}
+
+    public record ActionResolutionView(
+            String result, String title, String reason, List<String> suggestions
     ) {}
 
     public record CurrentSaveResponse(boolean exists, GameResponse game) {}

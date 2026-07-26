@@ -108,7 +108,9 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 if (content.isBlank()) throw new IllegalArgumentException("Agent 未返回裁决");
                 AgentResult result = sanitize(objectMapper.readValue(content, AgentResult.class), state);
                 int narrativeLength = result.narrative().stream().mapToInt(String::length).sum();
-                if ("CONTINUE".equals(result.outcome()) && (result.narrative().size() < 10 || narrativeLength < 900)) {
+                if ("ACCEPTED".equals(result.actionResolution().result())
+                        && "CONTINUE".equals(result.outcome())
+                        && (result.narrative().size() < 10 || narrativeLength < 900)) {
                     throw new IllegalArgumentException("Agent 章节过短：" + result.narrative().size() + "段/" + narrativeLength + "字");
                 }
                 audit(state, attempt, "SUCCESS", "", responseId, (System.nanoTime() - startedAt) / 1_000_000L);
@@ -151,6 +153,11 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 NPC 有独立目标；时间、伤势、银钱、追查与危险会产生合理代价，但前6回合属于新手保护期，失败优先转化为受伤、失败、新债务或错失机缘。
                 只有玩家明知高危仍选择自杀式行动，或生命值已归零且无合理脱身手段时，才能判定死亡。高危选项必须事先明示危险。
                 每轮写成一个完整章节：推进2至4个连续场景，自动处理赶路、寒暄、普通观察与低价值交流，只在会改变命运、资源、关系或风险的关键节点停下。
+                先判断玩家行动能否在当前权威状态中成立，并填写 actionResolution：
+                - ACCEPTED：行动明确且可能成立，正常生成完整章节并推进状态。
+                - REJECTED：行动违反境界顺序、声称拥有不存在的物品/能力、试图改写既定历史，或当前条件显然无法做到。直接说明具体原因，不生成替代剧情，不施加反噬，不推进时间和状态。
+                - CLARIFY：行动对象或意图不明确，无法确定玩家究竟想做什么。直接请求补充，不推进时间和状态。
+                REJECTED/CLARIFY 时只填写 actionResolution，其他剧情变化字段留空或为 null；suggestions 提供2至3条当前确实可做的小说化行动。它们是业务裁决，不是系统错误。
                 CONTINUE 时 narrative 必须10至16段，总计约1200至2000个简体中文字；保持小说感、具体感官与人物行动，不写流水账，不复述状态面板。
                 面向玩家的 narrative、signals、choices 和能力 description 必须保持小说语言，不得出现百分比、成功率、冷却时间、回合数、数值加成、系统提示或“触发判定”等 RPG 面板措辞。数值只用于 JSON 状态字段和后端裁决，不得写进正文。
                 playerPatch 使用更新后的绝对数值，不是增量。characterPatch/threadPatch 只能引用输入中已有 id；无变化时为 null。
@@ -169,6 +176,7 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 必须输出以下 json 格式：
                 {
                   "sceneId":"ascii-kebab-id","sceneTitle":"","currentLocation":"","elapsed":30,"outcome":"CONTINUE",
+                  "actionResolution":{"result":"ACCEPTED|REJECTED|CLARIFY","title":"","reason":"","suggestions":["",""]},
                   "narrative":["",""],"signals":[""],
                   "choices":[{"id":"ascii-kebab-id","label":"","hint":"","tone":"default"}],
                   "playerPatch":{"vitality":60,"silver":20,"insight":7,"suspicion":30},
@@ -186,6 +194,14 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
 
     AgentResult sanitize(AgentResult raw, GameState state) {
         if (raw == null) throw new IllegalArgumentException("Agent 裁决为空");
+        AgentResult.ActionResolution actionResolution = sanitizeActionResolution(raw.actionResolution());
+        if (!"ACCEPTED".equals(actionResolution.result())) {
+            return new AgentResult(
+                    state.sceneId, state.sceneTitle, state.currentLocation, 0, "CONTINUE",
+                    List.of(), List.of(), List.of(), Map.of(), null, null, null, null, null,
+                    actionResolution, sanitizeDeclaration(raw.declarationResolution(), raw.abilityChange())
+            );
+        }
         String outcome = "DEAD".equalsIgnoreCase(raw.outcome()) ? "DEAD" : "CONTINUE";
         List<String> narrative = strings(raw.narrative(), "DEAD".equals(outcome) ? 3 : 6, 16);
         List<String> signals = strings(raw.signals(), 1, 3);
@@ -211,8 +227,25 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 sanitizeEntity(raw.characterPatch(), state.characters.stream().map(character -> character.id).toList(), CHARACTER_KEYS),
                 sanitizeEntity(raw.threadPatch(), state.threads.stream().map(thread -> thread.id).toList(), THREAD_KEYS),
                 sanitizeInventory(raw.inventoryChange(), state), abilityChange,
+                actionResolution,
                 sanitizeDeclaration(raw.declarationResolution(), raw.abilityChange())
         );
+    }
+
+    private AgentResult.ActionResolution sanitizeActionResolution(AgentResult.ActionResolution resolution) {
+        if (resolution == null) {
+            return new AgentResult.ActionResolution("ACCEPTED", "", "", List.of());
+        }
+        String result = Set.of("ACCEPTED", "REJECTED", "CLARIFY").contains(resolution.result())
+                ? resolution.result() : "ACCEPTED";
+        if ("ACCEPTED".equals(result)) {
+            return new AgentResult.ActionResolution(result, "", "", List.of());
+        }
+        String title = value(resolution.title(), "REJECTED".equals(result) ? "此念不可行" : "此念尚未成形");
+        if (blank(resolution.reason())) throw new IllegalArgumentException("Agent 未说明行动裁决原因");
+        List<String> suggestions = strings(resolution.suggestions(), 2, 3);
+        if (suggestions.size() < 2) throw new IllegalArgumentException("Agent 未提供可行行动建议");
+        return new AgentResult.ActionResolution(result, title, resolution.reason().strip(), suggestions);
     }
 
     private AgentResult.DeclarationResolution sanitizeDeclaration(

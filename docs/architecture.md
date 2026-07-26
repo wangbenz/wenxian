@@ -60,7 +60,7 @@ DeepSeek V4 Pro 调用采用 OpenAI 兼容 Tool Calls。Java 会主动附带当�
 - `get_recent_events`
 - `get_active_threads`
 
-工具执行时由 Java 隐式绑定当前用户和存档，Agent 无法读取其他玩家或尚未被玩家认识的人物。最终裁决以 JSON 返回，经过白名单和数值范围校验后才写入数据库。
+工具执行时由 Java 隐式绑定当前用户和存档，Agent 无法读取其他玩家或尚未被玩家认识的人物。最终裁决以 JSON 返回，经过白名单和数值范围校验后才写入数据库。`actionResolution.result` 只能为 `ACCEPTED`、`REJECTED` 或 `CLARIFY`；后两者不进入 `GameEngine`，因此无法修改存档或世界时间。
 
 后续接入 LangChain4j、Spring AI 或独立 LangChain 服务时，只替换 `NarrativeAgent` 实现；工具 JSON Schema、游戏接口、数据库校验和事务边界继续保留。
 
@@ -70,8 +70,13 @@ DeepSeek V4 Pro 调用采用 OpenAI 兼容 Tool Calls。Java 会主动附带当�
 玩家行动
 → 基础输入门控
 → 检查存档归属、版本和 requestId
+→ Java 硬规则裁决（无意义输入、明确跨境突破等）
+   ├─ REJECTED / CLARIFY：保存会话记录，原样返回原因与可行建议，世界状态不变
+   └─ ACCEPTED：继续加载命卷
 → 加载同一命卷历史与当前权威状态
-→ DeepSeek V4 Pro 生成完整小章节，按需调用只读工具
+→ DeepSeek V4 Pro 先裁决行动语义
+   ├─ REJECTED / CLARIFY：返回原因与建议，不生成替代章节，世界状态不变
+   └─ ACCEPTED：生成完整小章节，按需调用只读工具
 → JSON、状态同步或章节长度失败时自动携带修复约束重试一次
 → 返回叙事和结构化补丁
 → Java 校验角色 ID、境界跨度、数值、物品和天赋声明一致性
@@ -81,6 +86,23 @@ DeepSeek V4 Pro 调用采用 OpenAI 兼容 Tool Calls。Java 会主动附带当�
 ```
 
 同一存档一次只处理一轮行动；`stateVersion` 防止旧页面覆盖新状态，`requestId` 防止网络重试造成重复生成。
+
+明确境界变更还有第二道 Java 强校验：只能从当前境界进入紧邻的下一境界，并且正文或结构化变化中必须存在明确突破事实。即使 Agent 错误返回“凡俗直接元婴”，补丁也会被拒绝，不依赖提示词维持境界规则。
+
+`POST /turns` 的成功响应可选携带：
+
+```json
+{
+  "actionResolution": {
+    "result": "REJECTED",
+    "title": "此念不可行",
+    "reason": "你目前仍在凡俗之境……",
+    "suggestions": ["寻找引气法门", "打听灵根测试", "先处理眼前局势"]
+  }
+}
+```
+
+此时 HTTP 请求本身成功，`revision`、`state.turn` 和世界时间保持原值。只有网络、模型超时、响应损坏等技术故障才返回错误状态。
 
 开局前三回合允许补完一项低阶先天天赋。Agent 若接受或修改玩家声明，必须同时提交 `abilityChange`；Java 拒绝“叙事承认但能力未落库”的裁决。受限能力记录次数、恢复规则、边界和代价，使用次数由 Java 扣减。上述机械字段只用于服务端裁决，不直接展示；H5 仅呈现小说化能力描述、来历和当前领悟阶段。
 

@@ -607,6 +607,16 @@
 .chapter-generating strong { display: block; margin: 3px 0; font-family: var(--display); font-size: 15px; }
 .chapter-generating p { margin: 0; color: var(--ink-faint); font-size: 9px; line-height: 1.45; }
 .turn-error { margin: 11px 0 0; padding: 9px 11px; color: var(--cinnabar); background: rgba(156, 63, 54, 0.07); border-left: 2px solid var(--cinnabar); font-size: 10px; line-height: 1.5; }
+.action-resolution { margin: 18px 0 14px; padding: 17px 16px 15px; color: var(--ink); background: color-mix(in srgb, var(--paper-strong) 90%, var(--cinnabar) 10%); border: 1px solid color-mix(in srgb, var(--line) 65%, var(--cinnabar) 35%); border-left: 3px solid var(--cinnabar); }
+.action-resolution[data-result="CLARIFY"] { background: color-mix(in srgb, var(--paper-strong) 92%, var(--celadon) 8%); border-color: color-mix(in srgb, var(--line) 60%, var(--celadon) 40%); border-left-color: var(--celadon); }
+.action-resolution .eyebrow { margin: 0 0 6px; color: var(--cinnabar); }
+.action-resolution[data-result="CLARIFY"] .eyebrow { color: var(--celadon); }
+.action-resolution h2 { margin: 0 0 8px; font-family: var(--display); font-size: 22px; }
+.action-resolution > p:not(.eyebrow) { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.8; }
+.resolution-suggestions { display: grid; gap: 7px; margin-top: 13px; }
+.resolution-suggestions button { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; padding: 9px 11px; color: var(--ink); text-align: left; background: color-mix(in srgb, var(--paper) 86%, transparent); border: 1px solid var(--line); }
+.resolution-suggestions button svg { flex: 0 0 auto; width: 15px; color: var(--celadon); }
+.resolution-suggestions button:disabled { opacity: .5; }
 
 .action-composer {
   position: absolute;

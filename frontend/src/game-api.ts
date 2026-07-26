@@ -149,6 +149,12 @@ export type ApiSnapshot = {
     deepSeekConfigured?: boolean;
     world?: string;
   };
+  actionResolution?: {
+    result: "REJECTED" | "CLARIFY";
+    title: string;
+    reason: string;
+    suggestions: string[];
+  } | null;
 };
 
 export type AuthResponse = {

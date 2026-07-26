@@ -20,6 +20,7 @@ public record AgentResult(
         EntityPatch threadPatch,
         InventoryChange inventoryChange,
         AbilityChange abilityChange,
+        ActionResolution actionResolution,
         DeclarationResolution declarationResolution
 ) {
     public record EventDraft(String title, String detail, String kind) {}
@@ -33,5 +34,6 @@ public record AgentResult(
             String stage, int mastery, String source, String description, String rules,
             int maxUses, int remainingUses, String resetRule, String sideEffect
     ) {}
+    public record ActionResolution(String result, String title, String reason, List<String> suggestions) {}
     public record DeclarationResolution(String type, String result, String reason) {}
 }

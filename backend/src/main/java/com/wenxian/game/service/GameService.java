@@ -8,6 +8,7 @@ import com.wenxian.game.engine.NarrativeAgent;
 import com.wenxian.game.engine.RealmProgression;
 import com.wenxian.game.engine.WorldGenerationService;
 import com.wenxian.game.model.ApiModels.CharacterSheetResponse;
+import com.wenxian.game.model.ApiModels.ActionResolutionView;
 import com.wenxian.game.model.ApiModels.CreateSaveRequest;
 import com.wenxian.game.model.ApiModels.CurrentSaveResponse;
 import com.wenxian.game.model.ApiModels.GameResponse;
@@ -159,10 +160,24 @@ public class GameService {
                         : "请先选择主角并开启命卷";
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
             }
-            String action = inputGate.normalize(request, current.state);
             String conversationId = conversationStore.ensure(saveId, fateGenerationService.model());
+            ActionInputGate.Assessment assessment = inputGate.assess(request, current.state);
+            if (!assessment.accepted()) {
+                conversationStore.append(conversationId, current.state.turn, "user", assessment.action(), null, 0, 0);
+                conversationStore.append(conversationId, current.state.turn, "assistant",
+                        conversationStore.json(Map.of("actionResolution", actionResolution(assessment))), null, 0, 0);
+                return response(current, actionResolution(assessment));
+            }
+            String action = assessment.action();
             AgentTurn agentTurn = agentService.resolve(action, current.state,
                     conversationStore.loadHistory(saveId, current.state));
+            if (!"ACCEPTED".equals(agentTurn.result().actionResolution().result())) {
+                ActionResolutionView resolution = actionResolution(agentTurn.result().actionResolution());
+                conversationStore.append(conversationId, current.state.turn, "user", action, null, 0, 0);
+                conversationStore.append(conversationId, current.state.turn, "assistant", agentTurn.assistantMessage(),
+                        agentTurn.responseId(), agentTurn.promptTokens(), agentTurn.completionTokens());
+                return response(current, resolution);
+            }
             GameState next = gameEngine.apply(current.state, agentTurn.result());
             if ("USE_ABILITY".equals(request.inputType())) gameEngine.consumeAbility(next, request.targetId());
             SaveStore.StoredSave saved = saveStore.put(saveId, user.userId(), next, current.revision + 1);
@@ -269,7 +284,19 @@ public class GameService {
     }
 
     private GameResponse response(SaveStore.StoredSave save) {
+        return response(save, null);
+    }
+
+    private GameResponse response(SaveStore.StoredSave save, ActionResolutionView actionResolution) {
         GameState copy = gameEngine.copy(save.state);
-        return new GameResponse(copy, save.revision, save.updatedAt, copy.choices, agentInfo());
+        return new GameResponse(copy, save.revision, save.updatedAt, copy.choices, agentInfo(), actionResolution);
+    }
+
+    private ActionResolutionView actionResolution(ActionInputGate.Assessment assessment) {
+        return new ActionResolutionView(assessment.result(), assessment.title(), assessment.reason(), assessment.suggestions());
+    }
+
+    private ActionResolutionView actionResolution(com.wenxian.game.engine.AgentResult.ActionResolution resolution) {
+        return new ActionResolutionView(resolution.result(), resolution.title(), resolution.reason(), resolution.suggestions());
     }
 }

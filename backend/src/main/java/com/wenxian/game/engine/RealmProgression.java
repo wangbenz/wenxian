@@ -21,12 +21,33 @@ public final class RealmProgression {
                                                      AgentResult.AbilityChange abilityChange) {
         Map<String, Object> completed = new LinkedHashMap<>(patch == null ? Map.of() : patch);
         if (state.player == null) return completed;
+        List<String> evidence = collectEvidence(narrative, signals, abilityChange);
         if (completed.containsKey("realm")) {
             String normalized = normalizeRealmName(String.valueOf(completed.get("realm")));
-            if (normalized != null) completed.put("realm", normalized);
+            if (normalized == null) throw new IllegalArgumentException("Agent 返回了未知境界");
+            int current = REALMS.indexOf(state.player.realm);
+            int proposed = REALMS.indexOf(normalized);
+            if (proposed == current) {
+                completed.remove("realm");
+                return completed;
+            }
+            if (current < 0 || proposed != current + 1) {
+                throw new IllegalArgumentException("境界只能依次突破，不能跨境或倒退");
+            }
+            if (evidence.stream().filter(value -> value != null && !value.isBlank())
+                    .noneMatch(value -> explicitlyReaches(value, normalized))) {
+                throw new IllegalArgumentException("境界变更缺少明确突破事实");
+            }
+            completed.put("realm", normalized);
             return completed;
         }
+        String inferred = inferNextRealm(state.player.realm, evidence);
+        if (inferred != null) completed.put("realm", inferred);
+        return completed;
+    }
 
+    private static List<String> collectEvidence(List<String> narrative, List<String> signals,
+                                                 AgentResult.AbilityChange abilityChange) {
         List<String> evidence = new ArrayList<>();
         if (narrative != null) evidence.addAll(narrative);
         if (signals != null) evidence.addAll(signals);
@@ -36,9 +57,7 @@ public final class RealmProgression {
             evidence.add(abilityChange.source());
             evidence.add(abilityChange.description());
         }
-        String inferred = inferNextRealm(state.player.realm, evidence);
-        if (inferred != null) completed.put("realm", inferred);
-        return completed;
+        return evidence;
     }
 
     public static boolean repairLegacyState(GameState state) {

@@ -377,13 +377,21 @@ function TalentSelectionView({ game, selectedId, isBusy, error, onSelect, onEnte
   </div>;
 }
 
-function AdventureView({ game, choices, isBusy, offline, error, onChoice }: { game: GameState; choices: Choice[]; isBusy: boolean; offline: boolean; error: string; onChoice: (id: string) => void }) {
+function AdventureView({ game, choices, resolution, isBusy, offline, error, onChoice, onSuggestion }: { game: GameState; choices: Choice[]; resolution?: ApiSnapshot["actionResolution"]; isBusy: boolean; offline: boolean; error: string; onChoice: (id: string) => void; onSuggestion: (action: string) => void }) {
   return (
     <div className="adventure-view">
       <section className="scene-heading" aria-labelledby="scene-title"><span className="leaf-mark" aria-hidden="true">〆</span><div><p className="eyebrow">当前场景</p><h1 id="scene-title">{game.sceneTitle}</h1></div></section>
       <div className="ornament-line" aria-hidden="true"><span /></div>
       <section className="narrative" aria-label="剧情">{game.narrative.map((paragraph, index) => <p data-beat={index > 0 && index % 3 === 0 ? "new" : undefined} key={`${index}-${paragraph}`}>{paragraph}</p>)}</section>
       {game.signals.length > 0 && <section className="signal-strip" aria-label="局势变化">{game.signals.map((signal, index) => <span className={index % 2 ? "signal-danger" : "signal-safe"} key={`${index}-${signal}`}>{signal}</span>)}</section>}
+      {resolution && <section className="action-resolution" data-result={resolution.result} role="status">
+        <p className="eyebrow">{resolution.result === "CLARIFY" ? "行动待明" : "世界裁决"}</p>
+        <h2>{resolution.title}</h2>
+        <p>{resolution.reason}</p>
+        <div className="resolution-suggestions" aria-label="可尝试的行动">
+          {resolution.suggestions.map((suggestion) => <button disabled={isBusy || offline} key={suggestion} onClick={() => onSuggestion(suggestion)} type="button">{suggestion}<ChevronRightIcon aria-hidden="true" /></button>)}
+        </div>
+      </section>}
       {isBusy && <AgentProgress />}
       <section className="choice-list" aria-busy={isBusy} aria-label="可选行动">
         {choices.map((choice, index) => (
@@ -739,7 +747,7 @@ export default function Prototype() {
     setDraft("");
     setTab("adventure");
     setSyncMode("server");
-    setToast("本回合已写入统一时间线");
+    if (!next.actionResolution) setToast("本回合已写入统一时间线");
   });
 
   const recreate = () => runBusy(async () => {
@@ -782,7 +790,7 @@ export default function Prototype() {
         {stage === "create" && bootstrap && <CharacterCreationView alternatives={nameAlternatives} bootstrap={bootstrap} draft={characterDraft} error={error} isBusy={isBusy} onCreate={createCharacter} onDraft={(patch) => setCharacterDraft((current) => ({ ...current, ...patch }))} onGenerateName={generateName} onLogout={() => void logout()} />}
         {stage === "fate" && game && <FateSelectionView error={error} game={game} isBusy={isBusy} onRecreate={() => setResetIntent("FATES")} onSelect={setSelectedFate} onStart={chooseFate} selectedId={selectedFate} />}
         {stage === "talent" && game && <TalentSelectionView error={error} game={game} isBusy={isBusy} onEnter={enterWithTalent} onReroll={rerollTalents} onSelect={setSelectedTalent} onSkip={enterWithoutTalent} selectedId={selectedTalent} />}
-        {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView choices={choices} error={error} game={game} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} />}
+        {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView choices={choices} error={error} game={game} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onSuggestion={(content) => void takeTurn("TEXT", { content })} resolution={snapshot?.actionResolution} />}
         {stage === "game" && game?.phase === "playing" && tab === "character" && <CharacterView game={game} />}
         {stage === "game" && game?.phase === "playing" && tab === "chronicle" && <ChronicleView game={game} />}
         {stage === "game" && game?.phase === "playing" && tab === "world" && <WorldView email={email} game={game} onLogout={() => void logout()} onReset={resetGame} onTheme={setTheme} syncMode={syncMode} theme={theme} />}
