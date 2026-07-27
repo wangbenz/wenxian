@@ -17,6 +17,8 @@ wenxian/
 
 应用运行时使用 MySQL 8。先创建 `wenxian` 数据库和独立应用账号，再复制 `backend/.env.example` 中的数据库变量，或在被 Git 忽略的 `backend/src/main/resources/application-secret.yml` 中配置连接。Spring Boot 启动时会执行 `schema.sql` 自动补齐表结构；不要把数据库密码提交到仓库。
 
+数据库连接池默认最多允许 100 个连接，并保持 1 个空闲连接；可通过 `GAME_DATABASE_MAX_POOL_SIZE` 按部署环境覆盖。连接按请求逐步创建，不会在启动时一次占满 100 个连接。
+
 先启动 Java 后端：
 
 ```bash
