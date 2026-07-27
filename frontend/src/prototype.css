@@ -244,6 +244,11 @@
 .creation-card .section-heading-copy { margin-bottom: 20px; }
 .name-field-row { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; }
 .name-field-row button { display: flex; align-items: center; gap: 5px; height: 46px; padding: 0 13px; color: var(--celadon-dark); background: var(--celadon-pale); border: 1px solid rgba(85, 122, 101, 0.3); font-family: var(--display); }
+.name-field-row button:disabled { color: var(--ink-faint); background: rgba(120, 120, 110, .08); border-color: var(--line); cursor: not-allowed; }
+.identity-step > legend { display: flex; align-items: center; gap: 7px; }
+.identity-step > legend > span { display: inline-grid; width: 19px; height: 19px; place-items: center; color: var(--paper); background: var(--celadon); border-radius: 50%; font-family: var(--body); font-size: 10px; }
+.name-generation-hint { margin: 8px 0 0; color: var(--ink-faint); font-size: 11px; line-height: 1.6; }
+.single-column-fields { grid-template-columns: 1fr; }
 .name-alternatives { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .name-alternatives button { padding: 5px 9px; color: var(--celadon-dark); background: transparent; border: 1px solid rgba(85, 122, 101, 0.26); font-family: var(--display); }
 

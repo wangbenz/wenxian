@@ -186,8 +186,8 @@ export type BootstrapResponse = {
 
 export type CharacterDraft = {
   playerName: string;
-  race: "HUMAN" | "DEMON" | "SPIRIT";
-  gender: "MALE" | "FEMALE" | "UNSPECIFIED";
+  race: "" | "HUMAN" | "DEMON" | "SPIRIT";
+  gender: "" | "MALE" | "FEMALE" | "UNSPECIFIED";
   lifeGoal: "LONGEVITY" | "KINSHIP" | "POWER" | "TRUTH" | "FREEDOM";
   preference: string;
 };
@@ -242,7 +242,7 @@ export const gameApi = {
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
   bootstrap: () => request<BootstrapResponse>("/api/v1/game/bootstrap"),
   currentSave: () => request<{ exists: boolean; game: ApiSnapshot | null }>("/api/v1/saves/current"),
-  generateName: (race: CharacterDraft["race"], gender: CharacterDraft["gender"], exclude: string[]) =>
+  generateName: (race: Exclude<CharacterDraft["race"], "">, gender: Exclude<CharacterDraft["gender"], "">, exclude: string[]) =>
     request<{ name: string; alternatives: string[] }>("/api/v1/character-names/generate", {
       method: "POST",
       body: JSON.stringify({ race, gender, exclude }),

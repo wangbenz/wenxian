@@ -36,8 +36,8 @@ const CACHE_KEY = "wenxian-readonly-cache-v2";
 const THEME_KEY = "wenxian-theme";
 const DEFAULT_DRAFT: CharacterDraft = {
   playerName: "",
-  race: "HUMAN",
-  gender: "MALE",
+  race: "",
+  gender: "",
   lifeGoal: "LONGEVITY",
   preference: "",
 };
@@ -226,31 +226,22 @@ function CharacterCreationView({
 
       <section className="creation-card">
         <div className="section-heading-copy">
-          <p className="eyebrow">WRITE YOUR NAME</p>
-          <h2>先定姓名，再问仙途</h2>
-          <span>世界不会为你重写，但你可以决定以谁的身份进入。</span>
+          <p className="eyebrow">CHOOSE WHO YOU ARE</p>
+          <h2>先择身份，再取姓名</h2>
+          <span>性别与种族会影响系统生成的姓名风格，自定义姓名不受此限制。</span>
         </div>
 
-        <div className="name-field-row">
-          <label>
-            <span>姓名</span>
-            <input
-              maxLength={6}
-              onChange={(event) => onDraft({ playerName: event.currentTarget.value })}
-              placeholder="2—6个汉字"
-              value={draft.playerName}
-            />
-          </label>
-          <button disabled={isBusy} onClick={onGenerateName} type="button"><ReloadIcon />随机雅名</button>
-        </div>
-        {alternatives.length > 0 && (
-          <div className="name-alternatives" aria-label="备选姓名">
-            {alternatives.map((name) => <button key={name} onClick={() => onDraft({ playerName: name })} type="button">{name}</button>)}
+        <fieldset className="choice-fieldset identity-step">
+          <legend><span>一</span> 性别</legend>
+          <div className="segmented-control">
+            {([["MALE", "男"], ["FEMALE", "女"], ["UNSPECIFIED", "不设定"]] as const).map(([code, label]) => (
+              <button aria-pressed={draft.gender === code} data-selected={draft.gender === code} key={code} onClick={() => onDraft({ gender: code })} type="button">{label}</button>
+            ))}
           </div>
-        )}
+        </fieldset>
 
-        <fieldset className="choice-fieldset">
-          <legend>种族</legend>
+        <fieldset className="choice-fieldset identity-step">
+          <legend><span>二</span> 种族</legend>
           <div className="race-grid">
             {bootstrap.races.map((race) => (
               <button
@@ -267,17 +258,31 @@ function CharacterCreationView({
           </div>
         </fieldset>
 
-        <div className="two-column-fields">
-          <fieldset className="choice-fieldset">
-            <legend>性别</legend>
-            <div className="segmented-control">
-              {([["MALE", "男"], ["FEMALE", "女"], ["UNSPECIFIED", "不设定"]] as const).map(([code, label]) => (
-                <button aria-pressed={draft.gender === code} data-selected={draft.gender === code} key={code} onClick={() => onDraft({ gender: code })} type="button">{label}</button>
-              ))}
+        <fieldset className="choice-fieldset identity-step">
+          <legend><span>三</span> 姓名</legend>
+          <div className="name-field-row">
+            <label>
+              <span>自定义或随机生成</span>
+              <input
+                maxLength={6}
+                onChange={(event) => onDraft({ playerName: event.currentTarget.value })}
+                placeholder="2—6个汉字"
+                value={draft.playerName}
+              />
+            </label>
+            <button disabled={isBusy || !draft.race || !draft.gender} onClick={onGenerateName} type="button"><ReloadIcon />随机雅名</button>
+          </div>
+          {(!draft.gender || !draft.race) && <p className="name-generation-hint">先选择性别与种族，命卷才能推演合适的名字。</p>}
+          {alternatives.length > 0 && (
+            <div className="name-alternatives" aria-label="备选姓名">
+              {alternatives.map((name) => <button key={name} onClick={() => onDraft({ playerName: name })} type="button">{name}</button>)}
             </div>
-          </fieldset>
-          <fieldset className="choice-fieldset">
-            <legend>此生所求</legend>
+          )}
+        </fieldset>
+
+        <div className="two-column-fields single-column-fields">
+          <fieldset className="choice-fieldset identity-step">
+            <legend><span>四</span> 此生所求</legend>
             <div className="goal-grid">
               {bootstrap.lifeGoals.map((goal) => (
                 <button aria-pressed={draft.lifeGoal === goal.code} data-selected={draft.lifeGoal === goal.code} key={goal.code} onClick={() => onDraft({ lifeGoal: goal.code })} type="button">
@@ -300,7 +305,7 @@ function CharacterCreationView({
         </label>
 
         {error && <p className="entry-error">{error}</p>}
-        <button className="primary-entry-button" disabled={isBusy || !draft.playerName.trim()} onClick={onCreate} type="button">
+        <button className="primary-entry-button" disabled={isBusy || !draft.gender || !draft.race || !draft.playerName.trim()} onClick={onCreate} type="button">
           {isBusy ? "天机正在推演三种命格…" : "生成三种命格"}<ArrowRightIcon />
         </button>
         <button className="text-button" disabled={isBusy} onClick={onLogout} type="button">退出当前邮箱</button>
@@ -569,6 +574,7 @@ export default function Prototype() {
   const [draft, setDraft] = useState("");
   const [characterDraft, setCharacterDraft] = useState<CharacterDraft>(DEFAULT_DRAFT);
   const [nameAlternatives, setNameAlternatives] = useState<string[]>([]);
+  const [generatedName, setGeneratedName] = useState("");
   const [selectedFate, setSelectedFate] = useState("");
   const [selectedTalent, setSelectedTalent] = useState("");
   const [theme, setTheme] = useState<ThemeMode>(() => (window.localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "system");
@@ -614,6 +620,8 @@ export default function Prototype() {
     await loadBootstrap();
     setSnapshot(null);
     setCharacterDraft(DEFAULT_DRAFT);
+    setNameAlternatives([]);
+    setGeneratedName("");
     setStage("create");
   };
 
@@ -693,10 +701,32 @@ export default function Prototype() {
   });
 
   const generateName = () => runBusy(async () => {
+    if (!characterDraft.race || !characterDraft.gender) {
+      throw new ApiError("请先选择性别与种族", 400);
+    }
     const generated = await gameApi.generateName(characterDraft.race, characterDraft.gender, [characterDraft.playerName, ...nameAlternatives].filter(Boolean));
     setCharacterDraft((current) => ({ ...current, playerName: generated.name }));
+    setGeneratedName(generated.name);
     setNameAlternatives(generated.alternatives);
   });
+
+  const updateCharacterDraft = (patch: Partial<CharacterDraft>) => {
+    const identityChanged = patch.race !== undefined || patch.gender !== undefined;
+    if (identityChanged) {
+      setNameAlternatives([]);
+      setCharacterDraft((current) => ({
+        ...current,
+        ...patch,
+        playerName: current.playerName === generatedName ? "" : current.playerName,
+      }));
+      setGeneratedName("");
+      return;
+    }
+    if (patch.playerName !== undefined) {
+      setGeneratedName(nameAlternatives.includes(patch.playerName) ? patch.playerName : "");
+    }
+    setCharacterDraft((current) => ({ ...current, ...patch }));
+  };
 
   const createCharacter = () => runBusy(async () => {
     const validation = await gameApi.validateName(characterDraft.playerName);
@@ -787,7 +817,7 @@ export default function Prototype() {
       <div className="game-scroll" data-phase={game?.phase ?? stage} key={`${stage}-${tab}-${game?.turn ?? 0}`}><main className="screen-content" data-testid="game-content">
         {stage === "loading" && <LoadingView />}
         {stage === "login" && <LoginView error={error} isBusy={isBusy} offline={syncMode === "offline"} onLogin={login} />}
-        {stage === "create" && bootstrap && <CharacterCreationView alternatives={nameAlternatives} bootstrap={bootstrap} draft={characterDraft} error={error} isBusy={isBusy} onCreate={createCharacter} onDraft={(patch) => setCharacterDraft((current) => ({ ...current, ...patch }))} onGenerateName={generateName} onLogout={() => void logout()} />}
+        {stage === "create" && bootstrap && <CharacterCreationView alternatives={nameAlternatives} bootstrap={bootstrap} draft={characterDraft} error={error} isBusy={isBusy} onCreate={createCharacter} onDraft={updateCharacterDraft} onGenerateName={generateName} onLogout={() => void logout()} />}
         {stage === "fate" && game && <FateSelectionView error={error} game={game} isBusy={isBusy} onRecreate={() => setResetIntent("FATES")} onSelect={setSelectedFate} onStart={chooseFate} selectedId={selectedFate} />}
         {stage === "talent" && game && <TalentSelectionView error={error} game={game} isBusy={isBusy} onEnter={enterWithTalent} onReroll={rerollTalents} onSelect={setSelectedTalent} onSkip={enterWithoutTalent} selectedId={selectedTalent} />}
         {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView choices={choices} error={error} game={game} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onSuggestion={(content) => void takeTurn("TEXT", { content })} resolution={snapshot?.actionResolution} />}

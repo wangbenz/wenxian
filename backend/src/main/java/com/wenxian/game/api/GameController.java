@@ -63,7 +63,7 @@ public class GameController {
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @Valid @RequestBody GenerateNameRequest request) {
         authService.requireUser(token);
-        return nameService.generate(request.race(), request.exclude());
+        return nameService.generate(request.race(), request.gender(), request.exclude());
     }
 
     @PostMapping("/character-names/validate")

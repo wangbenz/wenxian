@@ -24,8 +24,8 @@ public final class ApiModels {
     ) {}
 
     public record GenerateNameRequest(
-            @Pattern(regexp = "MALE|FEMALE|UNSPECIFIED") String gender,
-            @Pattern(regexp = "HUMAN|DEMON|SPIRIT") String race,
+            @NotBlank @Pattern(regexp = "MALE|FEMALE|UNSPECIFIED") String gender,
+            @NotBlank @Pattern(regexp = "HUMAN|DEMON|SPIRIT") String race,
             @Size(max = 20) List<@Size(max = 12) String> exclude
     ) {}
 

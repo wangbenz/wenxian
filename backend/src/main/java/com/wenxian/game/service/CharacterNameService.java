@@ -16,17 +16,23 @@ public class CharacterNameService {
     private static final Pattern VALID_NAME = Pattern.compile("^[\\p{IsHan}]{2,6}$");
     private static final Set<String> RESERVED = Set.of("管理员", "系统消息", "问仙录", "DeepSeek");
     private static final List<String> SURNAMES = List.of("陆", "沈", "顾", "谢", "宁", "裴", "江", "苏", "林", "陈", "温", "楚", "许", "秦", "叶", "白");
-    private static final List<String> HUMAN_FIRST = List.of("沉", "照川", "临渊", "知白", "无咎", "长安", "怀山", "景行", "听澜", "砚秋", "清和", "逐月");
-    private static final List<String> DEMON_FIRST = List.of("玄牙", "赤离", "青狩", "烬羽", "寒鳞", "望山", "月魄", "惊岚", "苍梧", "夜川");
-    private static final List<String> SPIRIT_FIRST = List.of("照微", "栖露", "空青", "流萤", "听雪", "忘川", "朝露", "问石", "青冥", "归岚");
+    private static final List<String> HUMAN_MALE_FIRST = List.of("沉", "照川", "临渊", "知白", "无咎", "怀山", "景行", "砚舟", "长风", "既明", "行简", "承安");
+    private static final List<String> HUMAN_FEMALE_FIRST = List.of("晚禾", "清漪", "疏月", "知微", "映雪", "云岫", "令仪", "扶摇", "青棠", "静姝", "若蘅", "听雨");
+    private static final List<String> HUMAN_NEUTRAL_FIRST = List.of("长安", "听澜", "砚秋", "清和", "逐月", "归宁", "望舒", "星回", "见素", "云深", "停舟", "南枝");
+    private static final List<String> DEMON_MALE_FIRST = List.of("玄牙", "青狩", "寒鳞", "望山", "苍梧", "夜川", "重渊", "烬锋", "赤霄", "玄戈");
+    private static final List<String> DEMON_FEMALE_FIRST = List.of("赤离", "烬羽", "月魄", "惊岚", "绯罗", "玄翎", "夜璃", "霜烬", "幽萝", "照影");
+    private static final List<String> DEMON_NEUTRAL_FIRST = List.of("离火", "照夜", "无昼", "寒烬", "归魄", "玄月", "惊鸿", "听骨", "折枝", "长离");
+    private static final List<String> SPIRIT_MALE_FIRST = List.of("空青", "忘川", "问石", "青冥", "归岚", "照野", "临川", "松隐", "玄度", "渡尘");
+    private static final List<String> SPIRIT_FEMALE_FIRST = List.of("照微", "栖露", "流萤", "听雪", "朝露", "灵犀", "月白", "风荷", "含章", "若水");
+    private static final List<String> SPIRIT_NEUTRAL_FIRST = List.of("云生", "见月", "栖迟", "无尘", "清昼", "含光", "闻溪", "照影", "归云", "知还");
     private final SecureRandom random = new SecureRandom();
 
-    public GenerateNameResponse generate(String race, List<String> excluded) {
+    public GenerateNameResponse generate(String race, String gender, List<String> excluded) {
         Set<String> blocked = excluded == null ? Set.of() : new LinkedHashSet<>(excluded);
         LinkedHashSet<String> generated = new LinkedHashSet<>();
         int attempts = 0;
         while (generated.size() < 4 && attempts++ < 80) {
-            String name = oneName(race);
+            String name = oneName(race, gender);
             if (!blocked.contains(name) && validate(name).valid()) generated.add(name);
         }
         if (generated.isEmpty()) generated.add("陆沉");
@@ -45,11 +51,19 @@ public class CharacterNameService {
         return new ValidateNameResponse(true, name, null, null);
     }
 
-    private String oneName(String race) {
-        List<String> firstNames = switch (race == null ? "" : race) {
-            case "DEMON" -> DEMON_FIRST;
-            case "SPIRIT" -> SPIRIT_FIRST;
-            default -> HUMAN_FIRST;
+    private String oneName(String race, String gender) {
+        String identity = (race == null ? "" : race) + ":" + (gender == null ? "" : gender);
+        List<String> firstNames = switch (identity) {
+            case "HUMAN:FEMALE" -> HUMAN_FEMALE_FIRST;
+            case "HUMAN:UNSPECIFIED" -> HUMAN_NEUTRAL_FIRST;
+            case "DEMON:MALE" -> DEMON_MALE_FIRST;
+            case "DEMON:FEMALE" -> DEMON_FEMALE_FIRST;
+            case "DEMON:UNSPECIFIED" -> DEMON_NEUTRAL_FIRST;
+            case "SPIRIT:MALE" -> SPIRIT_MALE_FIRST;
+            case "SPIRIT:FEMALE" -> SPIRIT_FEMALE_FIRST;
+            case "SPIRIT:UNSPECIFIED" -> SPIRIT_NEUTRAL_FIRST;
+            case "HUMAN:MALE" -> HUMAN_MALE_FIRST;
+            default -> throw new IllegalArgumentException("生成姓名前必须选择有效的性别与种族");
         };
         return SURNAMES.get(random.nextInt(SURNAMES.size()))
                 + firstNames.get(random.nextInt(firstNames.size()));
