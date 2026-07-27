@@ -1,0 +1,19 @@
+server:
+  port: ${ADMIN_PORT:18081}
+
+spring:
+  application:
+    name: wenxian-admin-backend
+  datasource:
+    url: ${ADMIN_DATABASE_URL:jdbc:mysql://127.0.0.1:3306/wenxian?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${ADMIN_DATABASE_USERNAME:wenxian_app}
+    password: ${ADMIN_DATABASE_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      connection-timeout: 10000
+      maximum-pool-size: 3
+      minimum-idle: 1
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
