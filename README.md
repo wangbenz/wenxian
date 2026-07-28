@@ -10,8 +10,11 @@
 wenxian/
 ├── frontend/   React + TypeScript + Vite 响应式 H5
 ├── backend/    Java 21 + Spring Boot 权威游戏服务
+├── admin/      独立的 React + Spring Boot 内测管理台
 └── docs/       玩法与 Agent/数据架构
 ```
+
+管理台与游戏服务共用同一个 MySQL `wenxian` 库。新生成的内测码会同时保存校验哈希和仅供管理员复制的明文；早期只保存哈希的旧码无法逆向恢复，管理台会明确标记为“明文不可恢复”。清理操作只删除非 `ACTIVE`、已达使用上限或已过期的码，不会删除仍可使用的邀请码。
 
 ## 本地运行
 

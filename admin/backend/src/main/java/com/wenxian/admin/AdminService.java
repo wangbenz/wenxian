@@ -17,9 +17,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -29,6 +31,9 @@ public class AdminService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final SecureRandom random = new SecureRandom();
     private static final int SESSION_DAYS = 7;
+    private static final char[] INVITE_CODE_ALPHABET =
+            "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
+    private static final int INVITE_CODE_LENGTH = 10;
 
     public AdminService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -152,7 +157,8 @@ public class AdminService {
             Map<String, Object> code = new LinkedHashMap<>();
             code.put("id", row.getString("id"));
             String label = row.getString("code_label");
-            code.put("codeDisplay", label != null ? label : codeIdLabel(row.getString("id")));
+            code.put("codeDisplay", label);
+            code.put("plaintextAvailable", label != null);
             code.put("status", row.getString("status"));
             code.put("maxUses", row.getInt("max_uses"));
             code.put("usedCount", row.getInt("used_count"));
@@ -170,8 +176,12 @@ public class AdminService {
         if (maxUses < 1 || maxUses > 200) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"使用次数需在 1-200 之间");
         Instant now = Instant.now();
         List<String> codes = new ArrayList<>();
+        Set<String> batchCodes = new HashSet<>();
         for (int i = 0; i < count; i++) {
-            String code = "WX-" + randomCode(10);
+            String code;
+            do {
+                code = "WX-" + randomCode(INVITE_CODE_LENGTH);
+            } while (!batchCodes.add(code));
             String hash = sha256(code);
             String inviteId = "invite-" + UUID.randomUUID();
             jdbc.update("""
@@ -186,6 +196,29 @@ public class AdminService {
         }
         audit("GENERATE_INVITES", "批量生成 " + count + " 个内测码（每码可用 " + maxUses + " 次）");
         return codes;
+    }
+
+    @Transactional
+    public int deleteUnusableInviteCodes() {
+        Instant now = Instant.now();
+        Timestamp timestamp = Timestamp.from(now);
+        jdbc.update("""
+                DELETE FROM admin_invite_code
+                WHERE invite_code_id IN (
+                    SELECT id FROM invite_code
+                    WHERE status <> 'ACTIVE'
+                       OR used_count >= max_uses
+                       OR (expires_at IS NOT NULL AND expires_at <= ?)
+                )
+                """, timestamp);
+        int deleted = jdbc.update("""
+                DELETE FROM invite_code
+                WHERE status <> 'ACTIVE'
+                   OR used_count >= max_uses
+                   OR (expires_at IS NOT NULL AND expires_at <= ?)
+                """, timestamp);
+        audit("DELETE_UNUSABLE_INVITES", "删除 " + deleted + " 个不可用内测码");
+        return deleted;
     }
 
     public List<Map<String, Object>> users(String search, int page, int size) {
@@ -331,10 +364,11 @@ public class AdminService {
     }
 
     private String randomCode(int length) {
-        byte[] bytes = new byte[(length + 3) / 4 * 3];
-        random.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
-                .replaceAll("[0-9OIl]", "").substring(0, Math.min(length, 12));
+        StringBuilder code = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            code.append(INVITE_CODE_ALPHABET[random.nextInt(INVITE_CODE_ALPHABET.length)]);
+        }
+        return code.toString();
     }
 
     private String randomToken() {
@@ -348,16 +382,6 @@ public class AdminService {
         int at = email.indexOf('@');
         if (at <= 1) return "***" + email.substring(Math.max(0, at));
         return email.charAt(0) + "***" + email.substring(at - 1);
-    }
-
-    private static String codeIdLabel(String id) {
-        // Format invite-xxx-xxx-xxx as readable code: take the last 3 segments
-        String[] parts = id.split("-");
-        if (parts.length >= 4) {
-            return "WX-" + parts[parts.length - 3].substring(0, Math.min(4, parts[parts.length - 3].length()))
-                    + "-" + parts[parts.length - 2].substring(0, Math.min(4, parts[parts.length - 2].length()));
-        }
-        return id.length() > 16 ? id.substring(0, 16) : id;
     }
 
     private static String truncate(String text, int max) {

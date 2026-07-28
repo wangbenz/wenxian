@@ -25,7 +25,8 @@ export type DashboardData = {
 
 export type InviteCodeItem = {
   id: string;
-  codeDisplay: string;
+  codeDisplay: string | null;
+  plaintextAvailable: boolean;
   status: "ACTIVE" | "EXHAUSTED";
   maxUses: number;
   usedCount: number;

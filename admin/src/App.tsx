@@ -364,7 +364,11 @@ function InviteCodesPage() {
               <tbody>
                 {data.map((c) => (
                   <tr key={c.id}>
-                    <td className="td-mono">{c.codeDisplay}</td>
+                    <td className="td-mono">
+                      {c.plaintextAvailable && c.codeDisplay
+                        ? c.codeDisplay
+                        : <span className="code-unavailable" title="旧邀请码仅保存哈希，无法恢复原始明文">明文不可恢复</span>}
+                    </td>
                     <td><StatusBadge status={c.status} /></td>
                     <td>{c.usedCount} / {c.maxUses}</td>
                     <td>{c.expiresAt ? formatDateTime(c.expiresAt) : "永不过期"}</td>

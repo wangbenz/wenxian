@@ -1,6 +1,7 @@
 package com.wenxian.admin;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -68,6 +69,12 @@ public class AdminController {
         if (maxUses < 1 || maxUses > 200) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "使用次数需在 1-200 之间");
         List<String> codes = adminService.generateInviteCodes(count, maxUses);
         return Map.of("codes", codes, "count", codes.size());
+    }
+
+    @DeleteMapping("/invite-codes/unusable")
+    public Map<String, Object> deleteUnusableInviteCodes() {
+        int deleted = adminService.deleteUnusableInviteCodes();
+        return Map.of("deleted", deleted, "message", "已删除 " + deleted + " 个不可用内测码");
     }
 
     @GetMapping("/users")

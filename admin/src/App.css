@@ -502,6 +502,12 @@ tr:hover td {
   font-size: 0.8rem;
 }
 
+.code-unavailable {
+  color: #9ca3af;
+  font-family: inherit;
+  font-style: italic;
+}
+
 .td-time {
   white-space: nowrap;
   color: #6b7280;
