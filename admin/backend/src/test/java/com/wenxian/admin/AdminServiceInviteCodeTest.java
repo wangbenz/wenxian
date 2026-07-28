@@ -113,14 +113,27 @@ class AdminServiceInviteCodeTest {
                 AdminService.sha256(codes.get(1)));
         jdbc.update("update invite_code set expires_at = ? where code_hash = ?",
                 Timestamp.from(Instant.now().minusSeconds(60)), AdminService.sha256(codes.get(2)));
+        jdbc.update("""
+                insert into invite_code(id, code_hash, status, max_uses, used_count, expires_at, created_at)
+                values (?, ?, 'ACTIVE', 1, 0, null, ?)
+                """, "invite-orphaned-unused", AdminService.sha256("LOST-PLAINTEXT"),
+                Timestamp.from(Instant.now()));
+        jdbc.update("""
+                insert into invite_code(id, code_hash, status, max_uses, used_count, expires_at, created_at)
+                values (?, ?, 'ACTIVE', 20, 1, null, ?)
+                """, "invite-circulating", AdminService.sha256("KNOWN-OUTSIDE-ADMIN"),
+                Timestamp.from(Instant.now()));
 
         int deleted = service.deleteUnusableInviteCodes();
 
-        assertEquals(3, deleted);
-        assertEquals(1, jdbc.queryForObject("select count(*) from invite_code", Integer.class));
+        assertEquals(4, deleted);
+        assertEquals(2, jdbc.queryForObject("select count(*) from invite_code", Integer.class));
         assertEquals(1, jdbc.queryForObject("select count(*) from admin_invite_code", Integer.class));
         assertEquals(1, jdbc.queryForObject(
                 "select count(*) from invite_code where code_hash = ? and status = 'ACTIVE' and used_count < max_uses",
                 Integer.class, AdminService.sha256(codes.get(3))));
+        assertEquals(1, jdbc.queryForObject(
+                "select count(*) from invite_code where id = 'invite-circulating'",
+                Integer.class));
     }
 }

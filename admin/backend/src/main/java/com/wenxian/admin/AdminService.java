@@ -209,6 +209,10 @@ public class AdminService {
                     WHERE status <> 'ACTIVE'
                        OR used_count >= max_uses
                        OR (expires_at IS NOT NULL AND expires_at <= ?)
+                       OR (used_count = 0 AND NOT EXISTS (
+                           SELECT 1 FROM admin_invite_code known
+                           WHERE known.invite_code_id = invite_code.id
+                       ))
                 )
                 """, timestamp);
         int deleted = jdbc.update("""
@@ -216,6 +220,10 @@ public class AdminService {
                 WHERE status <> 'ACTIVE'
                    OR used_count >= max_uses
                    OR (expires_at IS NOT NULL AND expires_at <= ?)
+                   OR (used_count = 0 AND NOT EXISTS (
+                       SELECT 1 FROM admin_invite_code known
+                       WHERE known.invite_code_id = invite_code.id
+                   ))
                 """, timestamp);
         audit("DELETE_UNUSABLE_INVITES", "删除 " + deleted + " 个不可用内测码");
         return deleted;
