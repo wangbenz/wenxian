@@ -202,29 +202,20 @@ public class AdminService {
     public int deleteUnusableInviteCodes() {
         Instant now = Instant.now();
         Timestamp timestamp = Timestamp.from(now);
-        jdbc.update("""
-                DELETE FROM admin_invite_code
-                WHERE invite_code_id IN (
-                    SELECT id FROM invite_code
-                    WHERE status <> 'ACTIVE'
-                       OR used_count >= max_uses
-                       OR (expires_at IS NOT NULL AND expires_at <= ?)
-                       OR (used_count = 0 AND NOT EXISTS (
-                           SELECT 1 FROM admin_invite_code known
-                           WHERE known.invite_code_id = invite_code.id
-                       ))
-                )
-                """, timestamp);
-        int deleted = jdbc.update("""
-                DELETE FROM invite_code
-                WHERE status <> 'ACTIVE'
-                   OR used_count >= max_uses
-                   OR (expires_at IS NOT NULL AND expires_at <= ?)
-                   OR (used_count = 0 AND NOT EXISTS (
-                       SELECT 1 FROM admin_invite_code known
-                       WHERE known.invite_code_id = invite_code.id
-                   ))
-                """, timestamp);
+        List<String> unusableIds = jdbc.query("""
+                SELECT ic.id
+                FROM invite_code ic
+                LEFT JOIN admin_invite_code known ON known.invite_code_id = ic.id
+                WHERE ic.status <> 'ACTIVE'
+                   OR ic.used_count >= ic.max_uses
+                   OR (ic.expires_at IS NOT NULL AND ic.expires_at <= ?)
+                   OR (ic.used_count = 0 AND known.id IS NULL)
+                """, (row, index) -> row.getString("id"), timestamp);
+        int deleted = 0;
+        for (String inviteId : unusableIds) {
+            jdbc.update("DELETE FROM admin_invite_code WHERE invite_code_id = ?", inviteId);
+            deleted += jdbc.update("DELETE FROM invite_code WHERE id = ?", inviteId);
+        }
         audit("DELETE_UNUSABLE_INVITES", "删除 " + deleted + " 个不可用内测码");
         return deleted;
     }
