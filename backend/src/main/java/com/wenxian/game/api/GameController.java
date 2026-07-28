@@ -16,9 +16,11 @@ import com.wenxian.game.model.ApiModels.TurnRequest;
 import com.wenxian.game.model.ApiModels.ValidateNameRequest;
 import com.wenxian.game.model.ApiModels.ValidateNameResponse;
 import com.wenxian.game.model.ApiModels.WorldResponse;
+import com.wenxian.game.model.ApiModels.ReleaseNoteView;
 import com.wenxian.game.model.GameState;
 import com.wenxian.game.service.CharacterNameService;
 import com.wenxian.game.service.GameService;
+import com.wenxian.game.service.ReleaseNoteService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.validation.annotation.Validated;
@@ -41,11 +43,14 @@ public class GameController {
     private final GameService gameService;
     private final AuthService authService;
     private final CharacterNameService nameService;
+    private final ReleaseNoteService releaseNotes;
 
-    public GameController(GameService gameService, AuthService authService, CharacterNameService nameService) {
+    public GameController(GameService gameService, AuthService authService, CharacterNameService nameService,
+                          ReleaseNoteService releaseNotes) {
         this.gameService = gameService;
         this.authService = authService;
         this.nameService = nameService;
+        this.releaseNotes = releaseNotes;
     }
 
     @GetMapping("/health")
@@ -56,6 +61,25 @@ public class GameController {
     @GetMapping("/game/bootstrap")
     public BootstrapResponse bootstrap() {
         return GameCatalog.bootstrap();
+    }
+
+    @GetMapping("/release-notes")
+    public List<ReleaseNoteView> releaseNotes(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token) {
+        return releaseNotes.published(user(token).userId());
+    }
+
+    @GetMapping("/release-notes/pending")
+    public ReleaseNoteView pendingReleaseNote(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token) {
+        return releaseNotes.pendingAnnouncement(user(token).userId());
+    }
+
+    @PostMapping("/release-notes/{releaseId}/read")
+    public void markReleaseNoteRead(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
+            @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String releaseId) {
+        releaseNotes.markRead(user(token).userId(), releaseId);
     }
 
     @PostMapping("/character-names/generate")

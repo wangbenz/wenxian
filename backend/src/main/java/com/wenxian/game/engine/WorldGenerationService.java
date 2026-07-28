@@ -3,7 +3,9 @@ package com.wenxian.game.engine;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wenxian.game.model.GameState;
+import com.wenxian.game.config.RuntimeAiConfigService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -21,17 +23,28 @@ import java.util.UUID;
 public class WorldGenerationService {
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
-    private final String apiKey;
-    private final String model;
+    private final RuntimeAiConfigService runtimeConfig;
+    private final String fixedApiKey;
+    private final String fixedModel;
 
+    @Autowired
     public WorldGenerationService(ObjectMapper objectMapper,
                                   RestClient.Builder restClientBuilder,
-                                  @Value("${deepseek.api-key:}") String apiKey,
                                   @Value("${deepseek.base-url:https://api.deepseek.com}") String baseUrl,
-                                  @Value("${deepseek.model:deepseek-v4-pro}") String model) {
+                                  RuntimeAiConfigService runtimeConfig) {
         this.objectMapper = objectMapper;
-        this.apiKey = apiKey == null ? "" : apiKey.strip();
-        this.model = model;
+        this.runtimeConfig = runtimeConfig;
+        this.fixedApiKey = "";
+        this.fixedModel = "";
+        this.restClient = restClientBuilder.baseUrl(baseUrl).build();
+    }
+
+    WorldGenerationService(ObjectMapper objectMapper, RestClient.Builder restClientBuilder,
+                           String apiKey, String baseUrl, String model) {
+        this.objectMapper = objectMapper;
+        this.runtimeConfig = null;
+        this.fixedApiKey = apiKey == null ? "" : apiKey.strip();
+        this.fixedModel = model;
         this.restClient = restClientBuilder.baseUrl(baseUrl).build();
     }
 
@@ -79,7 +92,7 @@ public class WorldGenerationService {
     }
 
     public boolean configured() {
-        return !apiKey.isBlank();
+        return !currentConfig().apiKey().isBlank();
     }
 
     public List<GameState.AbilityRecord> generateTalentOptions(GameState state) {
@@ -125,17 +138,18 @@ public class WorldGenerationService {
     }
 
     public String mode() {
-        return configured() ? "deepseek:" + model : "deepseek-not-configured";
+        return configured() ? "deepseek:" + model() : "deepseek-not-configured";
     }
 
     public String model() {
-        return model;
+        return currentConfig().model();
     }
 
     public String requestJson(String systemPrompt, String userPrompt, int maxTokens, double temperature) {
         if (!configured()) throw new IllegalStateException("尚未配置 DeepSeek API Key");
+        RuntimeAiConfigService.RuntimeConfig config = currentConfig();
         Map<String, Object> request = Map.of(
-                "model", model,
+                "model", config.model(),
                 "messages", List.of(
                         Map.of("role", "system", "content", systemPrompt),
                         Map.of("role", "user", "content", userPrompt)
@@ -147,7 +161,7 @@ public class WorldGenerationService {
                 "stream", false
         );
         JsonNode response = restClient.post().uri("/chat/completions")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey())
                 .body(request).retrieve().body(JsonNode.class);
         if (response == null) throw new IllegalStateException("DeepSeek 返回为空");
         String content = response.path("choices").path(0).path("message").path("content").asText();
@@ -158,8 +172,9 @@ public class WorldGenerationService {
     public ChatResponse requestMessage(List<Map<String, Object>> messages, List<Map<String, Object>> tools,
                                        int maxTokens, double temperature) {
         if (!configured()) throw new IllegalStateException("尚未配置 DeepSeek API Key");
+        RuntimeAiConfigService.RuntimeConfig config = currentConfig();
         Map<String, Object> request = Map.of(
-                "model", model,
+                "model", config.model(),
                 "messages", messages,
                 "tools", tools,
                 "tool_choice", "auto",
@@ -170,7 +185,7 @@ public class WorldGenerationService {
                 "stream", false
         );
         JsonNode response = restClient.post().uri("/chat/completions")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey())
                 .body(request).retrieve().body(JsonNode.class);
         if (response == null) throw new IllegalStateException("DeepSeek 返回为空");
         JsonNode message = response.path("choices").path(0).path("message");
@@ -181,6 +196,12 @@ public class WorldGenerationService {
     }
 
     public record ChatResponse(JsonNode message, String responseId, int promptTokens, int completionTokens) {}
+
+    private RuntimeAiConfigService.RuntimeConfig currentConfig() {
+        return runtimeConfig != null
+                ? runtimeConfig.current()
+                : new RuntimeAiConfigService.RuntimeConfig(fixedModel, fixedModel, fixedApiKey);
+    }
 
     private GameState normalize(String saveId, String playerName, String race,
                                 String gender, String lifeGoal, FateDraft draft) {

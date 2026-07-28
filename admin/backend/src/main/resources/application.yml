@@ -17,3 +17,6 @@ spring:
     init:
       mode: always
       encoding: UTF-8
+
+wenxian:
+  ai-config-master-key: ${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}

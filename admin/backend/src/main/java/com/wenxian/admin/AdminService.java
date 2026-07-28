@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -34,9 +36,17 @@ public class AdminService {
     private static final char[] INVITE_CODE_ALPHABET =
             "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
     private static final int INVITE_CODE_LENGTH = 10;
+    private final String aiConfigMasterKey;
 
-    public AdminService(JdbcTemplate jdbc) {
+    @Autowired
+    public AdminService(JdbcTemplate jdbc,
+                        @Value("${wenxian.ai-config-master-key:wenxian-local-config-key-change-me}") String aiConfigMasterKey) {
         this.jdbc = jdbc;
+        this.aiConfigMasterKey = aiConfigMasterKey;
+    }
+
+    AdminService(JdbcTemplate jdbc) {
+        this(jdbc, "wenxian-local-config-key-change-me");
     }
 
     @PostConstruct
@@ -97,14 +107,13 @@ public class AdminService {
 
     public Map<String, Object> dashboard() {
         int totalUsers = count("SELECT count(*) FROM app_user WHERE status = 'ACTIVE'");
-        int onlineUsers = count("""
-                SELECT count(DISTINCT user_id) FROM user_session
-                WHERE revoked_at IS NULL AND expires_at > NOW()
-                """);
+        int todayActive = count("SELECT count(*) FROM app_user WHERE last_login_at >= CURDATE()");
         int totalSaves = count("SELECT count(*) FROM game_save");
         int totalTurns = count("SELECT count(*) FROM game_turn");
         int todayTurns = count("SELECT count(*) FROM game_turn WHERE created_at > CURDATE()");
         int totalTokens = sum("SELECT coalesce(sum(prompt_tokens + completion_tokens), 0) FROM game_turn");
+        int todayTokens = sum("SELECT coalesce(sum(prompt_tokens + completion_tokens), 0) FROM game_turn WHERE created_at >= CURDATE()");
+        int failedToday = count("SELECT count(*) FROM agent_execution WHERE status = 'FAILED' AND created_at >= CURDATE()");
         Double avgLatency = jdbc.queryForObject(
                 "SELECT coalesce(avg(latency_ms), 0) FROM game_turn WHERE latency_ms > 0", Double.class);
 
@@ -135,13 +144,21 @@ public class AdminService {
             );
         });
 
-        return Map.of(
-                "totalUsers", totalUsers, "onlineUsers", onlineUsers,
-                "totalSaves", totalSaves, "totalTurns", totalTurns,
-                "todayTurns", todayTurns, "totalTokens", totalTokens,
-                "avgLatency", Math.round(avgLatency != null ? avgLatency : 0),
-                "recentTurns", recentTurns
-        );
+        String currentModel = jdbc.query("select display_name from ai_model_config where active = true limit 1",
+                (row, index) -> row.getString(1)).stream().findFirst().orElse("V4 Pro");
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("totalUsers", totalUsers);
+        result.put("usersWithCharacter", totalSaves);
+        result.put("todayActive", todayActive);
+        result.put("totalTurns", totalTurns);
+        result.put("todayTurns", todayTurns);
+        result.put("totalTokens", totalTokens);
+        result.put("todayTokens", todayTokens);
+        result.put("failedToday", failedToday);
+        result.put("avgLatency", Math.round(avgLatency != null ? avgLatency : 0));
+        result.put("currentModel", currentModel);
+        result.put("recentTurns", recentTurns);
+        return result;
     }
 
     public List<Map<String, Object>> inviteCodes(String status) {
@@ -216,36 +233,42 @@ public class AdminService {
         return deleted;
     }
 
-    public List<Map<String, Object>> users(String search, int page, int size) {
+    public List<Map<String, Object>> users(String search, String characterState, String difficulty,
+                                           String realmFilter, int page, int size) {
         String like = search == null || search.isBlank() ? "%" : "%" + search.strip() + "%";
         int offset = Math.max(0, page) * Math.max(1, Math.min(size, 50));
         int limit = Math.max(1, Math.min(size, 50));
 
-        int total = count("SELECT count(*) FROM app_user WHERE status = 'ACTIVE' AND email LIKE ?", like);
+        String stateFilter = characterState == null ? "" : characterState.strip().toUpperCase();
+        String difficultyFilter = difficulty == null ? "" : difficulty.strip().toUpperCase();
+        String realmFilterValue = realmFilter == null ? "" : realmFilter.strip();
 
-        List<Map<String, Object>> rows = jdbc.query("""
+        String sql = """
                 SELECT u.id, u.email, u.registered_at, u.last_login_at,
                        gs.id AS save_id, gs.state_json, gs.updated_at AS save_updated,
                        (SELECT count(*) FROM game_turn gt WHERE gt.save_id = gs.id) AS turn_count,
                        (SELECT coalesce(sum(gt2.prompt_tokens + gt2.completion_tokens), 0)
-                        FROM game_turn gt2 WHERE gt2.save_id = gs.id) AS total_tokens
-                FROM app_user u
-                LEFT JOIN game_save gs ON gs.user_id = u.id
-                WHERE u.status = 'ACTIVE' AND u.email LIKE ?
+                        FROM game_turn gt2 WHERE gt2.save_id = gs.id) AS total_tokens,
+                       (SELECT count(*) FROM game_life_archive gla WHERE gla.user_id = u.id) AS archive_count
+                FROM app_user u LEFT JOIN game_save gs ON gs.user_id = u.id
+                WHERE u.status = 'ACTIVE'
                 ORDER BY u.last_login_at DESC
-                LIMIT ? OFFSET ?
-                """, (row, idx) -> {
+                """;
+
+        List<Map<String, Object>> all = jdbc.query(sql, (row, idx) -> {
             String playerName = "", realm = "", race = "";
+            String rowDifficulty = "NORMAL";
             try {
                 JsonNode state = mapper.readTree(row.getString("state_json"));
                 JsonNode player = state.path("player");
                 playerName = player.path("name").asText("");
                 realm = player.path("realm").asText("");
                 race = player.path("race").asText("");
+                rowDifficulty = state.path("difficulty").asText("NORMAL");
             } catch (Exception ignored) { }
             Map<String, Object> user = new LinkedHashMap<>();
             user.put("userId", row.getString("id"));
-            user.put("email", maskEmail(row.getString("email")));
+            user.put("email", row.getString("email"));
             user.put("rawEmail", row.getString("email"));
             user.put("registeredAt", row.getTimestamp("registered_at").toInstant().toString());
             user.put("lastLoginAt", row.getTimestamp("last_login_at") != null
@@ -254,12 +277,26 @@ public class AdminService {
             user.put("playerName", playerName);
             user.put("realm", realm);
             user.put("race", race);
+            user.put("difficulty", rowDifficulty);
+            user.put("archiveCount", row.getInt("archive_count"));
+            user.put("characterState", row.getString("save_id") == null
+                    ? (row.getInt("archive_count") > 0 ? "RESTARTED" : "NONE") : "CURRENT");
             user.put("turnCount", row.getInt("turn_count"));
             user.put("totalTokens", row.getInt("total_tokens"));
             user.put("saveUpdated", row.getTimestamp("save_updated") != null
                     ? row.getTimestamp("save_updated").toInstant().toString() : null);
             return user;
-        }, like, limit, offset);
+        });
+        List<Map<String, Object>> filtered = all.stream().filter(row -> {
+            String haystack = (row.get("rawEmail") + " " + row.get("playerName") + " " + row.get("userId") + " " + row.get("saveId")).toLowerCase();
+            boolean searchOk = "%".equals(like) || haystack.contains(search.strip().toLowerCase());
+            boolean stateOk = stateFilter.isBlank() || stateFilter.equals(row.get("characterState"));
+            boolean difficultyOk = difficultyFilter.isBlank() || difficultyFilter.equals(row.get("difficulty"));
+            boolean realmOk = realmFilterValue.isBlank() || realmFilterValue.equals(row.get("realm"));
+            return searchOk && stateOk && difficultyOk && realmOk;
+        }).toList();
+        int total = filtered.size();
+        List<Map<String, Object>> rows = filtered.stream().skip(offset).limit(limit).toList();
 
         return List.of(
                 Map.<String, Object>of("total", total, "page", page, "size", limit),
@@ -274,7 +311,7 @@ public class AdminService {
                 """, (row, idx) -> {
             Map<String, Object> u = new LinkedHashMap<>();
             u.put("userId", row.getString("id"));
-            u.put("email", maskEmail(row.getString("email")));
+            u.put("email", row.getString("email"));
             u.put("status", row.getString("status"));
             u.put("registeredAt", row.getTimestamp("registered_at").toInstant().toString());
             if (row.getTimestamp("last_login_at") != null) {
@@ -284,32 +321,63 @@ public class AdminService {
         }, userId);
         if (users.isEmpty()) return Map.of("error", "用户不存在");
 
+        var currentLives = jdbc.query("select id, state_json, updated_at from game_save where user_id = ?",
+                (row, idx) -> lifeSummary("CURRENT", row.getString("id"), row.getString("state_json"),
+                        row.getTimestamp("updated_at").toInstant().toString()), userId);
+        var historicalLives = jdbc.query("""
+                select id, original_save_id, state_json, ended_at from game_life_archive
+                where user_id = ? order by ended_at desc
+                """, (row, idx) -> lifeSummary("ARCHIVED", row.getString("original_save_id"),
+                row.getString("state_json"), row.getTimestamp("ended_at").toInstant().toString()), userId);
+
+        return Map.of("user", users.getFirst(), "currentLives", currentLives,
+                "historicalLives", historicalLives);
+    }
+
+    public Map<String, Object> userTurns(String userId, String saveId, int page, int size, Integer turnNumber) {
+        int limit = Math.max(1, Math.min(size, 100));
+        int offset = Math.max(page, 0) * limit;
+        boolean current = count("select count(*) from game_save where id = ? and user_id = ?", saveId, userId) > 0;
+        String table = current ? "game_turn" : "game_life_turn_archive";
+        String where = current ? "save_id = ?" : "original_save_id = ?";
+        if (!current && count("select count(*) from game_life_archive where original_save_id = ? and user_id = ?", saveId, userId) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "该角色记录不存在");
+        }
+        String turnFilter = turnNumber == null ? "" : " and turn_number = " + Math.max(0, turnNumber);
+        int total = count("select count(*) from " + table + " where " + where + turnFilter, saveId);
         var turns = jdbc.query("""
                 SELECT turn_number, player_action, prompt_tokens, completion_tokens,
-                       latency_ms, model, response_id, created_at
-                FROM game_turn WHERE save_id = (SELECT id FROM game_save WHERE user_id = ? LIMIT 1)
-                ORDER BY turn_number DESC LIMIT 50
-                """, (row, idx) -> {
+                       latency_ms, model, response_id, state_delta_json, created_at
+                FROM %s WHERE %s %s
+                ORDER BY turn_number DESC LIMIT ? OFFSET ?
+                """.formatted(table, where, turnFilter), (row, idx) -> {
             Map<String, Object> t = new LinkedHashMap<>();
             t.put("turn", row.getInt("turn_number"));
             t.put("action", row.getString("player_action"));
             t.put("promptTokens", row.getInt("prompt_tokens"));
             t.put("completionTokens", row.getInt("completion_tokens"));
+            t.put("totalTokens", row.getInt("prompt_tokens") + row.getInt("completion_tokens"));
             t.put("latency", row.getLong("latency_ms"));
             t.put("model", row.getString("model"));
             if (row.getString("response_id") != null) {
                 t.put("responseId", row.getString("response_id"));
             }
             t.put("at", row.getTimestamp("created_at").toInstant().toString());
+            t.put("stateDelta", row.getString("state_delta_json"));
+            t.put("status", "SUCCESS");
             return t;
-        }, userId);
+        }, saveId, limit, offset);
+        return Map.of("total", total, "page", page, "size", limit, "rows", turns);
+    }
 
-        var executions = jdbc.query("""
+    public List<Map<String, Object>> executions(String saveId, int limit, Integer turnNumber) {
+        String turnFilter = turnNumber == null ? "" : " and turn_number = " + Math.max(0, turnNumber);
+        return jdbc.query("""
                 SELECT turn_number, attempt_number, status, detail, model,
                        response_id, latency_ms, created_at
-                FROM agent_execution WHERE save_id = (SELECT id FROM game_save WHERE user_id = ? LIMIT 1)
-                ORDER BY created_at DESC LIMIT 50
-                """, (row, idx) -> {
+                FROM agent_execution WHERE save_id = ? %s
+                ORDER BY created_at DESC LIMIT ?
+                """.formatted(turnFilter), (row, idx) -> {
             Map<String, Object> e = new LinkedHashMap<>();
             e.put("turn", row.getInt("turn_number"));
             e.put("attempt", row.getInt("attempt_number"));
@@ -322,9 +390,119 @@ public class AdminService {
             e.put("latency", row.getLong("latency_ms"));
             e.put("at", row.getTimestamp("created_at").toInstant().toString());
             return e;
-        }, userId);
+        }, saveId, Math.max(1, Math.min(limit, 200)));
+    }
 
-        return Map.of("user", users.getFirst(), "turns", turns, "executions", executions);
+    private Map<String, Object> lifeSummary(String status, String saveId, String stateJson, String at) {
+        Map<String, Object> life = new LinkedHashMap<>();
+        life.put("status", status);
+        life.put("saveId", saveId);
+        life.put("at", at);
+        try {
+            JsonNode state = mapper.readTree(stateJson);
+            JsonNode player = state.path("player");
+            life.put("playerName", player.path("name").asText("尚未择定"));
+            life.put("realm", player.path("realm").asText(""));
+            life.put("race", player.path("race").asText(""));
+            life.put("difficulty", state.path("difficulty").asText("NORMAL"));
+            life.put("phase", state.path("phase").asText(""));
+            life.put("turn", state.path("turn").asInt(0));
+            life.put("sceneTitle", state.path("sceneTitle").asText(""));
+        } catch (Exception ignored) { }
+        return life;
+    }
+
+    public List<Map<String, Object>> releaseNotes() {
+        return jdbc.query("""
+                select r.id, r.version, r.title, r.content, r.status, r.announce_all,
+                       r.published_at, r.created_at, r.updated_at,
+                       (select count(*) from user_release_receipt urr where urr.release_note_id = r.id) read_count
+                from release_note r order by r.created_at desc
+                """, (row, idx) -> {
+            Map<String, Object> note = new LinkedHashMap<>();
+            note.put("id", row.getString("id"));
+            note.put("version", row.getString("version"));
+            note.put("title", row.getString("title"));
+            note.put("content", row.getString("content"));
+            note.put("status", row.getString("status"));
+            note.put("announceAll", row.getBoolean("announce_all"));
+            note.put("publishedAt", row.getTimestamp("published_at") == null ? null : row.getTimestamp("published_at").toInstant().toString());
+            note.put("createdAt", row.getTimestamp("created_at").toInstant().toString());
+            note.put("updatedAt", row.getTimestamp("updated_at").toInstant().toString());
+            note.put("readCount", row.getInt("read_count"));
+            return note;
+        });
+    }
+
+    @Transactional
+    public Map<String, Object> saveReleaseNote(String id, String version, String title, String content,
+                                               String status, boolean announceAll) {
+        if (version == null || version.isBlank() || title == null || title.isBlank() || content == null || content.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "版本、标题和公告内容不能为空");
+        }
+        String safeStatus = Set.of("DRAFT", "PUBLISHED", "ARCHIVED").contains(status) ? status : "DRAFT";
+        Instant now = Instant.now();
+        String noteId = id == null || id.isBlank() ? "release-" + UUID.randomUUID() : id;
+        Integer exists = jdbc.queryForObject("select count(*) from release_note where id = ?", Integer.class, noteId);
+        if (exists != null && exists > 0) {
+            jdbc.update("""
+                    update release_note set version=?, title=?, content=?, status=?, announce_all=?,
+                      published_at=case when ?='PUBLISHED' and published_at is null then ? else published_at end,
+                      updated_at=? where id=?
+                    """, version.strip(), title.strip(), content.strip(), safeStatus, announceAll,
+                    safeStatus, Timestamp.from(now), Timestamp.from(now), noteId);
+        } else {
+            jdbc.update("""
+                    insert into release_note(id, version, title, content, status, announce_all, published_at, created_at, updated_at)
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, noteId, version.strip(), title.strip(), content.strip(), safeStatus, announceAll,
+                    "PUBLISHED".equals(safeStatus) ? Timestamp.from(now) : null, Timestamp.from(now), Timestamp.from(now));
+        }
+        audit("SAVE_RELEASE_NOTE", "保存版本公告 " + version + "（" + safeStatus + "）");
+        return releaseNotes().stream().filter(note -> noteId.equals(note.get("id"))).findFirst().orElse(Map.of());
+    }
+
+    public List<Map<String, Object>> modelConfigs() {
+        ensureModelRows();
+        return jdbc.query("select model_code, display_name, secret_ciphertext, active, updated_at from ai_model_config order by model_code desc",
+                (row, idx) -> Map.<String, Object>of(
+                        "modelCode", row.getString("model_code"),
+                        "displayName", row.getString("display_name"),
+                        "keyConfigured", row.getString("secret_ciphertext") != null && !row.getString("secret_ciphertext").isBlank(),
+                        "active", row.getBoolean("active"),
+                        "updatedAt", row.getTimestamp("updated_at").toInstant().toString()));
+    }
+
+    @Transactional
+    public void updateModelConfig(String modelCode, boolean active, String apiKey) {
+        if (!Set.of("deepseek-v4-pro", "deepseek-v4-flash").contains(modelCode)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的模型");
+        }
+        ensureModelRows();
+        if (active) jdbc.update("update ai_model_config set active = false");
+        if (apiKey != null && !apiKey.isBlank()) {
+            jdbc.update("update ai_model_config set secret_ciphertext=?, active=?, updated_at=? where model_code=?",
+                    SecretCipher.encrypt(apiKey.strip(), aiConfigMasterKey), active, Timestamp.from(Instant.now()), modelCode);
+        } else {
+            jdbc.update("update ai_model_config set active=?, updated_at=? where model_code=?",
+                    active, Timestamp.from(Instant.now()), modelCode);
+        }
+        audit("UPDATE_MODEL", "切换生成模型为 " + modelCode + (apiKey == null || apiKey.isBlank() ? "" : "，并更新密钥"));
+    }
+
+    private void ensureModelRows() {
+        Instant now = Instant.now();
+        jdbc.update("insert ignore into ai_model_config(model_code, display_name, active, updated_at) values ('deepseek-v4-pro','V4 Pro',true,?)", Timestamp.from(now));
+        jdbc.update("insert ignore into ai_model_config(model_code, display_name, active, updated_at) values ('deepseek-v4-flash','V4 Flash',false,?)", Timestamp.from(now));
+    }
+
+    public List<Map<String, Object>> operationLogs(int limit) {
+        return jdbc.query("select operation, detail, operated_at from admin_operation_log order by operated_at desc limit ?",
+                (row, idx) -> Map.<String, Object>of(
+                        "operation", row.getString("operation"),
+                        "detail", row.getString("detail"),
+                        "at", row.getTimestamp("operated_at").toInstant().toString()),
+                Math.max(1, Math.min(limit, 200)));
     }
 
     // ---- helpers ----

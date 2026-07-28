@@ -2,6 +2,7 @@ package com.wenxian.game.engine;
 
 import com.wenxian.game.model.ApiModels.BootstrapResponse;
 import com.wenxian.game.model.ApiModels.GoalView;
+import com.wenxian.game.model.ApiModels.DifficultyView;
 import com.wenxian.game.model.ApiModels.RaceView;
 import com.wenxian.game.model.GameState;
 
@@ -13,7 +14,7 @@ public final class GameCatalog {
 
     public static BootstrapResponse bootstrap() {
         return new BootstrapResponse(
-                "问仙录", fixedWorld(),
+                "问仙录", "V0.11", fixedWorld(),
                 List.of(
                         new RaceView("HUMAN", "人族", "寿元短暂，却拥有最完整的宗门、丹道与传承体系。",
                                 List.of("传承选择丰富", "擅长组织与交易"), List.of("寿元最短", "凡俗身份束缚深"), "凡俗约六十至九十年"),
@@ -28,6 +29,10 @@ public final class GameCatalog {
                         new GoalView("POWER", "求力量", "不再任由宗门、家族或强者决定命运。"),
                         new GoalView("TRUTH", "探仙路", "追查绝天之变与飞升断绝的真相。"),
                         new GoalView("FREEDOM", "求自在", "不愿被血脉、契约或宗门定义一生。")
+                ),
+                List.of(
+                        new DifficultyView("NORMAL", "普通", "更适合休闲阅读。世界仍有代价，但会给你更多周旋与补救的余地。"),
+                        new DifficultyView("HARD", "困难", "资源更紧、失误更重，人物不会为主角让路。适合想体验残酷仙途的人。")
                 ),
                 List.of("凡俗", "引气", "筑基", "金丹", "元婴", "化神", "炼虚", "合道")
         );
@@ -55,6 +60,7 @@ public final class GameCatalog {
         GameState.OpeningSeed opening = option.opening;
         GameState state = new GameState();
         state.saveId = setup.saveId;
+        state.difficulty = setup.difficulty;
         state.phase = "talent";
         state.world = fixedWorld();
         state.worldYear = 3001;

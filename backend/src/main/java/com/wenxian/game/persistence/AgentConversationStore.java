@@ -17,7 +17,9 @@ import java.util.UUID;
 
 @Repository
 public class AgentConversationStore {
-    private static final int CONTEXT_CHARACTER_BUDGET = 600_000;
+    private static final int FULL_HISTORY_CHARACTER_BUDGET = 36_000;
+    private static final int RECENT_HISTORY_CHARACTER_BUDGET = 22_000;
+    private static final int RECENT_MESSAGE_LIMIT = 16;
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
 
@@ -60,7 +62,7 @@ public class AgentConversationStore {
                 conversationId);
         int total = rows.stream().mapToInt(row -> row.content().length()).sum();
         List<Map<String, Object>> result = new ArrayList<>();
-        if (total <= CONTEXT_CHARACTER_BUDGET) {
+        if (total <= FULL_HISTORY_CHARACTER_BUDGET) {
             rows.forEach(row -> result.add(Map.of("role", row.role(), "content", row.content())));
             return result;
         }
@@ -71,7 +73,9 @@ public class AgentConversationStore {
         result.add(Map.of("role", "user", "content", "【此前命卷摘要】\n" + summary));
         int retained = 0;
         List<MessageRow> recent = new ArrayList<>();
-        for (int index = rows.size() - 1; index >= 0 && retained < 120_000; index--) {
+        for (int index = rows.size() - 1;
+             index >= 0 && retained < RECENT_HISTORY_CHARACTER_BUDGET && recent.size() < RECENT_MESSAGE_LIMIT;
+             index--) {
             MessageRow row = rows.get(index);
             recent.addFirst(row);
             retained += row.content().length();
@@ -111,7 +115,7 @@ public class AgentConversationStore {
         summary.put("inventory", state.inventory);
         summary.put("characters", state.characters);
         summary.put("threads", state.threads);
-        summary.put("recentEvents", state.events.stream().limit(50).toList());
+        summary.put("recentEvents", state.events.stream().limit(12).toList());
         return json(summary);
     }
 

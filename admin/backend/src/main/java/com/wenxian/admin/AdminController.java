@@ -80,9 +80,12 @@ public class AdminController {
     @GetMapping("/users")
     public List<Map<String, Object>> users(
             @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "") String characterState,
+            @RequestParam(defaultValue = "") String difficulty,
+            @RequestParam(defaultValue = "") String realm,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return adminService.users(search, page, size);
+        return adminService.users(search, characterState, difficulty, realm, page, size);
     }
 
     @GetMapping("/users/{userId}")
@@ -92,6 +95,49 @@ public class AdminController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, (String) detail.get("error"));
         }
         return detail;
+    }
+
+    @GetMapping("/users/{userId}/lives/{saveId}/turns")
+    public Map<String, Object> userTurns(@PathVariable String userId, @PathVariable String saveId,
+                                         @RequestParam(defaultValue = "0") int page,
+                                         @RequestParam(defaultValue = "20") int size,
+                                         @RequestParam(required = false) Integer turn) {
+        return adminService.userTurns(userId, saveId, page, size, turn);
+    }
+
+    @GetMapping("/agent-executions/{saveId}")
+    public List<Map<String, Object>> executions(@PathVariable String saveId,
+                                                 @RequestParam(defaultValue = "50") int limit,
+                                                 @RequestParam(required = false) Integer turn) {
+        return adminService.executions(saveId, limit, turn);
+    }
+
+    @GetMapping("/release-notes")
+    public List<Map<String, Object>> releaseNotes() {
+        return adminService.releaseNotes();
+    }
+
+    @PostMapping("/release-notes")
+    public Map<String, Object> saveReleaseNote(@RequestBody Map<String, Object> body) {
+        return adminService.saveReleaseNote(string(body.get("id")), string(body.get("version")),
+                string(body.get("title")), string(body.get("content")),
+                string(body.get("status")).toUpperCase(), Boolean.TRUE.equals(body.get("announceAll")));
+    }
+
+    @GetMapping("/model-configs")
+    public List<Map<String, Object>> modelConfigs() {
+        return adminService.modelConfigs();
+    }
+
+    @PostMapping("/model-configs/{modelCode}")
+    public Map<String, Object> updateModelConfig(@PathVariable String modelCode, @RequestBody Map<String, Object> body) {
+        adminService.updateModelConfig(modelCode, Boolean.TRUE.equals(body.get("active")), string(body.get("apiKey")));
+        return Map.of("ok", true);
+    }
+
+    @GetMapping("/operation-logs")
+    public List<Map<String, Object>> operationLogs(@RequestParam(defaultValue = "100") int limit) {
+        return adminService.operationLogs(limit);
     }
 
     private static String string(Object value) {

@@ -68,11 +68,27 @@ public class SaveStore {
 
     @Transactional
     public synchronized void archiveAndDelete(StoredSave save) {
+        archiveAndDelete(save, "RESTARTED");
+    }
+
+    @Transactional
+    public synchronized void archiveAndDelete(StoredSave save, String endReason) {
+        String archiveId = "life-" + java.util.UUID.randomUUID();
         jdbcTemplate.update("""
                 insert into game_life_archive(id, user_id, original_save_id, state_json, ended_at)
                 values (?, ?, ?, ?, ?)
-                """, "life-" + java.util.UUID.randomUUID(), save.userId, save.id,
+                """, archiveId, save.userId, save.id,
                 write(save.state), Timestamp.from(Instant.now()));
+        jdbcTemplate.update("""
+                insert into game_life_turn_archive(
+                    id, life_archive_id, original_save_id, turn_number, player_action,
+                    narrative_json, choices_json, state_delta_json, model, response_id,
+                    prompt_tokens, completion_tokens, latency_ms, created_at)
+                select concat('life-turn-', id), ?, save_id, turn_number, player_action,
+                    narrative_json, choices_json, state_delta_json, model, response_id,
+                    prompt_tokens, completion_tokens, latency_ms, created_at
+                from game_turn where save_id = ?
+                """, archiveId, save.id);
         delete(save.id, save.userId);
     }
 

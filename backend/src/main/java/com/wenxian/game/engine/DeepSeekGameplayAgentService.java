@@ -60,6 +60,9 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                     【当前权威状态】
                     %s
 
+                    【本世难度】
+                    %s
+
                     【本轮行动】
                     当前场景：%s
                     当前地点：%s
@@ -67,11 +70,11 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                     玩家行动：%s
                     当前为第%d回合；第0至3回合属于命格补完期。
                     权威状态已经完整提供。只有追查特殊细节时才调用工具，避免重复读取。完成判断后只输出约定的 JSON 裁决。
-                    """.formatted(objectMapper.writeValueAsString(state), state.sceneTitle, state.currentLocation,
+                    """.formatted(objectMapper.writeValueAsString(currentStateContext(state)), difficultyInstruction(state), state.sceneTitle, state.currentLocation,
                     state.worldYear, state.day, state.minute / 60, state.minute % 60, action, state.turn)));
             if (attempt > 1) messages.add(Map.of("role", "user", "content", """
                     上一次裁决因 JSON 结构、状态同步或章节长度不合格而被服务器拒绝。
-                    请完整重写本轮裁决：严格满足 JSON 字段，CONTINUE 章节不少于 900 个汉字、10段，若承认新天赋必须同步 abilityChange。
+                    请完整重写本轮裁决：严格满足 JSON 字段，CONTINUE 章节不少于 1000 个汉字并尽量写满8段，若承认新天赋必须同步 abilityChange。
                     不要解释修复过程，只输出完整裁决 JSON。
                     """));
 
@@ -110,7 +113,7 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 int narrativeLength = result.narrative().stream().mapToInt(String::length).sum();
                 if ("ACCEPTED".equals(result.actionResolution().result())
                         && "CONTINUE".equals(result.outcome())
-                        && (result.narrative().size() < 10 || narrativeLength < 900)) {
+                        && narrativeLength < 1_000) {
                     throw new IllegalArgumentException("Agent 章节过短：" + result.narrative().size() + "段/" + narrativeLength + "字");
                 }
                 audit(state, attempt, "SUCCESS", "", responseId, (System.nanoTime() - startedAt) / 1_000_000L);
@@ -158,7 +161,7 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 - REJECTED：行动违反境界顺序、声称拥有不存在的物品/能力、试图改写既定历史，或当前条件显然无法做到。直接说明具体原因，不生成替代剧情，不施加反噬，不推进时间和状态。
                 - CLARIFY：行动对象或意图不明确，无法确定玩家究竟想做什么。直接请求补充，不推进时间和状态。
                 REJECTED/CLARIFY 时只填写 actionResolution，其他剧情变化字段留空或为 null；suggestions 提供2至3条当前确实可做的小说化行动。它们是业务裁决，不是系统错误。
-                CONTINUE 时 narrative 必须10至16段，总计约1200至2000个简体中文字；保持小说感、具体感官与人物行动，不写流水账，不复述状态面板。
+                CONTINUE 时 narrative 建议8至14段，总计约1200至2000个简体中文字；保持小说感、具体感官与人物行动，不写流水账，不复述状态面板。服务器以正文总长度为主要质量标准，不要为了凑段落拆碎句子。
                 面向玩家的 narrative、signals、choices 和能力 description 必须保持小说语言，不得出现百分比、成功率、冷却时间、回合数、数值加成、系统提示或“触发判定”等 RPG 面板措辞。数值只用于 JSON 状态字段和后端裁决，不得写进正文。
                 playerPatch 使用更新后的绝对数值，不是增量。characterPatch/threadPatch 只能引用输入中已有 id；无变化时为 null。
                 境界只能使用：凡俗、引气、筑基、金丹、元婴、化神、炼虚、合道。境界属于 player.realm，不是功法或天赋；不得创建名为“练气一层/筑基境”等境界状态的 abilityChange。
@@ -190,6 +193,12 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 没有物品或能力变化时 inventoryChange/abilityChange 必须为 null；每轮最多各变化一项。
                 kind 只能是 decision、risk、gain、world；tone 只能是 default 或 danger。
                 """;
+    }
+
+    private String difficultyInstruction(GameState state) {
+        return "HARD".equals(state.difficulty)
+                ? "困难：资源与善意更稀缺，失败后果更持久；仍须给出清晰因果与预警，不能无故处死主角。"
+                : "普通：保持世界真实，但优先提供可理解的转圜、补救和成长机会，适合休闲沉浸阅读。";
     }
 
     AgentResult sanitize(AgentResult raw, GameState state) {
@@ -230,6 +239,29 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 actionResolution,
                 sanitizeDeclaration(raw.declarationResolution(), raw.abilityChange())
         );
+    }
+
+    Map<String, Object> currentStateContext(GameState state) {
+        Map<String, Object> context = new LinkedHashMap<>();
+        context.put("phase", state.phase);
+        context.put("sceneId", state.sceneId);
+        context.put("sceneTitle", state.sceneTitle);
+        context.put("currentLocation", state.currentLocation);
+        context.put("worldYear", state.worldYear);
+        context.put("day", state.day);
+        context.put("minute", state.minute);
+        context.put("turn", state.turn);
+        context.put("world", state.world);
+        context.put("player", state.player);
+        context.put("currentNarrative", state.narrative.stream().limit(4).toList());
+        context.put("signals", state.signals);
+        context.put("choices", state.choices);
+        context.put("characters", state.characters);
+        context.put("threads", state.threads);
+        context.put("inventory", state.inventory);
+        context.put("abilities", state.abilities);
+        context.put("recentEvents", state.events.stream().limit(12).toList());
+        return context;
     }
 
     private AgentResult.ActionResolution sanitizeActionResolution(AgentResult.ActionResolution resolution) {

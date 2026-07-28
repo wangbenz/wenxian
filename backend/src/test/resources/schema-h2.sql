@@ -108,3 +108,50 @@ create table game_life_archive (
     ended_at timestamp not null,
     constraint fk_life_archive_user foreign key (user_id) references app_user(id)
 );
+
+create table game_life_turn_archive (
+    id varchar(80) primary key,
+    life_archive_id varchar(80) not null,
+    original_save_id varchar(80) not null,
+    turn_number integer not null,
+    player_action clob not null,
+    narrative_json clob not null,
+    choices_json clob not null,
+    state_delta_json clob not null,
+    model varchar(80) not null,
+    response_id varchar(128),
+    prompt_tokens integer not null default 0,
+    completion_tokens integer not null default 0,
+    latency_ms bigint not null default 0,
+    created_at timestamp not null,
+    constraint fk_life_turn_archive foreign key (life_archive_id) references game_life_archive(id) on delete cascade
+);
+
+create table release_note (
+    id varchar(80) primary key,
+    version varchar(32) not null,
+    title varchar(120) not null,
+    content clob not null,
+    status varchar(24) not null default 'DRAFT',
+    announce_all boolean not null default false,
+    published_at timestamp,
+    created_at timestamp not null,
+    updated_at timestamp not null
+);
+
+create table user_release_receipt (
+    user_id varchar(64) not null,
+    release_note_id varchar(80) not null,
+    read_at timestamp not null,
+    primary key (user_id, release_note_id),
+    constraint fk_release_receipt_user foreign key (user_id) references app_user(id) on delete cascade,
+    constraint fk_release_receipt_note foreign key (release_note_id) references release_note(id) on delete cascade
+);
+
+create table ai_model_config (
+    model_code varchar(40) primary key,
+    display_name varchar(80) not null,
+    secret_ciphertext clob,
+    active boolean not null default false,
+    updated_at timestamp not null
+);

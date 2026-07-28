@@ -39,6 +39,16 @@ class SaveStoreTest {
             String conversationId = conversations.ensure("persist-test-save", "deepseek-v4-pro");
             conversations.append(conversationId, 0, "user", "选择命格", null, 0, 0);
             conversations.append(conversationId, 0, "assistant", "命卷开启", "response-1", 10, 20);
+            jdbc.update("""
+                    insert into game_turn(
+                        id, save_id, conversation_id, turn_number, player_action,
+                        narrative_json, choices_json, state_delta_json,
+                        world_time_before, world_time_after, model, response_id,
+                        prompt_tokens, completion_tokens, latency_ms, created_at)
+                    values ('turn-test', 'persist-test-save', ?, 1, '向前行走',
+                        '[]', '[]', '{}', 0, 60, 'deepseek-v4-pro', 'response-1',
+                        10, 20, 800, ?)
+                    """, conversationId, Timestamp.from(Instant.now()));
 
             assertEquals(2, conversations.loadHistory("persist-test-save", state).size());
             assertTrue(conversationId.startsWith("conversation-"));
@@ -55,6 +65,9 @@ class SaveStoreTest {
 
             assertEquals(0, jdbc.queryForObject("select count(*) from game_save", Integer.class));
             assertEquals(1, jdbc.queryForObject("select count(*) from game_life_archive", Integer.class));
+            assertEquals(1, jdbc.queryForObject("select count(*) from game_life_turn_archive", Integer.class));
+            assertEquals("向前行走", jdbc.queryForObject(
+                    "select player_action from game_life_turn_archive", String.class));
         } finally {
             database.shutdown();
         }

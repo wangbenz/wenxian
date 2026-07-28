@@ -18,9 +18,11 @@ public final class ApiModels {
 
     public record GoalView(String code, String name, String description) {}
 
+    public record DifficultyView(String code, String name, String description) {}
+
     public record BootstrapResponse(
-            String gameName, GameState.WorldProfile world, List<RaceView> races,
-            List<GoalView> lifeGoals, List<String> realmPath
+            String gameName, String version, GameState.WorldProfile world, List<RaceView> races,
+            List<GoalView> lifeGoals, List<DifficultyView> difficulties, List<String> realmPath
     ) {}
 
     public record GenerateNameRequest(
@@ -40,8 +42,12 @@ public final class ApiModels {
             @NotBlank @Pattern(regexp = "HUMAN|DEMON|SPIRIT") String race,
             @NotBlank @Pattern(regexp = "MALE|FEMALE|UNSPECIFIED") String gender,
             @NotBlank @Pattern(regexp = "LONGEVITY|KINSHIP|POWER|TRUTH|FREEDOM") String lifeGoal,
+            @NotBlank @Pattern(regexp = "NORMAL|HARD") String difficulty,
             @Size(max = 160) String preference
     ) {}
+
+    public record ReleaseNoteView(String id, String version, String title, String content,
+                                  Instant publishedAt, boolean unread) {}
 
     public record SelectProtagonistRequest(@NotBlank @Size(max = 80) String candidateId) {}
 

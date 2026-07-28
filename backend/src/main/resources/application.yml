@@ -34,6 +34,7 @@ game:
   auth:
     session-days: ${WENXIAN_SESSION_DAYS:30}
     secure-cookie: ${WENXIAN_SECURE_COOKIE:false}
+  ai-config-master-key: ${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}
 
 deepseek:
   api-key: ${DEEPSEEK_API_KEY:}

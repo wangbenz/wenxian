@@ -5,6 +5,7 @@ import java.util.List;
 
 public class GameState {
     public String phase = "setup";
+    public String difficulty = "NORMAL";
     public String saveId;
     public String sceneId;
     public String sceneTitle;

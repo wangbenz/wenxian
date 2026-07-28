@@ -106,6 +106,7 @@ export type QuestThread = { id: string; title: string; state: string; danger: nu
 
 export type GameState = {
   phase: "setup" | "talent" | "playing" | "dead";
+  difficulty: "NORMAL" | "HARD";
   saveId: string;
   sceneId: string;
   sceneTitle: string;
@@ -167,6 +168,7 @@ export type AuthResponse = {
 
 export type BootstrapResponse = {
   gameName: string;
+  version: string;
   world: WorldProfile;
   races: Array<{
     code: "HUMAN" | "DEMON" | "SPIRIT";
@@ -181,6 +183,7 @@ export type BootstrapResponse = {
     name: string;
     description: string;
   }>;
+  difficulties: Array<{ code: "NORMAL" | "HARD"; name: string; description: string }>;
   realmPath: string[];
 };
 
@@ -189,7 +192,17 @@ export type CharacterDraft = {
   race: "" | "HUMAN" | "DEMON" | "SPIRIT";
   gender: "" | "MALE" | "FEMALE" | "UNSPECIFIED";
   lifeGoal: "LONGEVITY" | "KINSHIP" | "POWER" | "TRUTH" | "FREEDOM";
+  difficulty: "NORMAL" | "HARD";
   preference: string;
+};
+
+export type ReleaseNote = {
+  id: string;
+  version: string;
+  title: string;
+  content: string;
+  publishedAt: string;
+  unread: boolean;
 };
 
 export class ApiError extends Error {
@@ -241,6 +254,9 @@ export const gameApi = {
   }),
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
   bootstrap: () => request<BootstrapResponse>("/api/v1/game/bootstrap"),
+  releaseNotes: () => request<ReleaseNote[]>("/api/v1/release-notes"),
+  pendingReleaseNote: () => request<ReleaseNote | null>("/api/v1/release-notes/pending"),
+  markReleaseNoteRead: (releaseId: string) => request<void>(`/api/v1/release-notes/${encodeURIComponent(releaseId)}/read`, { method: "POST" }),
   currentSave: () => request<{ exists: boolean; game: ApiSnapshot | null }>("/api/v1/saves/current"),
   generateName: (race: Exclude<CharacterDraft["race"], "">, gender: Exclude<CharacterDraft["gender"], "">, exclude: string[]) =>
     request<{ name: string; alternatives: string[] }>("/api/v1/character-names/generate", {

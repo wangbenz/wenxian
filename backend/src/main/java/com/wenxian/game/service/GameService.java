@@ -21,6 +21,7 @@ import com.wenxian.game.persistence.TurnRequestStore;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -38,13 +39,14 @@ public class GameService {
     private final CharacterNameService nameService;
     private final ActionInputGate inputGate;
     private final AgentConversationStore conversationStore;
+    private final TransactionTemplate transactions;
     private final Map<String, Object> saveLocks = new ConcurrentHashMap<>();
 
     public GameService(SaveStore saveStore, TurnRequestStore turnRequestStore,
                        NarrativeAgent agentService,
                        WorldGenerationService fateGenerationService, GameEngine gameEngine,
                        CharacterNameService nameService, ActionInputGate inputGate,
-                       AgentConversationStore conversationStore) {
+                       AgentConversationStore conversationStore, TransactionTemplate transactions) {
         this.saveStore = saveStore;
         this.turnRequestStore = turnRequestStore;
         this.agentService = agentService;
@@ -53,9 +55,9 @@ public class GameService {
         this.nameService = nameService;
         this.inputGate = inputGate;
         this.conversationStore = conversationStore;
+        this.transactions = transactions;
     }
 
-    @Transactional
     public GameResponse create(UserIdentity user, CreateSaveRequest request) {
         if (saveStore.findCurrentForUser(user.userId()) != null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "当前已有存档，请先继续本世或删除旧存档");
@@ -65,13 +67,19 @@ public class GameService {
         String saveId = "save-" + UUID.randomUUID();
         GameState setup = fateGenerationService.generateFates(saveId, validation.normalizedName(),
                 request.race(), request.gender(), request.lifeGoal(), request.preference());
-        SaveStore.StoredSave saved = saveStore.put(saveId, user.userId(), setup, 0);
-        String conversationId = conversationStore.ensure(saveId, fateGenerationService.model());
-        conversationStore.append(conversationId, 0, "user", "创建角色：" + conversationStore.json(request),
-                null, 0, 0);
-        conversationStore.append(conversationId, 0, "assistant", "三份候选命格：" + conversationStore.json(setup.protagonistOptions),
-                null, 0, 0);
-        return response(saved);
+        setup.difficulty = request.difficulty();
+        return transactions.execute(status -> {
+            if (saveStore.findCurrentForUser(user.userId()) != null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "当前已有存档，请先继续本世或删除旧存档");
+            }
+            SaveStore.StoredSave saved = saveStore.put(saveId, user.userId(), setup, 0);
+            String conversationId = conversationStore.ensure(saveId, fateGenerationService.model());
+            conversationStore.append(conversationId, 0, "user", "创建角色：" + conversationStore.json(request),
+                    null, 0, 0);
+            conversationStore.append(conversationId, 0, "assistant", "三份候选命格：" + conversationStore.json(setup.protagonistOptions),
+                    null, 0, 0);
+            return response(saved);
+        });
     }
 
     public CurrentSaveResponse current(UserIdentity user) {
@@ -83,7 +91,6 @@ public class GameService {
         return response(requireOwned(user, saveId));
     }
 
-    @Transactional
     public GameResponse start(UserIdentity user, String saveId, String protagonistId) {
         synchronized (lock(saveId)) {
             SaveStore.StoredSave current = requireOwned(user, saveId);
@@ -93,20 +100,22 @@ public class GameService {
             try {
                 GameState started = GameCatalog.start(current.state, protagonistId);
                 started.talentOptions = fateGenerationService.generateTalentOptions(started);
-                SaveStore.StoredSave saved = saveStore.put(saveId, user.userId(), started, current.revision + 1);
-                String conversationId = conversationStore.ensure(saveId, fateGenerationService.model());
-                conversationStore.append(conversationId, 0, "user", "我选择命格：" + protagonistId, null, 0, 0);
-                conversationStore.append(conversationId, 0, "assistant", "命卷与候选天赋：" + conversationStore.json(Map.of(
-                        "narrative", started.narrative, "talents", started.talentOptions, "player", started.player)),
-                        null, 0, 0);
-                return response(saved);
+                return transactions.execute(status -> {
+                    requireRevision(user, saveId, current.revision);
+                    SaveStore.StoredSave saved = saveStore.put(saveId, user.userId(), started, current.revision + 1);
+                    String conversationId = conversationStore.ensure(saveId, fateGenerationService.model());
+                    conversationStore.append(conversationId, 0, "user", "我选择命格：" + protagonistId, null, 0, 0);
+                    conversationStore.append(conversationId, 0, "assistant", "命卷与候选天赋：" + conversationStore.json(Map.of(
+                            "narrative", started.narrative, "talents", started.talentOptions, "player", started.player)),
+                            null, 0, 0);
+                    return response(saved);
+                });
             } catch (IllegalArgumentException error) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error.getMessage());
             }
         }
     }
 
-    @Transactional
     public GameResponse rerollTalents(UserIdentity user, String saveId) {
         synchronized (lock(saveId)) {
             SaveStore.StoredSave current = requireTalentPhase(user, saveId);
@@ -116,7 +125,10 @@ public class GameService {
             GameState next = gameEngine.copy(current.state);
             next.talentOptions = fateGenerationService.generateTalentOptions(next);
             next.talentRerolled = true;
-            return response(saveStore.put(saveId, user.userId(), next, current.revision + 1));
+            return transactions.execute(status -> {
+                requireRevision(user, saveId, current.revision);
+                return response(saveStore.put(saveId, user.userId(), next, current.revision + 1));
+            });
         }
     }
 
@@ -146,7 +158,6 @@ public class GameService {
         }
     }
 
-    @Transactional
     public GameResponse act(UserIdentity user, String saveId, TurnRequest request) {
         synchronized (lock(saveId)) {
             SaveStore.StoredSave current = requireOwned(user, saveId);
@@ -163,38 +174,49 @@ public class GameService {
             String conversationId = conversationStore.ensure(saveId, fateGenerationService.model());
             ActionInputGate.Assessment assessment = inputGate.assess(request, current.state);
             if (!assessment.accepted()) {
-                conversationStore.append(conversationId, current.state.turn, "user", assessment.action(), null, 0, 0);
-                conversationStore.append(conversationId, current.state.turn, "assistant",
-                        conversationStore.json(Map.of("actionResolution", actionResolution(assessment))), null, 0, 0);
-                return response(current, actionResolution(assessment));
+                return transactions.execute(status -> {
+                    conversationStore.append(conversationId, current.state.turn, "user", assessment.action(), null, 0, 0);
+                    conversationStore.append(conversationId, current.state.turn, "assistant",
+                            conversationStore.json(Map.of("actionResolution", actionResolution(assessment))), null, 0, 0);
+                    return response(current, actionResolution(assessment));
+                });
             }
             String action = assessment.action();
             AgentTurn agentTurn = agentService.resolve(action, current.state,
                     conversationStore.loadHistory(saveId, current.state));
             if (!"ACCEPTED".equals(agentTurn.result().actionResolution().result())) {
                 ActionResolutionView resolution = actionResolution(agentTurn.result().actionResolution());
-                conversationStore.append(conversationId, current.state.turn, "user", action, null, 0, 0);
-                conversationStore.append(conversationId, current.state.turn, "assistant", agentTurn.assistantMessage(),
-                        agentTurn.responseId(), agentTurn.promptTokens(), agentTurn.completionTokens());
-                return response(current, resolution);
+                return transactions.execute(status -> {
+                    conversationStore.append(conversationId, current.state.turn, "user", action, null, 0, 0);
+                    conversationStore.append(conversationId, current.state.turn, "assistant", agentTurn.assistantMessage(),
+                            agentTurn.responseId(), agentTurn.promptTokens(), agentTurn.completionTokens());
+                    return response(current, resolution);
+                });
             }
             GameState next = gameEngine.apply(current.state, agentTurn.result());
             if ("USE_ABILITY".equals(request.inputType())) gameEngine.consumeAbility(next, request.targetId());
-            SaveStore.StoredSave saved = saveStore.put(saveId, user.userId(), next, current.revision + 1);
-            conversationStore.append(conversationId, next.turn, "user", action, null, 0, 0);
-            conversationStore.append(conversationId, next.turn, "assistant", agentTurn.assistantMessage(),
-                    agentTurn.responseId(), agentTurn.promptTokens(), agentTurn.completionTokens());
-            conversationStore.recordTurn(request.requestId(), saveId, conversationId, next.turn, action,
-                    current.state, next, agentTurn, fateGenerationService.model());
-            turnRequestStore.record(request.requestId(), saveId);
-            return response(saved);
+            return transactions.execute(status -> {
+                SaveStore.StoredSave latest = requireRevision(user, saveId, current.revision);
+                if (turnRequestStore.exists(request.requestId(), saveId)) return response(latest);
+                SaveStore.StoredSave saved = saveStore.put(saveId, user.userId(), next, current.revision + 1);
+                conversationStore.append(conversationId, next.turn, "user", action, null, 0, 0);
+                conversationStore.append(conversationId, next.turn, "assistant", agentTurn.assistantMessage(),
+                        agentTurn.responseId(), agentTurn.promptTokens(), agentTurn.completionTokens());
+                conversationStore.recordTurn(request.requestId(), saveId, conversationId, next.turn, action,
+                        current.state, next, agentTurn, fateGenerationService.model());
+                turnRequestStore.record(request.requestId(), saveId);
+                return response(saved);
+            });
         }
     }
 
     public void delete(UserIdentity user, String saveId) {
         SaveStore.StoredSave save = requireOwned(user, saveId);
-        if ("dead".equals(save.state.phase)) saveStore.archiveAndDelete(save);
-        else saveStore.delete(saveId, user.userId());
+        if (save.state.player != null || "dead".equals(save.state.phase)) {
+            saveStore.archiveAndDelete(save, "dead".equals(save.state.phase) ? "DEAD" : "RESTARTED");
+        } else {
+            saveStore.delete(saveId, user.userId());
+        }
         saveLocks.remove(saveId);
     }
 
@@ -245,6 +267,14 @@ public class GameService {
         SaveStore.StoredSave save = saveStore.findOwned(saveId, user.userId());
         if (save == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "存档不存在");
         return repairProgression(save);
+    }
+
+    private SaveStore.StoredSave requireRevision(UserIdentity user, String saveId, long expectedRevision) {
+        SaveStore.StoredSave latest = requireOwned(user, saveId);
+        if (latest.revision != expectedRevision) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "游戏状态已经变化，请刷新当前场景");
+        }
+        return latest;
     }
 
     private SaveStore.StoredSave repairProgression(SaveStore.StoredSave save) {

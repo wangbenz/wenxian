@@ -271,6 +271,13 @@
 .goal-grid button[data-selected="true"] { color: var(--ink); background: rgba(225, 233, 222, 0.9); border-color: var(--celadon); box-shadow: inset 3px 0 var(--celadon); }
 .goal-grid strong { font-family: var(--display); font-size: 14px; font-weight: 600; }
 .goal-grid small { color: var(--ink-faint); font-size: 8px; line-height: 1.35; }
+.difficulty-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.difficulty-grid button { min-height: 106px; padding: 15px; color: var(--ink); text-align: left; background: rgba(255, 253, 247, .58); border: 1px solid var(--line); }
+.difficulty-grid button[data-selected="true"] { background: rgba(225, 233, 222, .9); border-color: var(--celadon); box-shadow: inset 3px 0 var(--celadon); }
+.difficulty-grid strong, .difficulty-grid small { display: block; }
+.difficulty-grid strong { margin-bottom: 7px; font-family: var(--display); font-size: 18px; }
+.difficulty-grid small { color: var(--ink-soft); font-size: 10px; line-height: 1.65; }
+.difficulty-note { margin: 9px 0 0; color: var(--ink-faint); font-size: 9px; }
 .preference-field { margin: 19px 0 13px; }
 .text-button { display: block; margin: 12px auto 0; padding: 5px 10px; color: var(--ink-faint); background: transparent; border: 0; font-size: 10px; text-decoration: underline; text-underline-offset: 3px; }
 
@@ -659,6 +666,18 @@
 .talent-secondary-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px; color: var(--ink-soft); background: rgba(245, 240, 227, .66); border: 1px solid var(--line); font-family: var(--display); }
 .talent-secondary-actions button:disabled { opacity: .48; }
 .theme-card { margin-top: 14px; padding: 16px; background: rgba(248, 245, 235, .72); border: 1px solid var(--line); }
+.release-history { margin-top: 14px; padding: 16px; background: rgba(248, 245, 235, .72); border: 1px solid var(--line); }
+.release-history details { border-top: 1px solid var(--line); }
+.release-history summary { display: grid; grid-template-columns: auto 1fr auto; gap: 9px; align-items: center; padding: 13px 0; cursor: pointer; list-style: none; }
+.release-history summary::-webkit-details-marker { display: none; }
+.release-history summary span { color: var(--celadon-dark); font-family: var(--display); }
+.release-history summary strong { font-family: var(--display); font-size: 14px; font-weight: 500; }
+.release-history summary small { color: var(--ink-faint); font-size: 9px; }
+.release-history details > p, .empty-copy { margin: 0 0 14px; color: var(--ink-soft); font-size: 11px; line-height: 1.8; white-space: pre-line; }
+.release-dialog { max-height: min(78vh, 620px); overflow: auto; }
+.release-dialog-content { max-height: 42vh; margin: 16px 0 20px; overflow: auto; }
+.release-dialog-content p { margin: 0 0 10px; color: var(--ink-soft); font-size: 12px; line-height: 1.8; }
+.ink-dialog-actions.single { grid-template-columns: 1fr; }
 .theme-card > div:first-child { display: flex; flex-direction: column; gap: 4px; }
 .theme-card strong { font-family: var(--display); font-size: 17px; }
 .theme-card span { color: var(--ink-faint); font-size: 10px; line-height: 1.5; }
@@ -694,7 +713,7 @@
 .game-shell[data-theme="night"] .paper-background { background-image: linear-gradient(rgba(7, 12, 11, .7), rgba(7, 12, 11, .86)), url("/assets/game/xuan-paper-night.png"); filter: saturate(.58) contrast(1.02); opacity: .84; }
 .game-shell[data-theme="night"] .game-header { background: linear-gradient(180deg, rgba(15, 20, 19, .99), rgba(15, 20, 19, .96) 78%, rgba(15, 20, 19, .82)); }
 .game-shell[data-theme="night"] .brand-lockup strong { color: #f3eddb; }
-.game-shell[data-theme="night"] :is(.entry-card, .world-intro-card, .creation-card, .fate-card, .talent-card, .choice-card, .hero-card, .life-purpose-card, .ability-row, .inventory-item, .character-row, .timeline-summary, .timeline-card, .location-card, .world-law-card, .thread-card, .agent-record-card, .theme-card, .death-card, .ink-dialog) { color: var(--ink); background: linear-gradient(145deg, rgba(33, 42, 39, .97), rgba(20, 27, 25, .95)); border-color: var(--line); box-shadow: 0 10px 28px rgba(0, 0, 0, .12); }
+.game-shell[data-theme="night"] :is(.entry-card, .world-intro-card, .creation-card, .fate-card, .talent-card, .choice-card, .hero-card, .life-purpose-card, .ability-row, .inventory-item, .character-row, .timeline-summary, .timeline-card, .location-card, .world-law-card, .thread-card, .agent-record-card, .theme-card, .release-history, .death-card, .ink-dialog) { color: var(--ink); background: linear-gradient(145deg, rgba(33, 42, 39, .97), rgba(20, 27, 25, .95)); border-color: var(--line); box-shadow: 0 10px 28px rgba(0, 0, 0, .12); }
 .game-shell[data-theme="night"] :is(input, textarea, .action-composer textarea) { color: var(--ink); background: rgba(20, 27, 25, .99); border-color: rgba(218, 212, 191, .44); caret-color: var(--celadon); }
 .game-shell[data-theme="night"] :is(input, textarea)::placeholder { color: #b3b3a8; opacity: 1; }
 .game-shell[data-theme="night"] .bottom-nav { background: rgba(14, 20, 18, .99); border-top-color: rgba(225, 220, 200, .26); }
@@ -1288,6 +1307,7 @@
   .screen-content { padding-right: 16px; padding-left: 16px; }
   .action-composer { width: calc(100% - 24px); }
   .race-grid { grid-template-columns: 1fr; }
+  .difficulty-grid { grid-template-columns: 1fr; }
   .two-column-fields { grid-template-columns: 1fr; gap: 0; }
   .name-field-row { grid-template-columns: 1fr; }
   .name-field-row button { justify-content: center; }
@@ -1316,6 +1336,7 @@
   .race-grid button,
   .segmented-control button,
   .goal-grid button,
+  .difficulty-grid button,
   .world-remix,
   .world-title-row i,
   .world-pill-row span,
@@ -1333,6 +1354,7 @@
 .game-shell[data-theme="night"] :is(
   .race-grid button[data-selected="true"],
   .goal-grid button[data-selected="true"],
+  .difficulty-grid button[data-selected="true"],
   .segmented-control button[data-selected="true"]
 ) {
   color: var(--ink);
