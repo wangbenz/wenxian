@@ -16,6 +16,8 @@ import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -33,10 +35,13 @@ public class AdminService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final SecureRandom random = new SecureRandom();
     private static final int SESSION_DAYS = 7;
+    private static final long DASHBOARD_CACHE_MILLIS = 10_000;
     private static final char[] INVITE_CODE_ALPHABET =
             "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
     private static final int INVITE_CODE_LENGTH = 10;
     private final String aiConfigMasterKey;
+    private volatile Map<String, Object> dashboardCache;
+    private volatile long dashboardCacheExpiresAt;
 
     @Autowired
     public AdminService(JdbcTemplate jdbc,
@@ -106,16 +111,80 @@ public class AdminService {
     // ---- dashboard ----
 
     public Map<String, Object> dashboard() {
+        long nowMillis = System.currentTimeMillis();
+        Map<String, Object> cached = dashboardCache;
+        if (cached != null && nowMillis < dashboardCacheExpiresAt) return cached;
+
+        ZoneId reportingZone = ZoneId.of("Asia/Shanghai");
+        LocalDate today = LocalDate.now(reportingZone);
+        Timestamp todayStart = Timestamp.from(today.atStartOfDay(reportingZone).toInstant());
         int totalUsers = count("SELECT count(*) FROM app_user WHERE status = 'ACTIVE'");
-        int todayActive = count("SELECT count(*) FROM app_user WHERE last_login_at >= CURDATE()");
+        Integer todayActiveValue = jdbc.queryForObject(
+                "SELECT count(*) FROM app_user WHERE last_login_at >= ?", Integer.class, todayStart);
+        int todayActive = todayActiveValue == null ? 0 : todayActiveValue;
+        Integer onlinePlayers = jdbc.queryForObject(
+                "SELECT count(*) FROM app_user WHERE status = 'ACTIVE' AND last_login_at >= ?",
+                Integer.class, Timestamp.from(Instant.now().minus(Duration.ofMinutes(15))));
         int totalSaves = count("SELECT count(*) FROM game_save");
-        int totalTurns = count("SELECT count(*) FROM game_turn");
-        int todayTurns = count("SELECT count(*) FROM game_turn WHERE created_at > CURDATE()");
-        int totalTokens = sum("SELECT coalesce(sum(prompt_tokens + completion_tokens), 0) FROM game_turn");
-        int todayTokens = sum("SELECT coalesce(sum(prompt_tokens + completion_tokens), 0) FROM game_turn WHERE created_at >= CURDATE()");
-        int failedToday = count("SELECT count(*) FROM agent_execution WHERE status = 'FAILED' AND created_at >= CURDATE()");
-        Double avgLatency = jdbc.queryForObject(
-                "SELECT coalesce(avg(latency_ms), 0) FROM game_turn WHERE latency_ms > 0", Double.class);
+        Map<String, Number> turnMetrics = jdbc.queryForObject("""
+                SELECT count(*) total_turns,
+                       coalesce(sum(case when created_at >= ? then 1 else 0 end), 0) today_turns,
+                       coalesce(sum(prompt_tokens + completion_tokens), 0) total_tokens,
+                       coalesce(sum(case when created_at >= ?
+                           then prompt_tokens + completion_tokens else 0 end), 0) today_tokens,
+                       coalesce(avg(case when latency_ms > 0 then latency_ms end), 0) avg_latency
+                FROM (
+                    SELECT created_at, prompt_tokens, completion_tokens, latency_ms FROM game_turn
+                    UNION ALL
+                    SELECT created_at, prompt_tokens, completion_tokens, latency_ms FROM game_life_turn_archive
+                ) all_turns
+                """, (row, index) -> Map.of(
+                "totalTurns", row.getLong("total_turns"),
+                "todayTurns", row.getLong("today_turns"),
+                "totalTokens", row.getLong("total_tokens"),
+                "todayTokens", row.getLong("today_tokens"),
+                "avgLatency", row.getDouble("avg_latency")
+        ), todayStart, todayStart);
+        Integer failedTodayValue = jdbc.queryForObject(
+                "SELECT count(*) FROM agent_execution WHERE status = 'FAILED' AND created_at >= ?",
+                Integer.class, todayStart);
+        int failedToday = failedTodayValue == null ? 0 : failedTodayValue;
+
+        Timestamp tokenSince = Timestamp.from(Instant.now().minus(Duration.ofDays(14)));
+        List<Map<String, Object>> rawDailyTokens = jdbc.query("""
+                SELECT DATE(token_usage.created_at) usage_date,
+                       coalesce(sum(token_usage.prompt_tokens), 0) prompt_tokens,
+                       coalesce(sum(token_usage.completion_tokens), 0) completion_tokens,
+                       count(*) turn_count,
+                       count(distinct token_usage.user_id) player_count
+                FROM (
+                    SELECT gt.created_at, gt.prompt_tokens, gt.completion_tokens, gs.user_id
+                    FROM game_turn gt JOIN game_save gs ON gs.id = gt.save_id
+                    WHERE gt.created_at >= ?
+                    UNION ALL
+                    SELECT gta.created_at, gta.prompt_tokens, gta.completion_tokens, gla.user_id
+                    FROM game_life_turn_archive gta
+                    JOIN game_life_archive gla ON gla.id = gta.life_archive_id
+                    WHERE gta.created_at >= ?
+                ) token_usage
+                GROUP BY DATE(token_usage.created_at)
+                ORDER BY usage_date
+                """, (row, index) -> Map.<String, Object>of(
+                "date", row.getDate("usage_date").toLocalDate().toString(),
+                "promptTokens", row.getLong("prompt_tokens"),
+                "completionTokens", row.getLong("completion_tokens"),
+                "turns", row.getLong("turn_count"),
+                "players", row.getLong("player_count")
+        ), tokenSince, tokenSince);
+        Map<String, Map<String, Object>> dailyByDate = new LinkedHashMap<>();
+        rawDailyTokens.forEach(day -> dailyByDate.put(String.valueOf(day.get("date")), day));
+        List<Map<String, Object>> dailyTokens = new ArrayList<>();
+        for (int offset = 13; offset >= 0; offset--) {
+            String date = today.minusDays(offset).toString();
+            dailyTokens.add(dailyByDate.getOrDefault(date, Map.of(
+                    "date", date, "promptTokens", 0L, "completionTokens", 0L,
+                    "turns", 0L, "players", 0L)));
+        }
 
         List<Map<String, Object>> recentTurns = jdbc.query("""
                 SELECT gt.turn_number, gt.player_action,
@@ -150,15 +219,20 @@ public class AdminService {
         result.put("totalUsers", totalUsers);
         result.put("usersWithCharacter", totalSaves);
         result.put("todayActive", todayActive);
-        result.put("totalTurns", totalTurns);
-        result.put("todayTurns", todayTurns);
-        result.put("totalTokens", totalTokens);
-        result.put("todayTokens", todayTokens);
+        result.put("onlinePlayers", onlinePlayers == null ? 0 : onlinePlayers);
+        result.put("totalTurns", turnMetrics.get("totalTurns"));
+        result.put("todayTurns", turnMetrics.get("todayTurns"));
+        result.put("totalTokens", turnMetrics.get("totalTokens"));
+        result.put("todayTokens", turnMetrics.get("todayTokens"));
         result.put("failedToday", failedToday);
-        result.put("avgLatency", Math.round(avgLatency != null ? avgLatency : 0));
+        result.put("avgLatency", Math.round(turnMetrics.get("avgLatency").doubleValue()));
         result.put("currentModel", currentModel);
+        result.put("dailyTokens", dailyTokens);
         result.put("recentTurns", recentTurns);
-        return result;
+        Map<String, Object> snapshot = Map.copyOf(result);
+        dashboardCache = snapshot;
+        dashboardCacheExpiresAt = nowMillis + DASHBOARD_CACHE_MILLIS;
+        return snapshot;
     }
 
     public List<Map<String, Object>> inviteCodes(String status) {
@@ -235,29 +309,62 @@ public class AdminService {
 
     public List<Map<String, Object>> users(String search, String characterState, String difficulty,
                                            String realmFilter, int page, int size) {
-        String like = search == null || search.isBlank() ? "%" : "%" + search.strip() + "%";
         int offset = Math.max(0, page) * Math.max(1, Math.min(size, 50));
         int limit = Math.max(1, Math.min(size, 50));
 
+        String searchValue = search == null ? "" : search.strip();
         String stateFilter = characterState == null ? "" : characterState.strip().toUpperCase();
         String difficultyFilter = difficulty == null ? "" : difficulty.strip().toUpperCase();
         String realmFilterValue = realmFilter == null ? "" : realmFilter.strip();
+        StringBuilder where = new StringBuilder(" WHERE u.status = 'ACTIVE' ");
+        List<Object> args = new ArrayList<>();
+        if (!searchValue.isBlank()) {
+            String like = "%" + searchValue + "%";
+            where.append("""
+                     AND (u.email LIKE ? OR u.id LIKE ? OR coalesce(gs.id, '') LIKE ?
+                          OR coalesce(JSON_UNQUOTE(JSON_EXTRACT(gs.state_json, '$.player.name')), '') LIKE ?)
+                    """);
+            args.add(like); args.add(like); args.add(like); args.add(like);
+        }
+        if ("CURRENT".equals(stateFilter)) {
+            where.append(" AND gs.id IS NOT NULL ");
+        } else if ("RESTARTED".equals(stateFilter)) {
+            where.append(" AND gs.id IS NULL AND coalesce(arc.archive_count, 0) > 0 ");
+        } else if ("NONE".equals(stateFilter)) {
+            where.append(" AND gs.id IS NULL AND coalesce(arc.archive_count, 0) = 0 ");
+        }
+        if (!difficultyFilter.isBlank()) {
+            where.append(" AND coalesce(JSON_UNQUOTE(JSON_EXTRACT(gs.state_json, '$.difficulty')), 'NORMAL') = ? ");
+            args.add(difficultyFilter);
+        }
+        if (!realmFilterValue.isBlank()) {
+            where.append(" AND coalesce(JSON_UNQUOTE(JSON_EXTRACT(gs.state_json, '$.player.realm')), '') = ? ");
+            args.add(realmFilterValue);
+        }
+
+        String from = """
+                FROM app_user u
+                LEFT JOIN game_save gs ON gs.user_id = u.id
+                LEFT JOIN (
+                    SELECT user_id, count(*) archive_count
+                    FROM game_life_archive GROUP BY user_id
+                ) arc ON arc.user_id = u.id
+                """;
+        int total = jdbc.queryForObject("SELECT count(*) " + from + where, Integer.class, args.toArray());
 
         String sql = """
                 SELECT u.id, u.email, u.registered_at, u.last_login_at,
                        gs.id AS save_id, gs.state_json, gs.updated_at AS save_updated,
-                       (SELECT count(*) FROM game_turn gt WHERE gt.save_id = gs.id) AS turn_count,
-                       (SELECT coalesce(sum(gt2.prompt_tokens + gt2.completion_tokens), 0)
-                        FROM game_turn gt2 WHERE gt2.save_id = gs.id) AS total_tokens,
-                       (SELECT count(*) FROM game_life_archive gla WHERE gla.user_id = u.id) AS archive_count
-                FROM app_user u LEFT JOIN game_save gs ON gs.user_id = u.id
-                WHERE u.status = 'ACTIVE'
-                ORDER BY u.last_login_at DESC
-                """;
+                       coalesce(arc.archive_count, 0) AS archive_count
+                """ + from + where + " ORDER BY u.last_login_at DESC, u.registered_at DESC LIMIT ? OFFSET ?";
+        List<Object> pageArgs = new ArrayList<>(args);
+        pageArgs.add(limit);
+        pageArgs.add(offset);
 
-        List<Map<String, Object>> all = jdbc.query(sql, (row, idx) -> {
+        List<Map<String, Object>> rows = jdbc.query(sql, (row, idx) -> {
             String playerName = "", realm = "", race = "";
             String rowDifficulty = "NORMAL";
+            int turnCount = 0;
             try {
                 JsonNode state = mapper.readTree(row.getString("state_json"));
                 JsonNode player = state.path("player");
@@ -265,6 +372,7 @@ public class AdminService {
                 realm = player.path("realm").asText("");
                 race = player.path("race").asText("");
                 rowDifficulty = state.path("difficulty").asText("NORMAL");
+                turnCount = state.path("turn").asInt(0);
             } catch (Exception ignored) { }
             Map<String, Object> user = new LinkedHashMap<>();
             user.put("userId", row.getString("id"));
@@ -281,22 +389,12 @@ public class AdminService {
             user.put("archiveCount", row.getInt("archive_count"));
             user.put("characterState", row.getString("save_id") == null
                     ? (row.getInt("archive_count") > 0 ? "RESTARTED" : "NONE") : "CURRENT");
-            user.put("turnCount", row.getInt("turn_count"));
-            user.put("totalTokens", row.getInt("total_tokens"));
+            user.put("turnCount", turnCount);
+            user.put("totalTokens", 0);
             user.put("saveUpdated", row.getTimestamp("save_updated") != null
                     ? row.getTimestamp("save_updated").toInstant().toString() : null);
             return user;
-        });
-        List<Map<String, Object>> filtered = all.stream().filter(row -> {
-            String haystack = (row.get("rawEmail") + " " + row.get("playerName") + " " + row.get("userId") + " " + row.get("saveId")).toLowerCase();
-            boolean searchOk = "%".equals(like) || haystack.contains(search.strip().toLowerCase());
-            boolean stateOk = stateFilter.isBlank() || stateFilter.equals(row.get("characterState"));
-            boolean difficultyOk = difficultyFilter.isBlank() || difficultyFilter.equals(row.get("difficulty"));
-            boolean realmOk = realmFilterValue.isBlank() || realmFilterValue.equals(row.get("realm"));
-            return searchOk && stateOk && difficultyOk && realmOk;
-        }).toList();
-        int total = filtered.size();
-        List<Map<String, Object>> rows = filtered.stream().skip(offset).limit(limit).toList();
+        }, pageArgs.toArray());
 
         return List.of(
                 Map.<String, Object>of("total", total, "page", page, "size", limit),

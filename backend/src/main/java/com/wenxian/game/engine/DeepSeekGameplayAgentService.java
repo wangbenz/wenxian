@@ -73,17 +73,17 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                     """.formatted(objectMapper.writeValueAsString(currentStateContext(state)), difficultyInstruction(state), state.sceneTitle, state.currentLocation,
                     state.worldYear, state.day, state.minute / 60, state.minute % 60, action, state.turn)));
             if (attempt > 1) messages.add(Map.of("role", "user", "content", """
-                    上一次裁决因 JSON 结构、状态同步或章节长度不合格而被服务器拒绝。
-                    请完整重写本轮裁决：严格满足 JSON 字段，CONTINUE 章节不少于 1000 个汉字并尽量写满8段，若承认新天赋必须同步 abilityChange。
+                    上一次裁决因 JSON 结构、必填字段或状态同步不合格而被服务器拒绝。
+                    请完整重写本轮裁决：严格满足 JSON 字段，CONTINUE 正文保持6至10段、800至1200字，若承认新天赋必须同步 abilityChange。
                     不要解释修复过程，只输出完整裁决 JSON。
                     """));
 
             int promptTokens = 0;
             int completionTokens = 0;
             String responseId = "";
-            for (int round = 0; round < 5; round++) {
+            for (int round = 0; round < 2; round++) {
                 WorldGenerationService.ChatResponse response = deepSeek.requestMessage(
-                        messages, toolRegistry.definitions(), 5200, 0.72);
+                        messages, toolRegistry.definitions(), 3200, 0.72);
                 JsonNode message = response.message();
                 promptTokens += response.promptTokens();
                 completionTokens += response.completionTokens();
@@ -113,7 +113,7 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 int narrativeLength = result.narrative().stream().mapToInt(String::length).sum();
                 if ("ACCEPTED".equals(result.actionResolution().result())
                         && "CONTINUE".equals(result.outcome())
-                        && narrativeLength < 1_000) {
+                        && narrativeLength < 700) {
                     throw new IllegalArgumentException("Agent 章节过短：" + result.narrative().size() + "段/" + narrativeLength + "字");
                 }
                 audit(state, attempt, "SUCCESS", "", responseId, (System.nanoTime() - startedAt) / 1_000_000L);
@@ -161,7 +161,7 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 - REJECTED：行动违反境界顺序、声称拥有不存在的物品/能力、试图改写既定历史，或当前条件显然无法做到。直接说明具体原因，不生成替代剧情，不施加反噬，不推进时间和状态。
                 - CLARIFY：行动对象或意图不明确，无法确定玩家究竟想做什么。直接请求补充，不推进时间和状态。
                 REJECTED/CLARIFY 时只填写 actionResolution，其他剧情变化字段留空或为 null；suggestions 提供2至3条当前确实可做的小说化行动。它们是业务裁决，不是系统错误。
-                CONTINUE 时 narrative 建议8至14段，总计约1200至2000个简体中文字；保持小说感、具体感官与人物行动，不写流水账，不复述状态面板。服务器以正文总长度为主要质量标准，不要为了凑段落拆碎句子。
+                CONTINUE 时 narrative 建议6至10段，总计约800至1200个简体中文字，最低不得少于700字；保持小说感、具体感官与人物行动，不写流水账，不复述状态面板。不要为了凑段落拆碎句子。
                 面向玩家的 narrative、signals、choices 和能力 description 必须保持小说语言，不得出现百分比、成功率、冷却时间、回合数、数值加成、系统提示或“触发判定”等 RPG 面板措辞。数值只用于 JSON 状态字段和后端裁决，不得写进正文。
                 playerPatch 使用更新后的绝对数值，不是增量。characterPatch/threadPatch 只能引用输入中已有 id；无变化时为 null。
                 境界只能使用：凡俗、引气、筑基、金丹、元婴、化神、炼虚、合道。境界属于 player.realm，不是功法或天赋；不得创建名为“练气一层/筑基境”等境界状态的 abilityChange。
@@ -253,14 +253,14 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
         context.put("turn", state.turn);
         context.put("world", state.world);
         context.put("player", state.player);
-        context.put("currentNarrative", state.narrative.stream().limit(4).toList());
+        context.put("currentNarrative", state.narrative.stream().limit(2).toList());
         context.put("signals", state.signals);
         context.put("choices", state.choices);
         context.put("characters", state.characters);
         context.put("threads", state.threads);
         context.put("inventory", state.inventory);
         context.put("abilities", state.abilities);
-        context.put("recentEvents", state.events.stream().limit(12).toList());
+        context.put("recentEvents", state.events.stream().limit(6).toList());
         return context;
     }
 

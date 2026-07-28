@@ -37,7 +37,7 @@ public class AgentToolRegistry {
                 case "get_player_state" -> state.player;
                 case "get_inventory" -> state.inventory;
                 case "get_abilities" -> state.abilities;
-                case "get_recent_events" -> state.events.stream().limit(12).toList();
+                case "get_recent_events" -> state.events.stream().limit(6).toList();
                 case "get_active_threads" -> state.threads;
                 case "get_character" -> character(arguments.path("characterId").asText(), state);
                 default -> Map.of("error", "UNKNOWN_TOOL", "message", "工具不存在");

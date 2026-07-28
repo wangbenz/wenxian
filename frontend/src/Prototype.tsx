@@ -32,9 +32,11 @@ import {
 type TabId = "adventure" | "character" | "chronicle" | "world";
 type AppStage = "loading" | "login" | "create" | "fate" | "talent" | "game";
 type ThemeMode = "system" | "paper" | "night";
+type FontSizeMode = "compact" | "standard" | "large";
 
 const CACHE_KEY = "wenxian-readonly-cache-v2";
 const THEME_KEY = "wenxian-theme";
+const FONT_SIZE_KEY = "wenxian-font-size";
 const DEFAULT_DRAFT: CharacterDraft = {
   playerName: "",
   race: "",
@@ -565,7 +567,7 @@ function ResetConfirmDialog({
   );
 }
 
-function WorldView({ game, version, releaseNotes, syncMode, email, theme, onTheme, onReset, onLogout }: { game: GameState; version: string; releaseNotes: ReleaseNote[]; syncMode: SyncMode; email: string; theme: ThemeMode; onTheme: (theme: ThemeMode) => void; onReset: () => void; onLogout: () => void }) {
+function WorldView({ game, version, releaseNotes, syncMode, email, theme, fontSize, onTheme, onFontSize, onReset, onLogout }: { game: GameState; version: string; releaseNotes: ReleaseNote[]; syncMode: SyncMode; email: string; theme: ThemeMode; fontSize: FontSizeMode; onTheme: (theme: ThemeMode) => void; onFontSize: (fontSize: FontSizeMode) => void; onReset: () => void; onLogout: () => void }) {
   return (
     <div className="record-view">
       <div className="page-title-row"><div><p className="eyebrow">KNOWN WORLD</p><h1>世界</h1></div><GlobeIcon className="title-icon" /></div>
@@ -574,7 +576,11 @@ function WorldView({ game, version, releaseNotes, syncMode, email, theme, onThem
       <section className="record-section"><div className="section-label"><MagnifyingGlassIcon /><h2>未解线索</h2><span>{game.threads.length}</span></div><div className="thread-list">{game.threads.map((thread) => <article className="thread-card" key={thread.id}><div><h3>{thread.title}</h3><p>{thread.state}</p></div><span data-danger={thread.danger > 75 ? "high" : "normal"}>{dangerName(thread.danger)}</span></article>)}</div></section>
       <section className="agent-record-card"><span className="agent-dot" /><div><h2>{syncMode === "server" ? "本世命卷已同步" : "命卷暂时封存"}</h2><p>{syncMode === "server" ? "人物、纪事与未解线索均已妥善保存。" : "已有经历仍可查阅，暂时无法续写。"} 当前邮箱：{email || "未知"}</p></div></section>
       <section className="release-history"><div className="section-label"><ReaderIcon /><h2>版本纪事</h2><span>{version}</span></div>{releaseNotes.length === 0 ? <p className="empty-copy">尚无公开版本纪事。</p> : releaseNotes.map((note) => <details key={note.id}><summary><span>{note.version}</span><strong>{note.title}</strong><small>{new Date(note.publishedAt).toLocaleDateString("zh-CN")}</small></summary><p>{note.content}</p></details>)}</section>
-      <section className="theme-card"><div><strong>阅读外观</strong><span>夜间模式采用月下宣纸，不改变游戏进度。</span></div><div className="theme-switch">{([["system", "跟随系统"], ["paper", "宣纸"], ["night", "月夜"]] as Array<[ThemeMode, string]>).map(([id, label]) => <button aria-pressed={theme === id} data-selected={theme === id} key={id} onClick={() => onTheme(id)} type="button">{label}</button>)}</div></section>
+      <section className="theme-card">
+        <div><strong>阅读外观</strong><span>夜间模式采用月下宣纸，不改变游戏进度。</span></div>
+        <div className="theme-switch">{([["system", "跟随系统"], ["paper", "宣纸"], ["night", "月夜"]] as Array<[ThemeMode, string]>).map(([id, label]) => <button aria-pressed={theme === id} data-selected={theme === id} key={id} onClick={() => onTheme(id)} type="button">{label}</button>)}</div>
+        <div className="font-size-setting"><div><strong>字体大小</strong><span>调整剧情、选项与资料正文的阅读字号。</span></div><div className="theme-switch">{([["compact", "小字"], ["standard", "标准"], ["large", "大字"]] as Array<[FontSizeMode, string]>).map(([id, label]) => <button aria-pressed={fontSize === id} data-selected={fontSize === id} key={id} onClick={() => onFontSize(id)} type="button">{label}</button>)}</div></div>
+      </section>
       <div className="world-actions"><button className="reset-button" onClick={onReset} type="button"><ReloadIcon />重开此世</button><button className="reset-button" onClick={onLogout} type="button">退出邮箱</button></div>
     </div>
   );
@@ -601,6 +607,7 @@ export default function Prototype() {
   const [selectedFate, setSelectedFate] = useState("");
   const [selectedTalent, setSelectedTalent] = useState("");
   const [theme, setTheme] = useState<ThemeMode>(() => (window.localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "system");
+  const [fontSize, setFontSize] = useState<FontSizeMode>(() => (window.localStorage.getItem(FONT_SIZE_KEY) as FontSizeMode | null) ?? "standard");
   const [systemDark, setSystemDark] = useState(() => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [isBusy, setIsBusy] = useState(false);
@@ -692,14 +699,19 @@ export default function Prototype() {
         if (!active) return;
         setReleaseNotes(notes);
         if (pending) setPendingRelease((current) => current?.id === pending.id ? current : pending);
-      } catch {
-        // 公告检查失败不应中断单机命卷。
+      } catch (caught) {
+        if (caught instanceof ApiError && caught.status === 401 && active) {
+          setAuth(null);
+          setStage("login");
+          setSyncMode("server");
+        }
+        // 其他公告检查失败不应中断单机命卷。
       } finally {
         checking = false;
       }
     };
     const onVisible = () => { if (document.visibilityState === "visible") void checkReleases(); };
-    const timer = window.setInterval(() => void checkReleases(), 30_000);
+    const timer = window.setInterval(() => void checkReleases(), 5 * 60_000);
     window.addEventListener("focus", checkReleases);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -717,6 +729,10 @@ export default function Prototype() {
     media.addEventListener?.("change", update);
     return () => media.removeEventListener?.("change", update);
   }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem(FONT_SIZE_KEY, fontSize);
+  }, [fontSize]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -745,6 +761,11 @@ export default function Prototype() {
     try {
       await task();
     } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 401) {
+        setAuth(null);
+        setStage("login");
+        setSyncMode("server");
+      }
       setError(errorMessage(caught));
     } finally {
       busyRef.current = false;
@@ -869,7 +890,7 @@ export default function Prototype() {
   }, [bootstrap, game]);
 
   return (
-    <div className="game-shell" data-composer-focused={isComposerFocused} data-entry={!showGameChrome} data-keyboard-open={keyboardOffset > 80} data-theme={actualTheme} onFocusCapture={(event) => { const target = event.target; if (target instanceof HTMLElement && target.matches("input, textarea, select") && !target.closest(".action-composer")) revealFormControl(target); }} style={{ "--keyboard-offset": `${keyboardOffset}px` } as CSSProperties}>
+    <div className="game-shell" data-composer-focused={isComposerFocused} data-entry={!showGameChrome} data-font-size={fontSize} data-keyboard-open={keyboardOffset > 80} data-theme={actualTheme} onFocusCapture={(event) => { const target = event.target; if (target instanceof HTMLElement && target.matches("input, textarea, select") && !target.closest(".action-composer")) revealFormControl(target); }} style={{ "--keyboard-offset": `${keyboardOffset}px` } as CSSProperties}>
       <div className="paper-background" aria-hidden="true" />
       <header className="game-header"><div className="game-header-inner"><div className="brand-lockup"><strong>问仙录</strong><span>浮生一卷 · {bootstrap?.version ?? "V0.11"}</span></div><div className="world-clock"><span>{headerText}</span><small><SewingPinFilledIcon />{game?.phase === "playing" && game.player ? `${game.currentLocation} · ${game.player.realm} · ${conditionName(game.player.vitality)}` : game?.phase === "dead" && game.player ? `${game.currentLocation} · ${game.player.realm} · 已故` : syncMode === "offline" ? "命卷暂封" : "单机世界 · 命卷待启"}</small></div></div></header>
       <div className="game-scroll" data-phase={game?.phase ?? stage} key={`${stage}-${tab}-${game?.turn ?? 0}`}><main className="screen-content" data-testid="game-content">
@@ -881,7 +902,7 @@ export default function Prototype() {
         {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView choices={choices} error={error} game={game} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onSuggestion={(content) => void takeTurn("TEXT", { content })} resolution={snapshot?.actionResolution} />}
         {stage === "game" && game?.phase === "playing" && tab === "character" && <CharacterView game={game} />}
         {stage === "game" && game?.phase === "playing" && tab === "chronicle" && <ChronicleView game={game} />}
-        {stage === "game" && game?.phase === "playing" && tab === "world" && <WorldView email={email} game={game} onLogout={() => void logout()} onReset={resetGame} onTheme={setTheme} releaseNotes={releaseNotes} syncMode={syncMode} theme={theme} version={bootstrap?.version ?? "V0.11"} />}
+        {stage === "game" && game?.phase === "playing" && tab === "world" && <WorldView email={email} fontSize={fontSize} game={game} onFontSize={setFontSize} onLogout={() => void logout()} onReset={resetGame} onTheme={setTheme} releaseNotes={releaseNotes} syncMode={syncMode} theme={theme} version={bootstrap?.version ?? "V0.11"} />}
         {stage === "game" && game?.phase === "dead" && tab !== "chronicle" && <DeathView game={game} isBusy={isBusy} onChronicle={() => setTab("chronicle")} onLogout={() => void logout()} onRebirth={resetGame} />}
         {stage === "game" && game?.phase === "dead" && tab === "chronicle" && <div className="death-chronicle"><ChronicleView game={game} /><button className="reset-button" onClick={() => setTab("adventure")} type="button">返回终局结算</button></div>}
       </main></div>

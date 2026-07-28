@@ -16,6 +16,10 @@
   --content-width: 760px;
   --header-height: calc(94px + env(safe-area-inset-top));
   --bottom-safe: env(safe-area-inset-bottom, 0px);
+  --reading-story-size: 17px;
+  --reading-title-size: 18px;
+  --reading-body-size: 11px;
+  --reading-detail-size: 10px;
 }
 
 .game-shell {
@@ -27,6 +31,20 @@
   color: var(--ink);
   background: var(--paper);
   font-family: var(--serif);
+}
+
+.game-shell[data-font-size="compact"] {
+  --reading-story-size: 15px;
+  --reading-title-size: 17px;
+  --reading-body-size: 10px;
+  --reading-detail-size: 9px;
+}
+
+.game-shell[data-font-size="large"] {
+  --reading-story-size: 19px;
+  --reading-title-size: 20px;
+  --reading-body-size: 13px;
+  --reading-detail-size: 12px;
 }
 
 /* The mobile runtime ships a generic gray paragraph color. Game copy must inherit
@@ -344,7 +362,7 @@
   max-width: 650px;
   margin: 0;
   font-family: var(--display);
-  font-size: 16px;
+  font-size: var(--reading-body-size);
   line-height: 1.75;
 }
 
@@ -407,11 +425,11 @@
 .fate-name { display: flex; align-items: baseline; gap: 8px; }
 .fate-name strong { font-family: var(--display); font-size: 22px; font-weight: 500; }
 .fate-name small { color: var(--ink-faint); font-size: 9px; }
-.fate-card > p { grid-column: 2; margin: -5px 0 2px; color: var(--celadon-dark); font-size: 10px; }
+.fate-card > p { grid-column: 2; margin: -5px 0 2px; color: var(--celadon-dark); font-size: var(--reading-detail-size); }
 .fate-card dl { display: grid; grid-column: 1 / -1; gap: 5px; margin: 0; }
 .fate-card dl div { display: grid; grid-template-columns: 42px 1fr; gap: 7px; }
 .fate-card dt { color: var(--ink-faint); font-size: 9px; }
-.fate-card dd { margin: 0; font-family: var(--display); font-size: 12px; line-height: 1.45; }
+.fate-card dd { margin: 0; font-family: var(--display); font-size: var(--reading-body-size); line-height: 1.5; }
 .open-scroll-button {
   display: flex;
   align-items: center;
@@ -495,7 +513,7 @@
   margin: 0 0 14px;
   color: var(--ink);
   font-family: var(--display);
-  font-size: 17px;
+  font-size: var(--reading-story-size);
   font-weight: 450;
   line-height: 1.78;
   text-shadow: 0 1px rgba(255, 255, 255, 0.72);
@@ -581,7 +599,7 @@
 
 .choice-copy strong {
   font-family: var(--display);
-  font-size: 18px;
+  font-size: var(--reading-title-size);
   font-weight: 500;
   line-height: 1.3;
   overflow-wrap: anywhere;
@@ -591,7 +609,7 @@
   display: block;
   color: var(--ink-faint);
   font-family: var(--serif);
-  font-size: 10px;
+  font-size: var(--reading-detail-size);
   line-height: 1.55;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -624,7 +642,7 @@
 .action-resolution .eyebrow { margin: 0 0 6px; color: var(--cinnabar); }
 .action-resolution[data-result="CLARIFY"] .eyebrow { color: var(--celadon); }
 .action-resolution h2 { margin: 0 0 8px; font-family: var(--display); font-size: 22px; }
-.action-resolution > p:not(.eyebrow) { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.8; }
+.action-resolution > p:not(.eyebrow) { margin: 0; color: var(--ink-soft); font-size: var(--reading-body-size); line-height: 1.8; }
 .resolution-suggestions { display: grid; gap: 7px; margin-top: 13px; }
 .resolution-suggestions button { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; padding: 9px 11px; color: var(--ink); text-align: left; background: color-mix(in srgb, var(--paper) 86%, transparent); border: 1px solid var(--line); }
 .resolution-suggestions button svg { flex: 0 0 auto; width: 15px; color: var(--celadon); }
@@ -659,8 +677,8 @@
 .talent-card[data-selected="true"] { background: rgba(223, 232, 222, .9); border-color: var(--celadon); box-shadow: inset 3px 0 var(--celadon); }
 .talent-sigil { display: grid; place-items: center; width: 46px; height: 46px; color: var(--celadon-dark); border: 1px solid var(--celadon); border-radius: 50%; font-family: var(--display); font-size: 21px; }
 .talent-card h3 { margin: 0 0 6px; font-family: var(--display); font-size: 21px; }
-.talent-card p { margin: 0 0 8px; color: var(--ink-soft); font-size: 12px; line-height: 1.7; }
-.talent-card small, .talent-card em { display: block; color: var(--ink-faint); font-size: 10px; line-height: 1.6; font-style: normal; }
+.talent-card p { margin: 0 0 8px; color: var(--ink-soft); font-size: var(--reading-body-size); line-height: 1.7; }
+.talent-card small, .talent-card em { display: block; color: var(--ink-faint); font-size: var(--reading-detail-size); line-height: 1.6; font-style: normal; }
 .talent-card em { color: var(--cinnabar); }
 .talent-secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; width: min(100%, 520px); margin: 9px auto 0; }
 .talent-secondary-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px; color: var(--ink-soft); background: rgba(245, 240, 227, .66); border: 1px solid var(--line); font-family: var(--display); }
@@ -673,14 +691,17 @@
 .release-history summary span { color: var(--celadon-dark); font-family: var(--display); }
 .release-history summary strong { font-family: var(--display); font-size: 14px; font-weight: 500; }
 .release-history summary small { color: var(--ink-faint); font-size: 9px; }
-.release-history details > p, .empty-copy { margin: 0 0 14px; color: var(--ink-soft); font-size: 11px; line-height: 1.8; white-space: pre-line; }
+.release-history details > p, .empty-copy { margin: 0 0 14px; color: var(--ink-soft); font-size: var(--reading-body-size); line-height: 1.8; white-space: pre-line; }
 .release-dialog { max-height: min(78vh, 620px); overflow: auto; }
 .release-dialog-content { max-height: 42vh; margin: 16px 0 20px; overflow: auto; }
-.release-dialog-content p { margin: 0 0 10px; color: var(--ink-soft); font-size: 12px; line-height: 1.8; }
+.release-dialog-content p { margin: 0 0 10px; color: var(--ink-soft); font-size: var(--reading-body-size); line-height: 1.8; }
 .ink-dialog-actions.single { grid-template-columns: 1fr; }
 .theme-card > div:first-child { display: flex; flex-direction: column; gap: 4px; }
 .theme-card strong { font-family: var(--display); font-size: 17px; }
 .theme-card span { color: var(--ink-faint); font-size: 10px; line-height: 1.5; }
+.font-size-setting { margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--line); }
+.font-size-setting > div:first-child { display: flex; flex-direction: column; gap: 4px; }
+.font-size-setting > div:first-child strong { font-size: 15px; }
 .theme-switch { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 12px; border: 1px solid var(--line); }
 .theme-switch button { min-height: 38px; color: var(--ink-soft); background: transparent; border: 0; font-family: var(--display); }
 .theme-switch button + button { border-left: 1px solid var(--line); }
@@ -1100,7 +1121,7 @@
 }
 
 .life-purpose-card p,
-.world-law-card p { display: grid; grid-template-columns: 72px 1fr; gap: 8px; margin: 0; color: var(--ink-soft); font-family: var(--display); font-size: 12px; line-height: 1.5; }
+.world-law-card p { display: grid; grid-template-columns: 72px 1fr; gap: 8px; margin: 0; color: var(--ink-soft); font-family: var(--display); font-size: var(--reading-body-size); line-height: 1.5; }
 .life-purpose-card strong,
 .world-law-card strong { color: var(--celadon-dark); font-size: 10px; font-weight: 500; }
 .world-law-card div { display: flex; gap: 6px; padding-top: 7px; border-top: 1px solid var(--line); flex-wrap: wrap; }
@@ -1145,7 +1166,7 @@
 
 .character-row h3 { margin: 0 0 3px; font-family: var(--display); font-size: 15px; }
 .character-row h3 small { margin-left: 7px; color: var(--ink-faint); font-family: var(--serif); font-size: 9px; font-weight: 400; }
-.character-row p { margin: 0 0 4px; font-size: 11px; }
+.character-row p { margin: 0 0 4px; font-size: var(--reading-body-size); }
 .character-row span { color: var(--ink-faint); font-size: 9px; }
 
 .inventory-row { display: flex; gap: 7px; flex-wrap: wrap; }
@@ -1170,7 +1191,7 @@
 .ability-row h3 small,
 .inventory-item h3 small { margin-left: 7px; color: var(--ink-faint); font-family: var(--serif); font-size: 8px; font-weight: 400; }
 .ability-row p,
-.inventory-item p { margin: 0 0 4px; color: var(--ink-soft); font-size: 10px; line-height: 1.45; }
+.inventory-item p { margin: 0 0 4px; color: var(--ink-soft); font-size: var(--reading-detail-size); line-height: 1.55; }
 .ability-row span { color: var(--ink-faint); font-size: 8px; }
 .ability-row .ability-rules { color: var(--cinnabar); font-size: 9px; }
 .ability-actions { display: grid; gap: 5px; }
@@ -1187,7 +1208,7 @@
 
 .timeline-summary span { display: block; color: var(--celadon); font-size: 9px; letter-spacing: 0.12em; }
 .timeline-summary strong { display: block; margin: 4px 0; font-family: var(--display); font-size: 18px; }
-.timeline-summary p { margin: 0; color: var(--ink-soft); font-size: 10px; line-height: 1.6; }
+.timeline-summary p { margin: 0; color: var(--ink-soft); font-size: var(--reading-detail-size); line-height: 1.6; }
 
 .timeline { margin-top: 18px; }
 
@@ -1215,7 +1236,7 @@
 .timeline-event[data-kind="risk"] .timeline-dot { background: var(--cinnabar); box-shadow: 0 0 0 1px var(--cinnabar); }
 .timeline-card { padding: 0 0 8px 3px; }
 .timeline-card h2 { margin: 0 0 4px; font-family: var(--display); font-size: 16px; }
-.timeline-card p { margin: 0 0 5px; color: var(--ink-soft); font-size: 10px; line-height: 1.55; }
+.timeline-card p { margin: 0 0 5px; color: var(--ink-soft); font-size: var(--reading-detail-size); line-height: 1.6; }
 .timeline-card small { color: var(--celadon); font-size: 8px; letter-spacing: 0.08em; }
 
 .location-card { overflow: hidden; background: rgba(245, 241, 229, 0.75); border: 1px solid var(--line); }
@@ -1223,7 +1244,7 @@
 .location-copy { padding: 13px; }
 .location-copy > span { display: flex; align-items: center; gap: 5px; color: var(--celadon); font-size: 9px; }
 .location-copy h2 { margin: 5px 0; font-family: var(--display); font-size: 19px; }
-.location-copy p { margin: 0; color: var(--ink-soft); font-size: 10px; line-height: 1.6; }
+.location-copy p { margin: 0; color: var(--ink-soft); font-size: var(--reading-detail-size); line-height: 1.65; }
 
 .thread-card {
   display: flex;
@@ -1236,7 +1257,7 @@
 }
 
 .thread-card h3 { margin: 0 0 3px; font-family: var(--display); font-size: 15px; }
-.thread-card p { margin: 0; color: var(--ink-faint); font-size: 9px; }
+.thread-card p { margin: 0; color: var(--ink-faint); font-size: var(--reading-detail-size); line-height: 1.5; }
 .thread-card > span { flex: 0 0 auto; padding: 5px 7px; color: var(--celadon-dark); background: var(--celadon-pale); font-size: 9px; }
 .thread-card > span[data-danger="high"] { color: var(--cinnabar); background: rgba(156, 63, 54, 0.09); }
 
@@ -1251,7 +1272,7 @@
 }
 
 .agent-record-card h2 { margin: 0 0 3px; font-family: var(--display); font-size: 15px; }
-.agent-record-card p { margin: 0; color: var(--ink-soft); font-size: 9px; }
+.agent-record-card p { margin: 0; color: var(--ink-soft); font-size: var(--reading-detail-size); line-height: 1.5; }
 
 .reset-button {
   display: flex;

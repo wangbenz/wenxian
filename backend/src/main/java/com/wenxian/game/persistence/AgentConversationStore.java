@@ -17,9 +17,9 @@ import java.util.UUID;
 
 @Repository
 public class AgentConversationStore {
-    private static final int FULL_HISTORY_CHARACTER_BUDGET = 36_000;
-    private static final int RECENT_HISTORY_CHARACTER_BUDGET = 22_000;
-    private static final int RECENT_MESSAGE_LIMIT = 16;
+    private static final int FULL_HISTORY_CHARACTER_BUDGET = 14_000;
+    private static final int RECENT_HISTORY_CHARACTER_BUDGET = 8_000;
+    private static final int RECENT_MESSAGE_LIMIT = 6;
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
 
@@ -115,7 +115,7 @@ public class AgentConversationStore {
         summary.put("inventory", state.inventory);
         summary.put("characters", state.characters);
         summary.put("threads", state.threads);
-        summary.put("recentEvents", state.events.stream().limit(12).toList());
+        summary.put("recentEvents", state.events.stream().limit(6).toList());
         return json(summary);
     }
 

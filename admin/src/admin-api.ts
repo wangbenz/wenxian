@@ -1,9 +1,10 @@
 export type LoginResponse = { ok: boolean; token: string };
 
 export type DashboardData = {
-  totalUsers: number; usersWithCharacter: number; todayActive: number;
+  totalUsers: number; usersWithCharacter: number; todayActive: number; onlinePlayers: number;
   totalTurns: number; todayTurns: number; totalTokens: number; todayTokens: number;
   failedToday: number; avgLatency: number; currentModel: string;
+  dailyTokens: Array<{ date: string; promptTokens: number; completionTokens: number; turns: number; players: number }>;
   recentTurns: Array<{ playerName: string; realm: string; turn: number; action: string; tokens: number; latency: number; model: string; at: string }>;
 };
 

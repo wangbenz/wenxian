@@ -1,6 +1,7 @@
 package com.wenxian.game.auth;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -26,13 +27,21 @@ public class AuthService {
     private final SecureRandom secureRandom = new SecureRandom();
     private final String bootstrapInviteCode;
     private final int sessionDays;
+    private final int idleHours;
 
+    @Autowired
     public AuthService(JdbcTemplate jdbcTemplate,
                        @Value("${game.invite.bootstrap-code:WENXIAN-LOCAL}") String bootstrapInviteCode,
-                       @Value("${game.auth.session-days:30}") int sessionDays) {
+                       @Value("${game.auth.session-days:30}") int sessionDays,
+                       @Value("${game.auth.idle-hours:12}") int idleHours) {
         this.jdbcTemplate = jdbcTemplate;
         this.bootstrapInviteCode = bootstrapInviteCode == null ? "" : bootstrapInviteCode.strip();
         this.sessionDays = Math.max(1, Math.min(sessionDays, 365));
+        this.idleHours = Math.max(1, Math.min(idleHours, 168));
+    }
+
+    AuthService(JdbcTemplate jdbcTemplate, String bootstrapInviteCode, int sessionDays) {
+        this(jdbcTemplate, bootstrapInviteCode, sessionDays, 12);
     }
 
     @PostConstruct
@@ -86,14 +95,25 @@ public class AuthService {
     public UserIdentity currentUser(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) return null;
         Instant now = Instant.now();
-        return jdbcTemplate.query("""
+        String tokenHash = TokenHasher.sha256(rawToken);
+        UserIdentity user = jdbcTemplate.query("""
                         select u.id, u.email
                         from user_session s
                         join app_user u on u.id = s.user_id
-                        where s.token_hash = ? and s.revoked_at is null and s.expires_at > ? and u.status = 'ACTIVE'
+                        where s.token_hash = ? and s.revoked_at is null and s.expires_at > ?
+                          and s.created_at > ? and u.status = 'ACTIVE'
                         """,
                 (result, row) -> new UserIdentity(result.getString("id"), result.getString("email")),
-                TokenHasher.sha256(rawToken), Timestamp.from(now)).stream().findFirst().orElse(null);
+                tokenHash, Timestamp.from(now),
+                Timestamp.from(now.minus(Duration.ofHours(idleHours))))
+                .stream().findFirst().orElse(null);
+        if (user != null) {
+            jdbcTemplate.update("update user_session set created_at = ? where token_hash = ?",
+                    Timestamp.from(now), tokenHash);
+            jdbcTemplate.update("update app_user set last_login_at = ? where id = ?",
+                    Timestamp.from(now), user.userId());
+        }
+        return user;
     }
 
     public UserIdentity requireUser(String rawToken) {

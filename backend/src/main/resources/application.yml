@@ -33,6 +33,7 @@ game:
     bootstrap-code: ${WENXIAN_INVITE_CODE:WENXIAN-LOCAL}
   auth:
     session-days: ${WENXIAN_SESSION_DAYS:30}
+    idle-hours: ${WENXIAN_SESSION_IDLE_HOURS:12}
     secure-cookie: ${WENXIAN_SECURE_COOKIE:false}
   ai-config-master-key: ${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}
 

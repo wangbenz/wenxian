@@ -3,7 +3,8 @@ create table if not exists app_user (
     email varchar(255) not null unique,
     status varchar(32) not null,
     registered_at timestamp(6) not null,
-    last_login_at timestamp(6)
+    last_login_at timestamp(6),
+    index idx_app_user_status_login (status, last_login_at)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
 
 create table if not exists invite_code (
@@ -87,6 +88,7 @@ create table if not exists game_turn (
     latency_ms bigint not null default 0,
     created_at timestamp(6) not null,
     index idx_game_turn_save (save_id, turn_number),
+    index idx_game_turn_created (created_at),
     constraint fk_game_turn_save foreign key (save_id) references game_save(id) on delete cascade,
     constraint fk_game_turn_conversation foreign key (conversation_id) references agent_conversation(id) on delete cascade
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
@@ -161,5 +163,6 @@ create table if not exists agent_execution (
     response_id varchar(128),
     latency_ms bigint not null default 0,
     created_at timestamp(6) not null,
-    index idx_agent_execution_save (save_id, turn_number, created_at)
+    index idx_agent_execution_save (save_id, turn_number, created_at),
+    index idx_agent_execution_status_created (status, created_at)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
