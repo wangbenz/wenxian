@@ -681,6 +681,36 @@ export default function Prototype() {
   }, []);
 
   useEffect(() => {
+    if (!auth?.authenticated) return;
+    let active = true;
+    let checking = false;
+    const checkReleases = async () => {
+      if (checking || document.visibilityState === "hidden") return;
+      checking = true;
+      try {
+        const [notes, pending] = await Promise.all([gameApi.releaseNotes(), gameApi.pendingReleaseNote()]);
+        if (!active) return;
+        setReleaseNotes(notes);
+        if (pending) setPendingRelease((current) => current?.id === pending.id ? current : pending);
+      } catch {
+        // 公告检查失败不应中断单机命卷。
+      } finally {
+        checking = false;
+      }
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") void checkReleases(); };
+    const timer = window.setInterval(() => void checkReleases(), 30_000);
+    window.addEventListener("focus", checkReleases);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", checkReleases);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [auth?.authenticated]);
+
+  useEffect(() => {
     window.localStorage.setItem(THEME_KEY, theme);
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const update = () => setSystemDark(media.matches);
