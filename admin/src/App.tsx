@@ -26,7 +26,7 @@ function formatDateTime(iso: string) {
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, [string, string]> = {
     ACTIVE: ["可用", "badge-green"],
-    EXHAUSTED: ["已用尽", "badge-gray"],
+    EXHAUSTED: ["已失效", "badge-gray"],
     EXPIRED: ["已过期", "badge-red"],
     SUCCESS: ["成功", "badge-green"],
     FAILED: ["失败", "badge-red"],
@@ -342,7 +342,7 @@ function InviteCodesPage() {
         <select className="search-input" onChange={(e) => setStatusFilter(e.target.value)} style={{width: "auto"}} value={statusFilter}>
           <option value="">全部状态</option>
           <option value="ACTIVE">可用</option>
-          <option value="EXHAUSTED">已用尽</option>
+          <option value="EXHAUSTED">已失效</option>
         </select>
         <button className="btn-primary" onClick={() => setShowGenerate(true)}>+ 批量生成</button>
       </div>

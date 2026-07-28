@@ -74,7 +74,7 @@ public class AdminController {
     @DeleteMapping("/invite-codes/unusable")
     public Map<String, Object> deleteUnusableInviteCodes() {
         int deleted = adminService.deleteUnusableInviteCodes();
-        return Map.of("deleted", deleted, "message", "已删除 " + deleted + " 个不可用内测码");
+        return Map.of("deleted", deleted, "message", "已删除 " + deleted + " 个错误生成且从未使用的内测码");
     }
 
     @GetMapping("/users")
