@@ -86,6 +86,10 @@ public class AgentConversationStore {
 
     public void recordTurn(String requestId, String saveId, String conversationId, int turnNumber,
                            String action, GameState before, GameState after, AgentTurn turn, String model) {
+        String recordedModel = turn.model() == null || turn.model().isBlank() ? model : turn.model();
+        if (turn.credentialSource() != null && !turn.credentialSource().isBlank()) {
+            recordedModel += "@" + turn.credentialSource();
+        }
         jdbc.update("""
                 insert into game_turn(id, save_id, conversation_id, turn_number, player_action,
                                       narrative_json, choices_json, state_delta_json,
@@ -94,7 +98,7 @@ public class AgentConversationStore {
                 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, requestId, saveId, conversationId, turnNumber, action,
                 json(turn.result().narrative()), json(turn.result().choices()), json(turn.result()),
-                absoluteTime(before), absoluteTime(after), model, turn.responseId(),
+                absoluteTime(before), absoluteTime(after), recordedModel, turn.responseId(),
                 turn.promptTokens(), turn.completionTokens(), turn.latencyMs(), Timestamp.from(Instant.now()));
     }
 

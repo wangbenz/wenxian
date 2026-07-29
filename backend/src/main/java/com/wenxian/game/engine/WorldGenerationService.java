@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wenxian.game.model.GameState;
 import com.wenxian.game.config.RuntimeAiConfigService;
+import com.wenxian.game.persistence.AiUsageStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -24,6 +25,7 @@ public class WorldGenerationService {
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
     private final RuntimeAiConfigService runtimeConfig;
+    private final AiUsageStore usageStore;
     private final String fixedApiKey;
     private final String fixedModel;
 
@@ -31,9 +33,11 @@ public class WorldGenerationService {
     public WorldGenerationService(ObjectMapper objectMapper,
                                   RestClient.Builder restClientBuilder,
                                   @Value("${deepseek.base-url:https://api.deepseek.com}") String baseUrl,
-                                  RuntimeAiConfigService runtimeConfig) {
+                                  RuntimeAiConfigService runtimeConfig,
+                                  AiUsageStore usageStore) {
         this.objectMapper = objectMapper;
         this.runtimeConfig = runtimeConfig;
+        this.usageStore = usageStore;
         this.fixedApiKey = "";
         this.fixedModel = "";
         this.restClient = restClientBuilder.baseUrl(baseUrl).build();
@@ -43,6 +47,7 @@ public class WorldGenerationService {
                            String apiKey, String baseUrl, String model) {
         this.objectMapper = objectMapper;
         this.runtimeConfig = null;
+        this.usageStore = null;
         this.fixedApiKey = apiKey == null ? "" : apiKey.strip();
         this.fixedModel = model;
         this.restClient = restClientBuilder.baseUrl(baseUrl).build();
@@ -81,7 +86,8 @@ public class WorldGenerationService {
                     额外偏好：%s
                     """.formatted(playerName, race, gender, lifeGoal,
                     preference == null || preference.isBlank() ? "残酷、克制、低起点" : preference.strip());
-            String content = requestJson(systemPrompt, prompt, 3800, 0.86);
+            String content = requestJson(systemPrompt, prompt, 3800, 0.86,
+                    "FATE_GENERATION", saveId, 0, "PUBLIC");
             FateDraft draft = objectMapper.readValue(content, FateDraft.class);
             return normalize(saveId, playerName, race, gender, lifeGoal, draft);
         } catch (ResponseStatusException error) {
@@ -113,7 +119,8 @@ public class WorldGenerationService {
                     "identity", state.player.identity, "lifeGoal", state.player.lifeGoal,
                     "goal", state.player.goal, "burden", state.player.burden,
                     "constitution", state.player.constitution));
-            TalentDraft draft = objectMapper.readValue(requestJson(systemPrompt, player, 1800, 0.9), TalentDraft.class);
+            TalentDraft draft = objectMapper.readValue(requestJson(systemPrompt, player, 1800, 0.9,
+                    "TALENT_GENERATION", state.saveId, state.turn, "PUBLIC"), TalentDraft.class);
             if (draft == null || draft.talents == null || draft.talents.size() < count) {
                 throw new IllegalArgumentException("天赋候选不足");
             }
@@ -146,6 +153,12 @@ public class WorldGenerationService {
     }
 
     public String requestJson(String systemPrompt, String userPrompt, int maxTokens, double temperature) {
+        return requestJson(systemPrompt, userPrompt, maxTokens, temperature,
+                "JSON_GENERATION", null, null, "PUBLIC");
+    }
+
+    public String requestJson(String systemPrompt, String userPrompt, int maxTokens, double temperature,
+                              String operation, String saveId, Integer turnNumber, String credentialSource) {
         if (!configured()) throw new IllegalStateException("尚未配置 DeepSeek API Key");
         RuntimeAiConfigService.RuntimeConfig config = currentConfig();
         Map<String, Object> request = Map.of(
@@ -160,9 +173,7 @@ public class WorldGenerationService {
                 "max_tokens", maxTokens,
                 "stream", false
         );
-        JsonNode response = restClient.post().uri("/chat/completions")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey())
-                .body(request).retrieve().body(JsonNode.class);
+        JsonNode response = execute(request, config, operation, saveId, turnNumber, credentialSource);
         if (response == null) throw new IllegalStateException("DeepSeek 返回为空");
         String content = response.path("choices").path(0).path("message").path("content").asText();
         if (content.isBlank()) throw new IllegalStateException("DeepSeek JSON 内容为空");
@@ -171,8 +182,22 @@ public class WorldGenerationService {
 
     public ChatResponse requestMessage(List<Map<String, Object>> messages, List<Map<String, Object>> tools,
                                        int maxTokens, double temperature) {
-        if (!configured()) throw new IllegalStateException("尚未配置 DeepSeek API Key");
-        RuntimeAiConfigService.RuntimeConfig config = currentConfig();
+        return requestMessage(messages, tools, maxTokens, temperature, currentConfig(),
+                "GAMEPLAY", null, null, "PUBLIC");
+    }
+
+    public ChatResponse requestMessage(List<Map<String, Object>> messages, List<Map<String, Object>> tools,
+                                       int maxTokens, double temperature,
+                                       RuntimeAiConfigService.RuntimeConfig config) {
+        return requestMessage(messages, tools, maxTokens, temperature, config,
+                "GAMEPLAY", null, null, "PUBLIC");
+    }
+
+    public ChatResponse requestMessage(List<Map<String, Object>> messages, List<Map<String, Object>> tools,
+                                       int maxTokens, double temperature,
+                                       RuntimeAiConfigService.RuntimeConfig config, String operation,
+                                       String saveId, Integer turnNumber, String credentialSource) {
+        if (config == null || config.apiKey().isBlank()) throw new IllegalStateException("尚未配置 DeepSeek API Key");
         Map<String, Object> request = Map.of(
                 "model", config.model(),
                 "messages", messages,
@@ -184,23 +209,65 @@ public class WorldGenerationService {
                 "max_tokens", maxTokens,
                 "stream", false
         );
-        JsonNode response = restClient.post().uri("/chat/completions")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey())
-                .body(request).retrieve().body(JsonNode.class);
+        JsonNode response = execute(request, config, operation, saveId, turnNumber, credentialSource);
         if (response == null) throw new IllegalStateException("DeepSeek 返回为空");
         JsonNode message = response.path("choices").path(0).path("message");
         if (message.isMissingNode() || message.isNull()) throw new IllegalStateException("DeepSeek 消息为空");
         JsonNode usage = response.path("usage");
         return new ChatResponse(message, response.path("id").asText(""),
-                usage.path("prompt_tokens").asInt(0), usage.path("completion_tokens").asInt(0));
+                usage.path("prompt_tokens").asInt(0), usage.path("completion_tokens").asInt(0),
+                usage.path("prompt_cache_hit_tokens").asInt(0),
+                usage.path("prompt_cache_miss_tokens").asInt(0));
     }
 
-    public record ChatResponse(JsonNode message, String responseId, int promptTokens, int completionTokens) {}
+    private JsonNode execute(Map<String, Object> request, RuntimeAiConfigService.RuntimeConfig config,
+                             String operation, String saveId, Integer turnNumber, String credentialSource) {
+        long startedAt = System.nanoTime();
+        try {
+            JsonNode response = restClient.post().uri("/chat/completions")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + config.apiKey())
+                    .body(request).retrieve().body(JsonNode.class);
+            long latencyMs = (System.nanoTime() - startedAt) / 1_000_000L;
+            JsonNode usage = response == null ? objectMapper.createObjectNode() : response.path("usage");
+            recordUsage(saveId, turnNumber, operation, config.provider(), credentialSource, config.model(), "SUCCESS",
+                    usage.path("prompt_tokens").asInt(0), usage.path("completion_tokens").asInt(0),
+                    usage.path("prompt_cache_hit_tokens").asInt(0),
+                    usage.path("prompt_cache_miss_tokens").asInt(0), latencyMs, "");
+            return response;
+        } catch (RuntimeException error) {
+            recordUsage(saveId, turnNumber, operation, config.provider(), credentialSource, config.model(), "FAILED",
+                    0, 0, 0, 0, (System.nanoTime() - startedAt) / 1_000_000L,
+                    error.getClass().getSimpleName() + ": " + error.getMessage());
+            throw error;
+        }
+    }
+
+    private void recordUsage(String saveId, Integer turnNumber, String operation, String provider, String credentialSource,
+                             String model, String status, int promptTokens, int completionTokens,
+                             int cacheHitTokens, int cacheMissTokens, long latencyMs, String error) {
+        if (usageStore == null) return;
+        try {
+            usageStore.record(saveId, turnNumber, operation,
+                    provider == null || provider.isBlank() ? "DEEPSEEK" : provider,
+                    credentialSource == null || credentialSource.isBlank() ? "PUBLIC" : credentialSource,
+                    model, status, promptTokens, completionTokens, cacheHitTokens, cacheMissTokens,
+                    latencyMs, error);
+        } catch (RuntimeException ignored) {
+            // Usage accounting must never interrupt the player's chapter.
+        }
+    }
+
+    public record ChatResponse(JsonNode message, String responseId, int promptTokens, int completionTokens,
+                               int cacheHitTokens, int cacheMissTokens) {}
+
+    public RuntimeAiConfigService.RuntimeConfig publicConfig() {
+        return currentConfig();
+    }
 
     private RuntimeAiConfigService.RuntimeConfig currentConfig() {
         return runtimeConfig != null
                 ? runtimeConfig.current()
-                : new RuntimeAiConfigService.RuntimeConfig(fixedModel, fixedModel, fixedApiKey);
+                : new RuntimeAiConfigService.RuntimeConfig("DEEPSEEK", fixedModel, fixedModel, fixedApiKey);
     }
 
     private GameState normalize(String saveId, String playerName, String race,

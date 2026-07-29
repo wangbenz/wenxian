@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: wenxian-admin-backend
+  config:
+    import: optional:file:../../backend/src/main/resources/application-secret.yml
   datasource:
     url: ${ADMIN_DATABASE_URL:jdbc:mysql://127.0.0.1:3306/wenxian?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${ADMIN_DATABASE_USERNAME:wenxian_app}

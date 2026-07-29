@@ -6,5 +6,12 @@ public record AgentTurn(
         String responseId,
         int promptTokens,
         int completionTokens,
-        long latencyMs
-) {}
+        long latencyMs,
+        String model,
+        String credentialSource
+) {
+    public AgentTurn(AgentResult result, String assistantMessage, String responseId,
+                     int promptTokens, int completionTokens, long latencyMs) {
+        this(result, assistantMessage, responseId, promptTokens, completionTokens, latencyMs, "", "PUBLIC");
+    }
+}

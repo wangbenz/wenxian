@@ -17,10 +17,13 @@ import com.wenxian.game.model.ApiModels.ValidateNameRequest;
 import com.wenxian.game.model.ApiModels.ValidateNameResponse;
 import com.wenxian.game.model.ApiModels.WorldResponse;
 import com.wenxian.game.model.ApiModels.ReleaseNoteView;
+import com.wenxian.game.model.ApiModels.AiSettingsView;
+import com.wenxian.game.model.ApiModels.SaveAiCredentialRequest;
 import com.wenxian.game.model.GameState;
 import com.wenxian.game.service.CharacterNameService;
 import com.wenxian.game.service.GameService;
 import com.wenxian.game.service.ReleaseNoteService;
+import com.wenxian.game.service.PlayerAiService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.validation.annotation.Validated;
@@ -29,6 +32,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,13 +48,15 @@ public class GameController {
     private final AuthService authService;
     private final CharacterNameService nameService;
     private final ReleaseNoteService releaseNotes;
+    private final PlayerAiService playerAiService;
 
     public GameController(GameService gameService, AuthService authService, CharacterNameService nameService,
-                          ReleaseNoteService releaseNotes) {
+                          ReleaseNoteService releaseNotes, PlayerAiService playerAiService) {
         this.gameService = gameService;
         this.authService = authService;
         this.nameService = nameService;
         this.releaseNotes = releaseNotes;
+        this.playerAiService = playerAiService;
     }
 
     @GetMapping("/health")
@@ -85,6 +91,31 @@ public class GameController {
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String releaseId) {
         releaseNotes.markRead(user(token).userId(), releaseId);
+    }
+
+    @GetMapping("/ai/settings")
+    public AiSettingsView aiSettings(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token) {
+        var settings = playerAiService.settings(user(token).userId());
+        return new AiSettingsView(settings.turnLimit(), settings.usedTurns(), settings.remainingTurns(),
+                settings.customApiEnabled(), settings.usingCustomApi(), settings.credentialConfigured(),
+                settings.maskedSuffix(), settings.credentialStatus(), settings.lastVerifiedAt());
+    }
+
+    @PutMapping("/ai/credential")
+    public AiSettingsView saveAiCredential(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
+            @Valid @RequestBody SaveAiCredentialRequest request) {
+        var settings = playerAiService.saveCredential(user(token).userId(), request.apiKey());
+        return new AiSettingsView(settings.turnLimit(), settings.usedTurns(), settings.remainingTurns(),
+                settings.customApiEnabled(), settings.usingCustomApi(), settings.credentialConfigured(),
+                settings.maskedSuffix(), settings.credentialStatus(), settings.lastVerifiedAt());
+    }
+
+    @DeleteMapping("/ai/credential")
+    public void deleteAiCredential(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token) {
+        playerAiService.deleteCredential(user(token).userId());
     }
 
     @PostMapping("/character-names/generate")

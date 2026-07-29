@@ -49,6 +49,14 @@ public final class ApiModels {
     public record ReleaseNoteView(String id, String version, String title, String content,
                                   Instant publishedAt, boolean unread) {}
 
+    public record AiSettingsView(
+            int turnLimit, int usedTurns, int remainingTurns, boolean customApiEnabled,
+            boolean usingCustomApi, boolean credentialConfigured, String maskedSuffix,
+            String credentialStatus, Instant lastVerifiedAt
+    ) {}
+
+    public record SaveAiCredentialRequest(@NotBlank @Size(min = 20, max = 512) String apiKey) {}
+
     public record SelectProtagonistRequest(@NotBlank @Size(max = 80) String candidateId) {}
 
     public record SelectTalentRequest(@NotBlank @Size(max = 80) String talentId) {}

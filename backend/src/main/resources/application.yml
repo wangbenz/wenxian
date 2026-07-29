@@ -35,7 +35,11 @@ game:
     session-days: ${WENXIAN_SESSION_DAYS:30}
     idle-hours: ${WENXIAN_SESSION_IDLE_HOURS:12}
     secure-cookie: ${WENXIAN_SECURE_COOKIE:false}
+    ip-hash-pepper: ${WENXIAN_IP_HASH_PEPPER:wenxian-local-ip-pepper-change-me}
+    registrations-per-ip-per-day: ${WENXIAN_REGISTRATIONS_PER_IP_PER_DAY:1}
+    login-failures-per-window: ${WENXIAN_LOGIN_FAILURES_PER_WINDOW:5}
   ai-config-master-key: ${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}
+  ai-config-force-environment: ${WENXIAN_AI_CONFIG_FORCE_ENVIRONMENT:false}
 
 deepseek:
   api-key: ${DEEPSEEK_API_KEY:}

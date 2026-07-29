@@ -27,6 +27,19 @@
 - Every control must remain keyboard accessible and have an accessible name.
 - Preserve server persistence with a read-only browser cache when offline. Never run a local rules Agent in place of DeepSeek.
 
+## Deployment and Data Safety
+
+- The public H5 entry is `https://wenxianlu.cn` (also `https://www.wenxianlu.cn`). Alibaba Cloud DNS points both `@` and `www` to the Hong Kong SWAS public IP `8.217.11.8` (instance `c895cacc73c9474a83623882f93853e1`, `Ubuntu-dhmd`, Ubuntu 22.04). Do not change these DNS records or move traffic without explicit user approval.
+- The Hong Kong server is an HTTPS edge only: Nginx serves `/var/www/wenxian/current`, and `/api/` proxies to the JD Cloud H5 origin at `http://116.198.232.119:25173`. Java, the admin backend, and MySQL do not run on the Hong Kong server. The admin console remains on the JD Cloud deployment.
+- Hong Kong Nginx config is `/etc/nginx/sites-available/wenxian` with a symlink in `sites-enabled`. The Let's Encrypt certificate covers `wenxianlu.cn` and `www.wenxianlu.cn`; files live under `/etc/letsencrypt/live/wenxianlu.cn/`, and `certbot.timer` performs renewal. Never copy or commit the private key. Verify with `nginx -t`, `systemctl status certbot.timer`, and `certbot renew --dry-run` after certificate or Nginx changes.
+- The Mac uses the dedicated SSH identity `/Users/ben/.ssh/id_ed25519_wenxian_hk` for `root@8.217.11.8`. This path identifies a local private key and must never be copied into the repository. Keep TCP 80/443 public; restrict TCP 22 to trusted source IPs when operational access allows it.
+- A frontend release must update the Hong Kong static directory (prefer an atomic release/symlink deployment) and verify both HTTPS hostnames plus one hashed asset. Backend releases still happen on JD Cloud; an H5 `502` on `/api/` normally means the JD origin/backend is unavailable, not that TLS or the Hong Kong static host failed.
+- The shared test database is Alibaba Cloud RDS MySQL 8, database `wenxian`. The H5 backend and admin backend must use the same RDS database through their private external Spring configuration.
+- The old Docker MySQL instance on the JD Cloud test server is retained only as a short-term rollback source and must remain stopped during normal operation. Do not start it as the application database or expose its port publicly.
+- Server secrets belong only in `/opt/wenxian-test/application-secret.yml` and `/opt/wenxian-admin/application-secret.yml` (or environment variables). Never commit database passwords, API keys, temporary client option files, dumps, or production data.
+- Before a database cutover, stop both backends, create an off-server backup, import into an empty target database, and compare every table's exact row count before switching connection settings.
+- After database or deployment changes, verify both backend processes, `/api/v1/health`, one database-backed public endpoint, and the admin login route before reopening the service.
+
 ## Verification
 
 - Run `mvn test` in `backend`, then `npm run check:runtime`, `npm run build`, and `npm run test:sites` in `frontend` before handoff.

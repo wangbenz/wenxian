@@ -97,6 +97,17 @@ public class AdminController {
         return detail;
     }
 
+    @PostMapping("/users/{userId}/temporary-password")
+    public Map<String, Object> resetPlayerPassword(@PathVariable String userId) {
+        return Map.of("temporaryPassword", adminService.resetPlayerPassword(userId));
+    }
+
+    @PostMapping("/users/{userId}/unlock-auth")
+    public Map<String, Object> unlockPlayerAuth(@PathVariable String userId) {
+        adminService.unlockPlayerAuth(userId);
+        return Map.of("ok", true, "message", "登录与注册限制已解除");
+    }
+
     @GetMapping("/users/{userId}/lives/{saveId}/turns")
     public Map<String, Object> userTurns(@PathVariable String userId, @PathVariable String saveId,
                                          @RequestParam(defaultValue = "0") int page,
@@ -134,6 +145,28 @@ public class AdminController {
     public Map<String, Object> updateModelConfig(@PathVariable String modelCode, @RequestBody Map<String, Object> body) {
         adminService.updateModelConfig(modelCode, Boolean.TRUE.equals(body.get("active")), string(body.get("apiKey")));
         return Map.of("ok", true);
+    }
+
+    @GetMapping("/gameplay-config")
+    public Map<String, Object> gameplayConfig() {
+        return adminService.gameplayConfig();
+    }
+
+    @PostMapping("/gameplay-config")
+    public Map<String, Object> updateGameplayConfig(@RequestBody Map<String, Object> body) {
+        return adminService.updateGameplayConfig(parseInt(body.get("accountPublicTurnLimit"), 20),
+                Boolean.TRUE.equals(body.get("customApiEnabled")));
+    }
+
+    @GetMapping("/registration-config")
+    public Map<String, Object> registrationConfig() {
+        return adminService.registrationConfig();
+    }
+
+    @PostMapping("/registration-config")
+    public Map<String, Object> updateRegistrationConfig(@RequestBody Map<String, Object> body) {
+        return adminService.updateRegistrationConfig(parseInt(body.get("maxUsers"), 1000),
+                string(body.get("limitMessage")), string(body.get("contactText")));
     }
 
     @GetMapping("/operation-logs")

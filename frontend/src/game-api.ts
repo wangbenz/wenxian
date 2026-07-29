@@ -163,6 +163,7 @@ export type AuthResponse = {
   newUser: boolean;
   user: { userId: string; email: string } | null;
   hasSave: boolean;
+  passwordConfigured: boolean;
   nextStep: "LOGIN" | "RESUME_GAME" | "CREATE_CHARACTER";
 };
 
@@ -203,6 +204,18 @@ export type ReleaseNote = {
   content: string;
   publishedAt: string;
   unread: boolean;
+};
+
+export type AiSettings = {
+  turnLimit: number;
+  usedTurns: number;
+  remainingTurns: number;
+  customApiEnabled: boolean;
+  usingCustomApi: boolean;
+  credentialConfigured: boolean;
+  maskedSuffix: string | null;
+  credentialStatus: string | null;
+  lastVerifiedAt: string | null;
 };
 
 export class ApiError extends Error {
@@ -248,11 +261,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const gameApi = {
   me: () => request<AuthResponse>("/api/v1/auth/me"),
-  login: (email: string, inviteCode: string) => request<AuthResponse>("/api/v1/auth/login", {
+  login: (email: string, password: string) => request<AuthResponse>("/api/v1/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, inviteCode: inviteCode || null }),
+    body: JSON.stringify({ email, password }),
+  }),
+  register: (email: string, password: string) => request<AuthResponse>("/api/v1/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  }),
+  setPassword: (currentPassword: string, newPassword: string) => request<AuthResponse>("/api/v1/auth/password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword: currentPassword || null, newPassword }),
   }),
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
+  deleteAccount: (confirmation: string) => request<void>("/api/v1/auth/account", {
+    method: "DELETE", body: JSON.stringify({ confirmation }),
+  }),
+  aiSettings: () => request<AiSettings>("/api/v1/ai/settings"),
+  saveAiCredential: (apiKey: string) => request<AiSettings>("/api/v1/ai/credential", {
+    method: "PUT", body: JSON.stringify({ apiKey }),
+  }),
+  deleteAiCredential: () => request<void>("/api/v1/ai/credential", { method: "DELETE" }),
   bootstrap: () => request<BootstrapResponse>("/api/v1/game/bootstrap"),
   releaseNotes: () => request<ReleaseNote[]>("/api/v1/release-notes"),
   latestPublicReleaseNote: () => request<ReleaseNote | null>("/api/v1/release-notes/public-latest"),

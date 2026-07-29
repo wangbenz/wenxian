@@ -1444,3 +1444,31 @@
 
 .game-shell[data-theme="night"] .talent-secondary-actions button:disabled { opacity: .68; }
 .game-shell[data-theme="night"] .text-button { color: var(--ink-soft); }
+.daily-chapter-usage { margin: 24px 0 0; color: var(--ink-faint); font-size: 12px; letter-spacing: .06em; text-align: center; }
+.ai-settings-card { display: grid; gap: 18px; margin-top: 18px; padding: 22px; border: 1px solid var(--line); background: rgba(247, 243, 232, .68); }
+.ai-settings-card h2 { margin: 5px 0 8px; font-size: 21px; }
+.ai-settings-card p { margin: 0; color: var(--ink-soft); line-height: 1.7; }
+.secondary-setting-button { min-height: 46px; padding: 0 18px; border: 1px solid var(--celadon); background: transparent; color: var(--celadon-dark); font: inherit; }
+.secondary-setting-button:disabled { opacity: .45; }
+.delete-account-button { display: block; margin: 18px auto 0; border: 0; background: transparent; color: var(--cinnabar); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 4px; }
+.credential-dialog { text-align: left; }
+.credential-dialog > p:not(.eyebrow):not(.credential-warning) { color: var(--ink-soft); line-height: 1.75; }
+.credential-field { display: grid; gap: 8px; margin: 20px 0; color: var(--ink-soft); font-size: 13px; }
+.credential-field label { display: grid; gap: 8px; }
+.credential-field input { width: 100%; min-height: 48px; box-sizing: border-box; border: 1px solid var(--line); background: rgba(247, 243, 232, .74); color: var(--ink); padding: 0 14px; font: inherit; }
+.credential-warning { padding: 12px; border-left: 3px solid var(--cinnabar); background: rgba(156, 63, 54, .1); color: var(--cinnabar); line-height: 1.6; }
+.credential-actions { grid-template-columns: repeat(3, 1fr); }
+.credential-delete { border: 1px solid var(--cinnabar) !important; background: transparent !important; color: var(--cinnabar) !important; }
+.ink-dialog-confirm.destructive { background: var(--cinnabar); }
+.game-shell[data-theme="night"] .ai-settings-card { background: rgba(20, 28, 25, .88); }
+.game-shell[data-theme="night"] .secondary-setting-button { color: var(--celadon); }
+.game-shell[data-theme="night"] .credential-field input { background: rgba(10, 17, 15, .82); }
+.login-mode-switch { display: grid; grid-template-columns: 1fr 1fr; margin: 20px 0 8px; border: 1px solid var(--line); }
+.login-mode-switch button { min-height: 44px; border: 0; background: transparent; color: var(--ink-soft); font: inherit; }
+.login-mode-switch button[aria-selected="true"] { background: var(--celadon); color: #f7f3e8; }
+.field-error { color: var(--cinnabar); line-height: 1.5; }
+.game-shell[data-theme="night"] .login-mode-switch button[aria-selected="true"] { color: #0c1512; }
+
+@media (min-width: 720px) {
+  .ai-settings-card { grid-template-columns: 1fr auto; align-items: center; }
+}

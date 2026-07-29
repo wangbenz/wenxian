@@ -20,6 +20,7 @@ import {
   ApiError,
   gameApi,
   type ApiSnapshot,
+  type AiSettings,
   type AuthResponse,
   type BootstrapResponse,
   type CharacterDraft,
@@ -138,36 +139,43 @@ function DestinyLoadingOverlay({ stage }: { stage: AppStage }) {
 }
 
 function LoginView({
-  announcement,
   isBusy,
   error,
   offline,
-  onLogin,
+  announcement,
+  onAuthenticate,
 }: {
-  announcement: ReleaseNote | null;
   isBusy: boolean;
   error: string;
   offline: boolean;
-  onLogin: (email: string, inviteCode: string) => void;
+  announcement: ReleaseNote | null;
+  onAuthenticate: (mode: "login" | "register", email: string, password: string) => void;
 }) {
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const mismatch = mode === "register" && confirmation.length > 0 && confirmation !== password;
 
   return (
     <section className="entry-card login-card">
       <div className="entry-seal" aria-hidden="true">问</div>
       <p className="eyebrow">ENTER XUANXU REALM</p>
-      <h1>以邮箱领取命卷</h1>
-      <p className="entry-lead">首次进入需填写邀请码。登记成功后，同一邮箱可直接继续自己的单机存档。</p>
+      <h1>{mode === "login" ? "续写你的命卷" : "领取一份新命卷"}</h1>
+      <p className="entry-lead">{mode === "login" ? "使用邮箱与密码继续自己的单机存档。老用户首次登录时，初始密码为完整邮箱地址。" : "新账号赠送 20 个推演回合，请填写长期可用的真实邮箱。"}</p>
       {announcement && <aside className="entry-announcement" aria-label="最新公告">
         <div><span>{announcement.version}</span><strong>{announcement.title}</strong></div>
         <p>{announcement.content}</p>
       </aside>}
+      <div className="login-mode-switch" role="tablist" aria-label="登录方式">
+        <button aria-selected={mode === "login"} onClick={() => { setMode("login"); setConfirmation(""); }} role="tab" type="button">登录</button>
+        <button aria-selected={mode === "register"} onClick={() => setMode("register")} role="tab" type="button">注册新账号</button>
+      </div>
       <form
         className="entry-form"
         onSubmit={(event) => {
           event.preventDefault();
-          onLogin(email.trim(), inviteCode.trim());
+          onAuthenticate(mode, email.trim(), password);
         }}
       >
         <label>
@@ -183,20 +191,29 @@ function LoginView({
           />
         </label>
         <label>
-          <span>邀请码 <small>老用户可留空</small></span>
+          <span>密码</span>
           <input
-            autoCapitalize="characters"
-            onChange={(event) => setInviteCode(event.currentTarget.value)}
-            placeholder="输入内部试玩邀请码"
-            value={inviteCode}
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            minLength={mode === "register" ? 8 : 1}
+            maxLength={mode === "register" ? 72 : 255}
+            onChange={(event) => setPassword(event.currentTarget.value)}
+            placeholder={mode === "login" ? "输入登录密码" : "至少 8 个字符"}
+            required
+            type="password"
+            value={password}
           />
         </label>
-        <button className="primary-entry-button" disabled={isBusy || !email.trim()} type="submit">
-          {isBusy ? "正在验明身份…" : "进入问仙录"}<ArrowRightIcon />
+        {mode === "register" && <label>
+          <span>确认密码</span>
+          <input autoComplete="new-password" minLength={8} maxLength={72} onChange={(event) => setConfirmation(event.currentTarget.value)} placeholder="再次输入密码" required type="password" value={confirmation} />
+          {mismatch && <small className="field-error">两次输入的密码不一致</small>}
+        </label>}
+        <button className="primary-entry-button" disabled={isBusy || !email.trim() || (mode === "register" ? password.length < 8 || confirmation !== password : !password)} type="submit">
+          {isBusy ? "正在验明身份…" : mode === "login" ? "进入问仙录" : "注册并领取命卷"}<ArrowRightIcon />
         </button>
       </form>
       {(error || offline) && <p className="entry-error">{error || "命卷暂时无法开启，请稍后重试。"}</p>}
-      <p className="entry-footnote">当前为小范围试玩准入，不会向该邮箱发送验证码或营销邮件。</p>
+      <p className="entry-footnote">当前暂不发送验证码，请务必使用自己的真实邮箱。验证码功能上线后，无法接收邮件的账号可能无法找回。</p>
     </section>
   );
 }
@@ -280,7 +297,9 @@ function CharacterCreationView({
                 value={draft.playerName}
               />
             </label>
-            <button disabled={isBusy || !draft.race || !draft.gender} onClick={onGenerateName} type="button"><ReloadIcon />随机雅名</button>
+            <button disabled={isBusy} onClick={onGenerateName} type="button">
+              <ReloadIcon />{isBusy ? "推演中…" : "随机雅名"}
+            </button>
           </div>
           {(!draft.gender || !draft.race) && <p className="name-generation-hint">先选择性别与种族，命卷才能推演合适的名字。</p>}
           {alternatives.length > 0 && (
@@ -404,7 +423,7 @@ function TalentSelectionView({ game, selectedId, isBusy, error, onSelect, onEnte
   </div>;
 }
 
-function AdventureView({ game, choices, resolution, isBusy, offline, error, onChoice, onSuggestion }: { game: GameState; choices: Choice[]; resolution?: ApiSnapshot["actionResolution"]; isBusy: boolean; offline: boolean; error: string; onChoice: (id: string) => void; onSuggestion: (action: string) => void }) {
+function AdventureView({ game, choices, resolution, aiSettings, isBusy, offline, error, onChoice, onSuggestion }: { game: GameState; choices: Choice[]; resolution?: ApiSnapshot["actionResolution"]; aiSettings: AiSettings | null; isBusy: boolean; offline: boolean; error: string; onChoice: (id: string) => void; onSuggestion: (action: string) => void }) {
   return (
     <div className="adventure-view">
       <section className="scene-heading" aria-labelledby="scene-title"><span className="leaf-mark" aria-hidden="true">〆</span><div><p className="eyebrow">当前场景</p><h1 id="scene-title">{game.sceneTitle}</h1></div></section>
@@ -429,18 +448,19 @@ function AdventureView({ game, choices, resolution, isBusy, offline, error, onCh
       </section>
       {offline && !isBusy && <div className="agent-thinking offline-note" role="status"><LightningBoltIcon /><span>命卷暂时无法续写，已有经历仍可查阅。</span></div>}
       {error && !isBusy && <p className="turn-error" role="alert">{error}</p>}
+      {aiSettings && <p className="daily-chapter-usage">{aiSettings.usingCustomApi ? "正在使用自己的推演密钥 · 不消耗赠送回合" : `当前账号回合 ${aiSettings.usedTurns}/${aiSettings.turnLimit}`}</p>}
     </div>
   );
 }
 
 function AgentProgress() {
-  const phases = ["续读此前命卷", "推演人物与因果", "书写本回章节", "校验状态与时间线"];
+  const phases = ["续读此前命卷", "推演人物与因果", "书写本回故事", "校验状态与时间线"];
   const [phase, setPhase] = useState(0);
   useEffect(() => {
     const timer = window.setInterval(() => setPhase((current) => Math.min(phases.length - 1, current + 1)), 2200);
     return () => window.clearInterval(timer);
   }, []);
-  return <section className="chapter-generating" role="status"><span className="ink-spinner" /><div><small>命卷推演中</small><strong>{phases[phase]}</strong><p>本轮会推进一个完整小章节，完成后统一写入人物、天赋与世界时间。</p></div></section>;
+  return <section className="chapter-generating" role="status"><span className="ink-spinner" /><div><small>命卷推演中</small><strong>{phases[phase]}</strong><p>本轮会推进一段完整故事，完成后统一写入人物、天赋与世界时间。</p></div></section>;
 }
 
 function CharacterView({ game }: { game: GameState }) {
@@ -573,7 +593,7 @@ function ResetConfirmDialog({
   );
 }
 
-function WorldView({ game, version, releaseNotes, syncMode, email, theme, fontSize, onTheme, onFontSize, onReset, onLogout }: { game: GameState; version: string; releaseNotes: ReleaseNote[]; syncMode: SyncMode; email: string; theme: ThemeMode; fontSize: FontSizeMode; onTheme: (theme: ThemeMode) => void; onFontSize: (fontSize: FontSizeMode) => void; onReset: () => void; onLogout: () => void }) {
+function WorldView({ game, version, releaseNotes, syncMode, email, passwordConfigured, aiSettings, theme, fontSize, onTheme, onFontSize, onAiSettings, onPasswordSettings, onReset, onLogout, onDeleteAccount }: { game: GameState; version: string; releaseNotes: ReleaseNote[]; syncMode: SyncMode; email: string; passwordConfigured: boolean; aiSettings: AiSettings | null; theme: ThemeMode; fontSize: FontSizeMode; onTheme: (theme: ThemeMode) => void; onFontSize: (fontSize: FontSizeMode) => void; onAiSettings: () => void; onPasswordSettings: () => void; onReset: () => void; onLogout: () => void; onDeleteAccount: () => void }) {
   return (
     <div className="record-view">
       <div className="page-title-row"><div><p className="eyebrow">KNOWN WORLD</p><h1>世界</h1></div><GlobeIcon className="title-icon" /></div>
@@ -581,6 +601,8 @@ function WorldView({ game, version, releaseNotes, syncMode, email, theme, fontSi
       <section className="world-law-card"><p><strong>修行法则</strong>{game.world.cultivationLaw}</p><p><strong>生存法则</strong>{game.world.dangerRule}</p><div>{game.world.factions.map((faction) => <span key={faction}>{faction}</span>)}</div></section>
       <section className="record-section"><div className="section-label"><MagnifyingGlassIcon /><h2>未解线索</h2><span>{game.threads.length}</span></div><div className="thread-list">{game.threads.map((thread) => <article className="thread-card" key={thread.id}><div><h3>{thread.title}</h3><p>{thread.state}</p></div><span data-danger={thread.danger > 75 ? "high" : "normal"}>{dangerName(thread.danger)}</span></article>)}</div></section>
       <section className="agent-record-card"><span className="agent-dot" /><div><h2>{syncMode === "server" ? "本世命卷已同步" : "命卷暂时封存"}</h2><p>{syncMode === "server" ? "人物、纪事与未解线索均已妥善保存。" : "已有经历仍可查阅，暂时无法续写。"} 当前邮箱：{email || "未知"}</p></div></section>
+      <section className="ai-settings-card"><div><p className="eyebrow">账号安全</p><h2>{passwordConfigured ? "登录密码已设置" : "请为旧账号设置密码"}</h2><p>{passwordConfigured ? "密码只用于登录，不会在页面或管理台中明文展示。" : "设置后可在其他设备使用邮箱和密码找回当前命卷。"}</p></div><button className="secondary-setting-button" onClick={onPasswordSettings} type="button">{passwordConfigured ? "修改密码" : "设置密码"}</button></section>
+      <section className="ai-settings-card"><div><p className="eyebrow">命卷续写</p><h2>{!aiSettings ? "续写设置暂未同步" : aiSettings.usingCustomApi ? "正在使用自己的推演密钥" : `当前账号回合 ${aiSettings.usedTurns}/${aiSettings.turnLimit}`}</h2><p>{!aiSettings ? "请确认网络连接后刷新页面，已有命卷不会受到影响。" : aiSettings.usingCustomApi ? `密钥尾号 · ${aiSettings.maskedSuffix ?? "已隐藏"}，推演不消耗赠送回合。` : `当前账号还可推演 ${aiSettings.remainingTurns} 回。自己的密钥只用于你的剧情续写，并会加密保存。`}</p></div><button className="secondary-setting-button" disabled={!aiSettings || !aiSettings.customApiEnabled} onClick={onAiSettings} type="button">{aiSettings?.credentialConfigured ? "管理密钥" : "接入自己的密钥"}</button></section>
       <section className="release-history"><div className="section-label"><ReaderIcon /><h2>版本纪事</h2><span>{version}</span></div>{releaseNotes.length === 0 ? <p className="empty-copy">尚无公开版本纪事。</p> : releaseNotes.map((note) => <details key={note.id}><summary><span>{note.version}</span><strong>{note.title}</strong><small>{new Date(note.publishedAt).toLocaleDateString("zh-CN")}</small></summary><p>{note.content}</p></details>)}</section>
       <section className="theme-card">
         <div><strong>阅读外观</strong><span>夜间模式采用月下宣纸，不改变游戏进度。</span></div>
@@ -588,8 +610,29 @@ function WorldView({ game, version, releaseNotes, syncMode, email, theme, fontSi
         <div className="font-size-setting"><div><strong>字体大小</strong><span>调整剧情、选项与资料正文的阅读字号。</span></div><div className="theme-switch">{([["compact", "小字"], ["standard", "标准"], ["large", "大字"]] as Array<[FontSizeMode, string]>).map(([id, label]) => <button aria-pressed={fontSize === id} data-selected={fontSize === id} key={id} onClick={() => onFontSize(id)} type="button">{label}</button>)}</div></div>
       </section>
       <div className="world-actions"><button className="reset-button" onClick={onReset} type="button"><ReloadIcon />重开此世</button><button className="reset-button" onClick={onLogout} type="button">退出邮箱</button></div>
+      <button className="delete-account-button" onClick={onDeleteAccount} type="button">注销账号与全部命卷</button>
     </div>
   );
+}
+
+function AiCredentialDialog({ settings, error, isBusy, onCancel, onSave, onDelete }: { settings: AiSettings; error: string; isBusy: boolean; onCancel: () => void; onSave: (key: string) => void; onDelete: () => void }) {
+  const [apiKey, setApiKey] = useState("");
+  const insecureRemote = window.location.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(window.location.hostname);
+  const keyTooShort = apiKey.trim().length > 0 && apiKey.trim().length < 20;
+  return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog credential-dialog" role="dialog"><div className="ink-dialog-seal">钥</div><p className="eyebrow">PRIVATE GENERATION KEY</p><h2>自己的推演密钥</h2><p>密钥会在服务器加密保存，只用于续写你的游戏故事；页面不会再次展示完整内容。</p>{insecureRemote && <p className="credential-warning">当前连接未启用 HTTPS，为避免密钥在传输中暴露，暂不允许保存。请改用安全地址。</p>}{error && <p className="credential-warning" role="alert">{error}</p>}<label className="credential-field">DeepSeek API Key<input autoComplete="off" disabled={isBusy || insecureRemote} placeholder={settings.credentialConfigured ? `当前尾号 ${settings.maskedSuffix ?? "****"}，输入新密钥可替换` : "sk-…"} type="password" value={apiKey} onChange={(event) => setApiKey(event.currentTarget.value)} />{keyTooShort && <small>密钥长度不足，请粘贴完整的 API Key。</small>}</label><div className="ink-dialog-actions credential-actions"><button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">返回</button>{settings.credentialConfigured && <button className="credential-delete" disabled={isBusy} onClick={onDelete} type="button">移除密钥</button>}<button className="ink-dialog-confirm" disabled={isBusy || insecureRemote || apiKey.trim().length < 20} onClick={() => onSave(apiKey.trim())} type="button">{isBusy ? "正在验证…" : "验证并保存"}</button></div></section></div>;
+}
+
+function PasswordDialog({ configured, mandatory = false, error, isBusy, onCancel, onSave }: { configured: boolean; mandatory?: boolean; error: string; isBusy: boolean; onCancel: () => void; onSave: (currentPassword: string, newPassword: string) => void }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const ready = newPassword.length >= 8 && newPassword === confirmation && (!configured || currentPassword.length >= 8);
+  return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog credential-dialog" role="dialog"><div className="ink-dialog-seal">密</div><p className="eyebrow">ACCOUNT SECURITY</p><h2>{mandatory ? "首次登录，请设置新密码" : configured ? "修改登录密码" : "设置登录密码"}</h2><p>{mandatory ? "初始化密码仅用于本次身份确认。请立即设置自己的密码，完成后才能继续命卷。" : "密码需为 8-72 个字符。服务器只保存不可逆摘要，不会保存或展示明文。"}</p>{error && <p className="credential-warning" role="alert">{error}</p>}<div className="credential-field">{configured && <label>当前密码<input autoComplete="current-password" disabled={isBusy} maxLength={72} onChange={(event) => setCurrentPassword(event.currentTarget.value)} type="password" value={currentPassword} /></label>}<label>新密码<input autoComplete="new-password" disabled={isBusy} maxLength={72} minLength={8} onChange={(event) => setNewPassword(event.currentTarget.value)} type="password" value={newPassword} /></label><label>确认新密码<input autoComplete="new-password" disabled={isBusy} maxLength={72} minLength={8} onChange={(event) => setConfirmation(event.currentTarget.value)} type="password" value={confirmation} /></label>{confirmation && confirmation !== newPassword && <small className="field-error">两次输入的密码不一致</small>}</div><div className={`ink-dialog-actions${mandatory ? " single" : ""}`}>{!mandatory && <button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">返回</button>}<button className="ink-dialog-confirm" disabled={isBusy || !ready} onClick={() => onSave(currentPassword, newPassword)} type="button">{isBusy ? "正在保存…" : "保存新密码并继续"}</button></div></section></div>;
+}
+
+function DeleteAccountDialog({ isBusy, onCancel, onConfirm }: { isBusy: boolean; onCancel: () => void; onConfirm: () => void }) {
+  const [confirmation, setConfirmation] = useState("");
+  return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog credential-dialog" role="dialog"><div className="ink-dialog-seal">止</div><p className="eyebrow">DELETE ACCOUNT</p><h2>注销这个账号</h2><p>注销后，邮箱身份、今生命卷、前世记录和自定义密钥都会永久删除，无法恢复。</p><label className="credential-field">请输入“确认注销”<input autoComplete="off" value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} /></label><div className="ink-dialog-actions"><button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">暂不注销</button><button className="ink-dialog-confirm destructive" disabled={isBusy || confirmation !== "确认注销"} onClick={onConfirm} type="button">永久注销</button></div></section></div>;
 }
 
 function ReleaseAnnouncementDialog({ note, onClose }: { note: ReleaseNote; onClose: () => void }) {
@@ -626,6 +669,10 @@ export default function Prototype() {
   const [pendingRelease, setPendingRelease] = useState<ReleaseNote | null>(null);
   const [loginAnnouncement, setLoginAnnouncement] = useState<ReleaseNote | null>(null);
   const [releaseNotes, setReleaseNotes] = useState<ReleaseNote[]>([]);
+  const [aiSettings, setAiSettings] = useState<AiSettings | null>(null);
+  const [showAiSettings, setShowAiSettings] = useState(false);
+  const [showPasswordSettings, setShowPasswordSettings] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
 
   const game = snapshot?.state ?? null;
   const choices = snapshot?.choices ?? game?.choices ?? [];
@@ -648,9 +695,11 @@ export default function Prototype() {
     setAuth(nextAuth);
     setSyncMode("server");
     await loadBootstrap();
-    const [notes, pending] = await Promise.all([gameApi.releaseNotes(), gameApi.pendingReleaseNote()]);
+    const [notes, pending, nextAiSettings] = await Promise.all([gameApi.releaseNotes(), gameApi.pendingReleaseNote(), gameApi.aiSettings()]);
     setReleaseNotes(notes);
     setPendingRelease(pending);
+    setAiSettings(nextAiSettings);
+    if (!nextAuth.passwordConfigured) setShowPasswordSettings(true);
     if (nextAuth.hasSave) {
       const current = await gameApi.currentSave();
       if (current.exists && current.game) {
@@ -775,6 +824,8 @@ export default function Prototype() {
         setAuth(null);
         setStage("login");
         setSyncMode("server");
+        setError("登录状态已失效，请重新进入命卷。刚才填写的内容不会产生任何消耗。");
+        return;
       }
       setError(errorMessage(caught));
     } finally {
@@ -783,10 +834,12 @@ export default function Prototype() {
     }
   };
 
-  const login = (loginEmail: string, inviteCode: string) => runBusy(async () => {
-    const nextAuth = await gameApi.login(loginEmail, inviteCode);
+  const authenticate = (mode: "login" | "register", loginEmail: string, password: string) => runBusy(async () => {
+    const nextAuth = mode === "register"
+      ? await gameApi.register(loginEmail, password)
+      : await gameApi.login(loginEmail, password);
     await enterAuthenticatedFlow(nextAuth);
-    setToast(nextAuth.newUser ? "命卷身份已登记" : "旧命卷已寻回");
+    setToast(nextAuth.newUser ? "新账号已登记，获赠 20 个推演回合" : "旧命卷已寻回");
   });
 
   const generateName = () => runBusy(async () => {
@@ -863,6 +916,7 @@ export default function Prototype() {
     setIsComposerFocused(false);
     const next = await gameApi.turn(game.saveId, snapshot.revision, inputType, payload);
     storeSnapshot(next);
+    gameApi.aiSettings().then(setAiSettings).catch(() => undefined);
     setDraft("");
     setTab("adventure");
     setSyncMode("server");
@@ -889,8 +943,42 @@ export default function Prototype() {
     window.localStorage.removeItem(CACHE_KEY);
     setAuth(null);
     setSnapshot(null);
+    setAiSettings(null);
     setStage("login");
     setSyncMode("server");
+  });
+
+  const saveAiCredential = (apiKey: string) => runBusy(async () => {
+    const next = await gameApi.saveAiCredential(apiKey);
+    setAiSettings(next);
+    setShowAiSettings(false);
+    setToast("自己的推演密钥已启用");
+  });
+
+  const deleteAiCredential = () => runBusy(async () => {
+    await gameApi.deleteAiCredential();
+    setAiSettings(await gameApi.aiSettings());
+    setShowAiSettings(false);
+    setToast("已恢复使用账号赠送回合");
+  });
+
+  const savePassword = (currentPassword: string, newPassword: string) => runBusy(async () => {
+    const nextAuth = await gameApi.setPassword(currentPassword, newPassword);
+    setAuth(nextAuth);
+    setShowPasswordSettings(false);
+    setToast("登录密码已妥善保存");
+  });
+
+  const deleteAccount = () => runBusy(async () => {
+    await gameApi.deleteAccount("确认注销");
+    window.localStorage.removeItem(CACHE_KEY);
+    setShowDeleteAccount(false);
+    setAuth(null);
+    setSnapshot(null);
+    setAiSettings(null);
+    setStage("login");
+    setSyncMode("server");
+    setToast("账号与全部命卷已注销");
   });
 
   const headerText = useMemo(() => {
@@ -905,14 +993,14 @@ export default function Prototype() {
       <header className="game-header"><div className="game-header-inner"><div className="brand-lockup"><strong>问仙录</strong><span>浮生一卷 · {bootstrap?.version ?? "V0.11"}</span></div><div className="world-clock"><span>{headerText}</span><small><SewingPinFilledIcon />{game?.phase === "playing" && game.player ? `${game.currentLocation} · ${game.player.realm} · ${conditionName(game.player.vitality)}` : game?.phase === "dead" && game.player ? `${game.currentLocation} · ${game.player.realm} · 已故` : syncMode === "offline" ? "命卷暂封" : "单机世界 · 命卷待启"}</small></div></div></header>
       <div className="game-scroll" data-phase={game?.phase ?? stage} key={`${stage}-${tab}-${game?.turn ?? 0}`}><main className="screen-content" data-testid="game-content">
         {stage === "loading" && <LoadingView />}
-        {stage === "login" && <LoginView announcement={loginAnnouncement} error={error} isBusy={isBusy} offline={syncMode === "offline"} onLogin={login} />}
+        {stage === "login" && <LoginView announcement={loginAnnouncement} error={error} isBusy={isBusy} offline={syncMode === "offline"} onAuthenticate={authenticate} />}
         {stage === "create" && bootstrap && <CharacterCreationView alternatives={nameAlternatives} bootstrap={bootstrap} draft={characterDraft} error={error} isBusy={isBusy} onCreate={createCharacter} onDraft={updateCharacterDraft} onGenerateName={generateName} onLogout={() => void logout()} />}
         {stage === "fate" && game && <FateSelectionView error={error} game={game} isBusy={isBusy} onRecreate={() => setResetIntent("FATES")} onSelect={setSelectedFate} onStart={chooseFate} selectedId={selectedFate} />}
         {stage === "talent" && game && <TalentSelectionView error={error} game={game} isBusy={isBusy} onEnter={enterWithTalent} onReroll={rerollTalents} onSelect={setSelectedTalent} onSkip={enterWithoutTalent} selectedId={selectedTalent} />}
-        {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView choices={choices} error={error} game={game} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onSuggestion={(content) => void takeTurn("TEXT", { content })} resolution={snapshot?.actionResolution} />}
+        {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView aiSettings={aiSettings} choices={choices} error={error} game={game} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onSuggestion={(content) => void takeTurn("TEXT", { content })} resolution={snapshot?.actionResolution} />}
         {stage === "game" && game?.phase === "playing" && tab === "character" && <CharacterView game={game} />}
         {stage === "game" && game?.phase === "playing" && tab === "chronicle" && <ChronicleView game={game} />}
-        {stage === "game" && game?.phase === "playing" && tab === "world" && <WorldView email={email} fontSize={fontSize} game={game} onFontSize={setFontSize} onLogout={() => void logout()} onReset={resetGame} onTheme={setTheme} releaseNotes={releaseNotes} syncMode={syncMode} theme={theme} version={bootstrap?.version ?? "V0.11"} />}
+        {stage === "game" && game?.phase === "playing" && tab === "world" && <WorldView aiSettings={aiSettings} email={email} fontSize={fontSize} game={game} onAiSettings={() => setShowAiSettings(true)} onDeleteAccount={() => setShowDeleteAccount(true)} onFontSize={setFontSize} onLogout={() => void logout()} onPasswordSettings={() => setShowPasswordSettings(true)} onReset={resetGame} onTheme={setTheme} passwordConfigured={auth?.passwordConfigured ?? false} releaseNotes={releaseNotes} syncMode={syncMode} theme={theme} version={bootstrap?.version ?? "V0.11"} />}
         {stage === "game" && game?.phase === "dead" && tab !== "chronicle" && <DeathView game={game} isBusy={isBusy} onChronicle={() => setTab("chronicle")} onLogout={() => void logout()} onRebirth={resetGame} />}
         {stage === "game" && game?.phase === "dead" && tab === "chronicle" && <div className="death-chronicle"><ChronicleView game={game} /><button className="reset-button" onClick={() => setTab("adventure")} type="button">返回终局结算</button></div>}
       </main></div>
@@ -920,6 +1008,9 @@ export default function Prototype() {
       {stage === "game" && game?.phase === "playing" && !isComposerFocused && <nav className="bottom-nav" aria-label="主要导航">{([["adventure", "历练"], ["character", "角色"], ["chronicle", "纪事"], ["world", "世界"]] as Array<[TabId, string]>).map(([id, label]) => <button aria-current={tab === id ? "page" : undefined} key={id} onClick={() => { setError(""); setTab(id); }} type="button"><TabIcon id={id} /><span>{label}</span></button>)}</nav>}
       {resetIntent && game && <ResetConfirmDialog game={game} intent={resetIntent} isBusy={isBusy} onCancel={() => setResetIntent(null)} onConfirm={() => { setResetIntent(null); void recreate(); }} />}
       {pendingRelease && <ReleaseAnnouncementDialog note={pendingRelease} onClose={() => { const id = pendingRelease.id; setPendingRelease(null); setReleaseNotes((notes) => notes.map((note) => note.id === id ? { ...note, unread: false } : note)); void gameApi.markReleaseNoteRead(id); }} />}
+      {showAiSettings && aiSettings && <AiCredentialDialog error={error} isBusy={isBusy} onCancel={() => setShowAiSettings(false)} onDelete={() => void deleteAiCredential()} onSave={(key) => void saveAiCredential(key)} settings={aiSettings} />}
+      {showPasswordSettings && <PasswordDialog configured={auth?.passwordConfigured ?? false} mandatory={auth?.authenticated === true && !auth.passwordConfigured} error={error} isBusy={isBusy} onCancel={() => setShowPasswordSettings(false)} onSave={(current, next) => void savePassword(current, next)} />}
+      {showDeleteAccount && <DeleteAccountDialog isBusy={isBusy} onCancel={() => setShowDeleteAccount(false)} onConfirm={() => void deleteAccount()} />}
       {isBusy && (stage === "create" || stage === "fate" || stage === "talent") && <DestinyLoadingOverlay stage={stage} />}
       {toast && <div className="save-toast" role="status"><span className="agent-dot" />{toast}</div>}
     </div>

@@ -3,6 +3,7 @@ package com.wenxian.game.engine;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.wenxian.game.config.RuntimeAiConfigService;
 import com.wenxian.game.model.GameState;
 import com.wenxian.game.persistence.AgentExecutionAuditStore;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,10 +48,17 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
 
     @Override
     public AgentTurn resolve(String action, GameState state, List<Map<String, Object>> history) {
-        if (!deepSeek.configured()) {
+        return resolve(action, state, history, deepSeek.publicConfig(), "PUBLIC");
+    }
+
+    @Override
+    public AgentTurn resolve(String action, GameState state, List<Map<String, Object>> history,
+                             RuntimeAiConfigService.RuntimeConfig config, String credentialSource) {
+        if (config == null || config.apiKey().isBlank()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "命卷推演尚未开放");
         }
         long startedAt = System.nanoTime();
+        String recordedModel = config.model() + "@" + credentialSource;
         Exception lastFailure = null;
         for (int attempt = 1; attempt <= 2; attempt++) try {
             List<Map<String, Object>> messages = new ArrayList<>();
@@ -83,7 +91,8 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
             String responseId = "";
             for (int round = 0; round < 2; round++) {
                 WorldGenerationService.ChatResponse response = deepSeek.requestMessage(
-                        messages, toolRegistry.definitions(), 3200, 0.72);
+                        messages, toolRegistry.definitions(), 3200, 0.72, config,
+                        "GAMEPLAY", state.saveId, state.turn + 1, credentialSource);
                 JsonNode message = response.message();
                 promptTokens += response.promptTokens();
                 completionTokens += response.completionTokens();
@@ -116,9 +125,9 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                         && narrativeLength < 700) {
                     throw new IllegalArgumentException("Agent 章节过短：" + result.narrative().size() + "段/" + narrativeLength + "字");
                 }
-                audit(state, attempt, "SUCCESS", "", responseId, (System.nanoTime() - startedAt) / 1_000_000L);
+                audit(state, attempt, recordedModel, "SUCCESS", "", responseId, (System.nanoTime() - startedAt) / 1_000_000L);
                 return new AgentTurn(result, content, responseId, promptTokens, completionTokens,
-                        (System.nanoTime() - startedAt) / 1_000_000L);
+                        (System.nanoTime() - startedAt) / 1_000_000L, config.model(), credentialSource);
             }
             throw new IllegalArgumentException("Agent 工具调用轮次过多");
         } catch (ResponseStatusException error) {
@@ -126,7 +135,7 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
         } catch (Exception error) {
             lastFailure = error;
             LOGGER.warn("DeepSeek 行动裁决第 {} 次失败: {}", attempt, error.getMessage());
-            audit(state, attempt, "FAILED", error.getClass().getSimpleName() + ": " + error.getMessage(), null,
+            audit(state, attempt, recordedModel, "FAILED", error.getClass().getSimpleName() + ": " + error.getMessage(), null,
                     (System.nanoTime() - startedAt) / 1_000_000L);
         }
         LOGGER.error("DeepSeek 行动裁决两次均失败", lastFailure);
@@ -134,10 +143,10 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                 "本章推演暂时中断，命卷没有发生变化，请重新推演", lastFailure);
     }
 
-    private void audit(GameState state, int attempt, String status, String detail, String responseId, long latencyMs) {
+    private void audit(GameState state, int attempt, String model, String status, String detail, String responseId, long latencyMs) {
         if (auditStore == null) return;
         try {
-            auditStore.record(state.saveId, state.turn + 1, deepSeek.model(), attempt, status, detail, responseId, latencyMs);
+            auditStore.record(state.saveId, state.turn + 1, model, attempt, status, detail, responseId, latencyMs);
         } catch (Exception error) {
             LOGGER.warn("Agent 审计日志写入失败: {}", error.getMessage());
         }

@@ -2,9 +2,27 @@ export type LoginResponse = { ok: boolean; token: string };
 
 export type DashboardData = {
   totalUsers: number; usersWithCharacter: number; todayActive: number; onlinePlayers: number;
-  totalTurns: number; todayTurns: number; totalTokens: number; todayTokens: number;
-  failedToday: number; avgLatency: number; currentModel: string;
-  dailyTokens: Array<{ date: string; promptTokens: number; completionTokens: number; turns: number; players: number }>;
+  totalTurns: number; todayTurns: number; avgLatency: number; currentModel: string;
+  totalPlatformTurns: number; totalCustomTurns: number; todayPlatformTurns: number; todayCustomTurns: number;
+  customApiUsers: number; todayPublicInvocations: number;
+  todayAiRequests: number; todayAiFailures: number;
+  todayPlatformPromptTokens: number; todayPlatformCompletionTokens: number;
+  todayPlatformCacheHitTokens: number; todayPlatformCacheMissTokens: number;
+  todayCustomPromptTokens: number; todayCustomCompletionTokens: number;
+  totalPlatformTokens: number; totalCustomTokens: number;
+  usageTrackingStartedAt: string;
+  dailyTokens: Array<{
+    date: string; platformPromptTokens: number; platformCompletionTokens: number;
+    customPromptTokens: number; customCompletionTokens: number;
+    cacheHitTokens: number; cacheMissTokens: number;
+    requests: number; failures: number; estimatedRequests: number; players: number;
+    platformTurns: number; customTurns: number; models: string;
+  }>;
+  modelUsage: Array<{
+    provider: string; model: string; source: "PUBLIC" | "USER"; requests: number;
+    promptTokens: number; completionTokens: number; cacheHitTokens: number; cacheMissTokens: number;
+    failures: number; avgLatency: number; firstUsedAt: string; lastUsedAt: string;
+  }>;
   recentTurns: Array<{ playerName: string; realm: string; turn: number; action: string; tokens: number; latency: number; model: string; at: string }>;
 };
 
@@ -27,7 +45,9 @@ export type LifeSummary = {
   realm: string; race: string; difficulty: "NORMAL" | "HARD"; phase: string; turn: number; sceneTitle: string;
 };
 export type UserDetail = {
-  user: { userId: string; email: string; status: string; registeredAt: string; lastLoginAt: string | null };
+  user: { userId: string; email: string; status: string; registeredAt: string; lastLoginAt: string | null;
+    passwordConfigured: boolean; passwordSetAt?: string | null; registrationNetwork?: string | null;
+    credentialConfigured: boolean; credentialStatus?: string | null; credentialSuffix?: string | null; credentialVerifiedAt?: string | null };
   currentLives: LifeSummary[]; historicalLives: LifeSummary[];
 };
 export type TurnPage = { total: number; page: number; size: number; rows: Array<{
@@ -37,7 +57,9 @@ export type TurnPage = { total: number; page: number; size: number; rows: Array<
 export type TurnRow = TurnPage["rows"][number];
 export type AgentExecution = { turn: number; attempt: number; status: string; detail: string; model: string; responseId: string; latency: number; at: string };
 export type ReleaseNoteAdmin = { id: string; version: string; title: string; content: string; status: "DRAFT" | "PUBLISHED" | "ARCHIVED"; announceAll: boolean; showOnLogin: boolean; publishedAt: string | null; createdAt: string; updatedAt: string; readCount: number };
-export type ModelConfig = { modelCode: string; displayName: string; keyConfigured: boolean; active: boolean; updatedAt: string };
+export type ModelConfig = { providerCode: string; modelCode: string; displayName: string; keyConfigured: boolean; active: boolean; updatedAt: string };
+export type GameplayConfig = { accountPublicTurnLimit: number; customApiEnabled: boolean; customApiUsers: number; invalidCredentialUsers: number; todayPublicInvocations: number; todayCustomTurns: number };
+export type RegistrationConfig = { maxUsers: number; currentUsers: number; remainingSlots: number; limitMessage: string; contactText: string };
 
 const TOKEN_KEY = "wenxian_admin_token";
 const BASE = "/api/admin";
@@ -68,11 +90,17 @@ export const adminApi = {
   generateInviteCodes: (count: number, maxUses: number) => request<{ codes: string[]; count: number }>("/invite-codes", { method: "POST", body: JSON.stringify({ count, maxUses }) }),
   users: (search = "", characterState = "", difficulty = "", realm = "", page = 0, size = 20) => request<UserListResult>(`/users?search=${encodeURIComponent(search)}&characterState=${characterState}&difficulty=${difficulty}&realm=${encodeURIComponent(realm)}&page=${page}&size=${size}`),
   userDetail: (userId: string) => request<UserDetail>(`/users/${encodeURIComponent(userId)}`),
+  resetPlayerPassword: (userId: string) => request<{ temporaryPassword: string }>(`/users/${encodeURIComponent(userId)}/temporary-password`, { method: "POST" }),
+  unlockPlayerAuth: (userId: string) => request<{ ok: boolean; message: string }>(`/users/${encodeURIComponent(userId)}/unlock-auth`, { method: "POST" }),
   userTurns: (userId: string, saveId: string, page = 0, size = 20, turn = "") => request<TurnPage>(`/users/${encodeURIComponent(userId)}/lives/${encodeURIComponent(saveId)}/turns?page=${page}&size=${size}${turn ? `&turn=${encodeURIComponent(turn)}` : ""}`),
   executions: (saveId: string, turn?: number) => request<AgentExecution[]>(`/agent-executions/${encodeURIComponent(saveId)}${turn === undefined ? "" : `?turn=${turn}`}`),
   releaseNotes: () => request<ReleaseNoteAdmin[]>("/release-notes"),
   saveReleaseNote: (note: Partial<ReleaseNoteAdmin>) => request<ReleaseNoteAdmin>("/release-notes", { method: "POST", body: JSON.stringify(note) }),
   modelConfigs: () => request<ModelConfig[]>("/model-configs"),
   updateModelConfig: (modelCode: string, active: boolean, apiKey = "") => request<{ ok: boolean }>(`/model-configs/${encodeURIComponent(modelCode)}`, { method: "POST", body: JSON.stringify({ active, apiKey }) }),
+  gameplayConfig: () => request<GameplayConfig>("/gameplay-config"),
+  updateGameplayConfig: (accountPublicTurnLimit: number, customApiEnabled: boolean) => request<GameplayConfig>("/gameplay-config", { method: "POST", body: JSON.stringify({ accountPublicTurnLimit, customApiEnabled }) }),
+  registrationConfig: () => request<RegistrationConfig>("/registration-config"),
+  updateRegistrationConfig: (maxUsers: number, limitMessage: string, contactText: string) => request<RegistrationConfig>("/registration-config", { method: "POST", body: JSON.stringify({ maxUsers, limitMessage, contactText }) }),
   operationLogs: () => request<Array<{ operation: string; detail: string; at: string }>>("/operation-logs"),
 };

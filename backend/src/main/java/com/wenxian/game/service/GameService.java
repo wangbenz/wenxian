@@ -39,6 +39,7 @@ public class GameService {
     private final CharacterNameService nameService;
     private final ActionInputGate inputGate;
     private final AgentConversationStore conversationStore;
+    private final PlayerAiService playerAiService;
     private final TransactionTemplate transactions;
     private final Map<String, Object> saveLocks = new ConcurrentHashMap<>();
 
@@ -46,7 +47,8 @@ public class GameService {
                        NarrativeAgent agentService,
                        WorldGenerationService fateGenerationService, GameEngine gameEngine,
                        CharacterNameService nameService, ActionInputGate inputGate,
-                       AgentConversationStore conversationStore, TransactionTemplate transactions) {
+                       AgentConversationStore conversationStore, PlayerAiService playerAiService,
+                       TransactionTemplate transactions) {
         this.saveStore = saveStore;
         this.turnRequestStore = turnRequestStore;
         this.agentService = agentService;
@@ -55,6 +57,7 @@ public class GameService {
         this.nameService = nameService;
         this.inputGate = inputGate;
         this.conversationStore = conversationStore;
+        this.playerAiService = playerAiService;
         this.transactions = transactions;
     }
 
@@ -182,14 +185,17 @@ public class GameService {
                 });
             }
             String action = assessment.action();
+            PlayerAiService.Route aiRoute = playerAiService.route(user.userId());
+            playerAiService.assertPublicQuota(user.userId(), aiRoute);
             AgentTurn agentTurn = agentService.resolve(action, current.state,
-                    conversationStore.loadHistory(saveId, current.state));
+                    conversationStore.loadHistory(saveId, current.state), aiRoute.config(), aiRoute.source());
             if (!"ACCEPTED".equals(agentTurn.result().actionResolution().result())) {
                 ActionResolutionView resolution = actionResolution(agentTurn.result().actionResolution());
                 return transactions.execute(status -> {
                     conversationStore.append(conversationId, current.state.turn, "user", action, null, 0, 0);
                     conversationStore.append(conversationId, current.state.turn, "assistant", agentTurn.assistantMessage(),
                             agentTurn.responseId(), agentTurn.promptTokens(), agentTurn.completionTokens());
+                    playerAiService.recordSuccessfulInvocation(user.userId(), aiRoute);
                     return response(current, resolution);
                 });
             }
@@ -204,6 +210,7 @@ public class GameService {
                         agentTurn.responseId(), agentTurn.promptTokens(), agentTurn.completionTokens());
                 conversationStore.recordTurn(request.requestId(), saveId, conversationId, next.turn, action,
                         current.state, next, agentTurn, fateGenerationService.model());
+                playerAiService.recordSuccessfulInvocation(user.userId(), aiRoute);
                 turnRequestStore.record(request.requestId(), saveId);
                 return response(saved);
             });
