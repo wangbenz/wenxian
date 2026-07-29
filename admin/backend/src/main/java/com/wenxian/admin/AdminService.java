@@ -512,7 +512,7 @@ public class AdminService {
 
     public List<Map<String, Object>> releaseNotes() {
         return jdbc.query("""
-                select r.id, r.version, r.title, r.content, r.status, r.announce_all,
+                select r.id, r.version, r.title, r.content, r.status, r.announce_all, r.show_on_login,
                        r.published_at, r.created_at, r.updated_at,
                        (select count(*) from user_release_receipt urr where urr.release_note_id = r.id) read_count
                 from release_note r order by r.created_at desc
@@ -524,6 +524,7 @@ public class AdminService {
             note.put("content", row.getString("content"));
             note.put("status", row.getString("status"));
             note.put("announceAll", row.getBoolean("announce_all"));
+            note.put("showOnLogin", row.getBoolean("show_on_login"));
             note.put("publishedAt", row.getTimestamp("published_at") == null ? null : row.getTimestamp("published_at").toInstant().toString());
             note.put("createdAt", row.getTimestamp("created_at").toInstant().toString());
             note.put("updatedAt", row.getTimestamp("updated_at").toInstant().toString());
@@ -534,26 +535,30 @@ public class AdminService {
 
     @Transactional
     public Map<String, Object> saveReleaseNote(String id, String version, String title, String content,
-                                               String status, boolean announceAll) {
+                                               String status, boolean announceAll, boolean showOnLogin) {
         if (version == null || version.isBlank() || title == null || title.isBlank() || content == null || content.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "版本、标题和公告内容不能为空");
         }
         String safeStatus = Set.of("DRAFT", "PUBLISHED", "ARCHIVED").contains(status) ? status : "DRAFT";
         Instant now = Instant.now();
         String noteId = id == null || id.isBlank() ? "release-" + UUID.randomUUID() : id;
+        boolean effectiveShowOnLogin = "PUBLISHED".equals(safeStatus) && announceAll && showOnLogin;
+        if (effectiveShowOnLogin) {
+            jdbc.update("update release_note set show_on_login=false where id<>?", noteId);
+        }
         Integer exists = jdbc.queryForObject("select count(*) from release_note where id = ?", Integer.class, noteId);
         if (exists != null && exists > 0) {
             jdbc.update("""
-                    update release_note set version=?, title=?, content=?, status=?, announce_all=?,
+                    update release_note set version=?, title=?, content=?, status=?, announce_all=?, show_on_login=?,
                       published_at=case when ?='PUBLISHED' and published_at is null then ? else published_at end,
                       updated_at=? where id=?
-                    """, version.strip(), title.strip(), content.strip(), safeStatus, announceAll,
+                    """, version.strip(), title.strip(), content.strip(), safeStatus, announceAll, effectiveShowOnLogin,
                     safeStatus, Timestamp.from(now), Timestamp.from(now), noteId);
         } else {
             jdbc.update("""
-                    insert into release_note(id, version, title, content, status, announce_all, published_at, created_at, updated_at)
-                    values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, noteId, version.strip(), title.strip(), content.strip(), safeStatus, announceAll,
+                    insert into release_note(id, version, title, content, status, announce_all, show_on_login, published_at, created_at, updated_at)
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, noteId, version.strip(), title.strip(), content.strip(), safeStatus, announceAll, effectiveShowOnLogin,
                     "PUBLISHED".equals(safeStatus) ? Timestamp.from(now) : null, Timestamp.from(now), Timestamp.from(now));
         }
         audit("SAVE_RELEASE_NOTE", "保存版本公告 " + version + "（" + safeStatus + "）");

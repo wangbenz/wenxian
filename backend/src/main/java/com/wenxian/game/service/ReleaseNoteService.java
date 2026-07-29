@@ -45,6 +45,19 @@ public class ReleaseNoteService {
                 .stream().findFirst().orElse(null);
     }
 
+    public ReleaseNoteView latestPublicAnnouncement() {
+        return jdbc.query("""
+                select r.id, r.version, r.title, r.content, r.published_at
+                from release_note r
+                where r.status = 'PUBLISHED' and r.announce_all = true and r.show_on_login = true
+                order by r.published_at desc, r.created_at desc
+                limit 1
+                """, (row, index) -> new ReleaseNoteView(
+                row.getString("id"), row.getString("version"), row.getString("title"),
+                row.getString("content"), row.getTimestamp("published_at").toInstant(), true))
+                .stream().findFirst().orElse(null);
+    }
+
     @Transactional
     public void markRead(String userId, String releaseId) {
         Integer exists = jdbc.queryForObject(

@@ -121,7 +121,8 @@ public class AdminController {
     public Map<String, Object> saveReleaseNote(@RequestBody Map<String, Object> body) {
         return adminService.saveReleaseNote(string(body.get("id")), string(body.get("version")),
                 string(body.get("title")), string(body.get("content")),
-                string(body.get("status")).toUpperCase(), Boolean.TRUE.equals(body.get("announceAll")));
+                string(body.get("status")).toUpperCase(), Boolean.TRUE.equals(body.get("announceAll")),
+                Boolean.TRUE.equals(body.get("showOnLogin")));
     }
 
     @GetMapping("/model-configs")

@@ -129,6 +129,7 @@ create table if not exists release_note (
     content longtext not null,
     status varchar(24) not null default 'DRAFT',
     announce_all boolean not null default false,
+    show_on_login boolean not null default false,
     published_at timestamp(6),
     created_at timestamp(6) not null,
     updated_at timestamp(6) not null,

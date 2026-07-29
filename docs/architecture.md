@@ -36,7 +36,7 @@ Agent 不切换页面、不执行 SQL、不修改固定世界，也不能绕过 
 - `agent_message`：按顺序保存玩家与 Agent 的完整消息；
 - `game_turn`：保存行动、章节、选项、状态差量、Token 与延迟指标。
 - `agent_execution`：独立记录每次 DeepSeek 推演尝试的成败、模型、响应 ID、延迟与经脱敏的失败原因，主事务回滚时仍保留。
-- `release_note` / `user_release_receipt`：版本公告、发布状态、全员展示开关和逐用户已读状态。
+- `release_note` / `user_release_receipt`：版本公告、发布状态、全员展示开关、登录页置顶标记和逐用户已读状态；登录页只读取运营明确置顶的一条公开公告。
 - `ai_model_config`：V4 Pro/Flash 当前启用状态与加密密钥。密钥只在服务器端解密，不通过管理台接口回传明文。
 
 测试服务器使用独立的 `wenxian` 数据库与最小权限应用账号。真实连接只保存在后端私有配置或部署环境变量中；生产/试玩运行不依赖本地 H2 文件，因此服务重启后数据仍由 MySQL 持久保存。

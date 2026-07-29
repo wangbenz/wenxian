@@ -255,6 +255,7 @@ export const gameApi = {
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
   bootstrap: () => request<BootstrapResponse>("/api/v1/game/bootstrap"),
   releaseNotes: () => request<ReleaseNote[]>("/api/v1/release-notes"),
+  latestPublicReleaseNote: () => request<ReleaseNote | null>("/api/v1/release-notes/public-latest"),
   pendingReleaseNote: () => request<ReleaseNote | null>("/api/v1/release-notes/pending"),
   markReleaseNoteRead: (releaseId: string) => request<void>(`/api/v1/release-notes/${encodeURIComponent(releaseId)}/read`, { method: "POST" }),
   currentSave: () => request<{ exists: boolean; game: ApiSnapshot | null }>("/api/v1/saves/current"),

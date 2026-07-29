@@ -138,11 +138,13 @@ function DestinyLoadingOverlay({ stage }: { stage: AppStage }) {
 }
 
 function LoginView({
+  announcement,
   isBusy,
   error,
   offline,
   onLogin,
 }: {
+  announcement: ReleaseNote | null;
   isBusy: boolean;
   error: string;
   offline: boolean;
@@ -157,6 +159,10 @@ function LoginView({
       <p className="eyebrow">ENTER XUANXU REALM</p>
       <h1>以邮箱领取命卷</h1>
       <p className="entry-lead">首次进入需填写邀请码。登记成功后，同一邮箱可直接继续自己的单机存档。</p>
+      {announcement && <aside className="entry-announcement" aria-label="最新公告">
+        <div><span>{announcement.version}</span><strong>{announcement.title}</strong></div>
+        <p>{announcement.content}</p>
+      </aside>}
       <form
         className="entry-form"
         onSubmit={(event) => {
@@ -618,6 +624,7 @@ export default function Prototype() {
   const [toast, setToast] = useState<string | null>(null);
   const [resetIntent, setResetIntent] = useState<"RESET" | "FATES" | null>(null);
   const [pendingRelease, setPendingRelease] = useState<ReleaseNote | null>(null);
+  const [loginAnnouncement, setLoginAnnouncement] = useState<ReleaseNote | null>(null);
   const [releaseNotes, setReleaseNotes] = useState<ReleaseNote[]>([]);
 
   const game = snapshot?.state ?? null;
@@ -664,6 +671,9 @@ export default function Prototype() {
     let active = true;
     (async () => {
       try {
+        void gameApi.latestPublicReleaseNote()
+          .then((note) => { if (active) setLoginAnnouncement(note); })
+          .catch(() => undefined);
         const session = await gameApi.me();
         if (!active) return;
         if (!session.authenticated) {
@@ -895,7 +905,7 @@ export default function Prototype() {
       <header className="game-header"><div className="game-header-inner"><div className="brand-lockup"><strong>问仙录</strong><span>浮生一卷 · {bootstrap?.version ?? "V0.11"}</span></div><div className="world-clock"><span>{headerText}</span><small><SewingPinFilledIcon />{game?.phase === "playing" && game.player ? `${game.currentLocation} · ${game.player.realm} · ${conditionName(game.player.vitality)}` : game?.phase === "dead" && game.player ? `${game.currentLocation} · ${game.player.realm} · 已故` : syncMode === "offline" ? "命卷暂封" : "单机世界 · 命卷待启"}</small></div></div></header>
       <div className="game-scroll" data-phase={game?.phase ?? stage} key={`${stage}-${tab}-${game?.turn ?? 0}`}><main className="screen-content" data-testid="game-content">
         {stage === "loading" && <LoadingView />}
-        {stage === "login" && <LoginView error={error} isBusy={isBusy} offline={syncMode === "offline"} onLogin={login} />}
+        {stage === "login" && <LoginView announcement={loginAnnouncement} error={error} isBusy={isBusy} offline={syncMode === "offline"} onLogin={login} />}
         {stage === "create" && bootstrap && <CharacterCreationView alternatives={nameAlternatives} bootstrap={bootstrap} draft={characterDraft} error={error} isBusy={isBusy} onCreate={createCharacter} onDraft={updateCharacterDraft} onGenerateName={generateName} onLogout={() => void logout()} />}
         {stage === "fate" && game && <FateSelectionView error={error} game={game} isBusy={isBusy} onRecreate={() => setResetIntent("FATES")} onSelect={setSelectedFate} onStart={chooseFate} selectedId={selectedFate} />}
         {stage === "talent" && game && <TalentSelectionView error={error} game={game} isBusy={isBusy} onEnter={enterWithTalent} onReroll={rerollTalents} onSelect={setSelectedTalent} onSkip={enterWithoutTalent} selectedId={selectedTalent} />}

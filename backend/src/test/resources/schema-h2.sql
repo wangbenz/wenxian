@@ -134,6 +134,7 @@ create table release_note (
     content clob not null,
     status varchar(24) not null default 'DRAFT',
     announce_all boolean not null default false,
+    show_on_login boolean not null default false,
     published_at timestamp,
     created_at timestamp not null,
     updated_at timestamp not null

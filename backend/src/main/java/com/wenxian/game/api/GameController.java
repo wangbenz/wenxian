@@ -69,6 +69,11 @@ public class GameController {
         return releaseNotes.published(user(token).userId());
     }
 
+    @GetMapping("/release-notes/public-latest")
+    public ReleaseNoteView latestPublicReleaseNote() {
+        return releaseNotes.latestPublicAnnouncement();
+    }
+
     @GetMapping("/release-notes/pending")
     public ReleaseNoteView pendingReleaseNote(
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token) {

@@ -36,7 +36,7 @@ export type TurnPage = { total: number; page: number; size: number; rows: Array<
 }> };
 export type TurnRow = TurnPage["rows"][number];
 export type AgentExecution = { turn: number; attempt: number; status: string; detail: string; model: string; responseId: string; latency: number; at: string };
-export type ReleaseNoteAdmin = { id: string; version: string; title: string; content: string; status: "DRAFT" | "PUBLISHED" | "ARCHIVED"; announceAll: boolean; publishedAt: string | null; createdAt: string; updatedAt: string; readCount: number };
+export type ReleaseNoteAdmin = { id: string; version: string; title: string; content: string; status: "DRAFT" | "PUBLISHED" | "ARCHIVED"; announceAll: boolean; showOnLogin: boolean; publishedAt: string | null; createdAt: string; updatedAt: string; readCount: number };
 export type ModelConfig = { modelCode: string; displayName: string; keyConfigured: boolean; active: boolean; updatedAt: string };
 
 const TOKEN_KEY = "wenxian_admin_token";

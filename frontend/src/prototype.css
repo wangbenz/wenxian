@@ -204,6 +204,44 @@
   box-shadow: 0 0 0 5px rgba(156, 63, 54, 0.1);
 }
 
+.entry-announcement {
+  margin: 0 0 18px;
+  padding: 13px 14px;
+  color: var(--ink-soft);
+  background: rgba(139, 65, 55, .07);
+  border: 1px solid rgba(139, 65, 55, .24);
+  border-left: 3px solid var(--cinnabar);
+}
+
+.entry-announcement > div {
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+  margin-bottom: 7px;
+}
+
+.entry-announcement span {
+  flex: none;
+  color: var(--cinnabar);
+  font-family: var(--display);
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+
+.entry-announcement strong {
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.entry-announcement p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.75;
+  white-space: pre-line;
+}
+
 .entry-form { display: grid; gap: 14px; }
 .entry-form label,
 .name-field-row label,
