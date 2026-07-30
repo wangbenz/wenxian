@@ -51,6 +51,35 @@ public class AdminController {
         return Map.of("ok", true, "message", "密码已修改，请重新登录");
     }
 
+    @GetMapping("/admin-accounts")
+    public List<Map<String, Object>> adminAccounts(
+            @org.springframework.web.bind.annotation.RequestHeader("Authorization") String auth) {
+        return adminService.adminAccounts(bearerToken(auth));
+    }
+
+    @PostMapping("/admin-accounts")
+    public Map<String, Object> createAdminAccount(
+            @RequestBody Map<String, Object> body,
+            @org.springframework.web.bind.annotation.RequestHeader("Authorization") String auth) {
+        return adminService.createAdminAccount(bearerToken(auth), string(body.get("username")), string(body.get("password")));
+    }
+
+    @PostMapping("/admin-accounts/{adminId}/status")
+    public Map<String, Object> updateAdminAccountStatus(
+            @PathVariable String adminId,
+            @RequestBody Map<String, Object> body,
+            @org.springframework.web.bind.annotation.RequestHeader("Authorization") String auth) {
+        adminService.updateAdminAccountStatus(bearerToken(auth), adminId, Boolean.TRUE.equals(body.get("active")));
+        return Map.of("ok", true);
+    }
+
+    @PostMapping("/admin-accounts/{adminId}/temporary-password")
+    public Map<String, Object> resetAdminAccountPassword(
+            @PathVariable String adminId,
+            @org.springframework.web.bind.annotation.RequestHeader("Authorization") String auth) {
+        return Map.of("temporaryPassword", adminService.resetAdminAccountPassword(bearerToken(auth), adminId));
+    }
+
     @GetMapping("/dashboard")
     public Map<String, Object> dashboard() {
         return adminService.dashboard();
@@ -182,5 +211,9 @@ public class AdminController {
         if (value instanceof Number n) return n.intValue();
         if (value instanceof String s) try { return Integer.parseInt(s); } catch (NumberFormatException ignored) { }
         return fallback;
+    }
+
+    private static String bearerToken(String auth) {
+        return auth != null && auth.startsWith("Bearer ") ? auth.substring(7) : "";
     }
 }

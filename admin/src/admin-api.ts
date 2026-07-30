@@ -37,6 +37,8 @@ export type UserRow = {
   lastLoginAt: string | null; saveId: string | null; playerName: string; realm: string;
   race: string; difficulty: "NORMAL" | "HARD"; characterState: "NONE" | "CURRENT" | "RESTARTED";
   archiveCount: number; turnCount: number; totalTokens: number; saveUpdated: string | null;
+  credentialConfigured: boolean; credentialStatus?: string; credentialSuffix?: string;
+  credentialVerifiedAt?: string | null;
 };
 export type UserListResult = [{ total: number; page: number; size: number }, { rows: UserRow[] }];
 
@@ -57,9 +59,18 @@ export type TurnPage = { total: number; page: number; size: number; rows: Array<
 export type TurnRow = TurnPage["rows"][number];
 export type AgentExecution = { turn: number; attempt: number; status: string; detail: string; model: string; responseId: string; latency: number; at: string };
 export type ReleaseNoteAdmin = { id: string; version: string; title: string; content: string; status: "DRAFT" | "PUBLISHED" | "ARCHIVED"; announceAll: boolean; showOnLogin: boolean; publishedAt: string | null; createdAt: string; updatedAt: string; readCount: number };
-export type ModelConfig = { providerCode: string; modelCode: string; displayName: string; keyConfigured: boolean; active: boolean; updatedAt: string };
+export type ModelConfig = {
+  providerCode: string; modelCode: string; displayName: string; keyConfigured: boolean; active: boolean;
+  keySource: "DATABASE" | "SERVER_DEFAULT" | "MISSING"; keySuffix: string;
+  keyState: "CONFIGURED" | "MISSING" | "DECRYPT_ERROR";
+  updatedAt: string; lastRequestStatus: string; lastUsedAt: string;
+};
 export type GameplayConfig = { accountPublicTurnLimit: number; customApiEnabled: boolean; customApiUsers: number; invalidCredentialUsers: number; todayPublicInvocations: number; todayCustomTurns: number };
 export type RegistrationConfig = { maxUsers: number; currentUsers: number; remainingSlots: number; limitMessage: string; contactText: string };
+export type AdminAccount = {
+  id: string; username: string; status: "ACTIVE" | "DISABLED"; createdAt: string;
+  lastLoginAt: string | null; activeSessions: number; current: boolean;
+};
 
 const TOKEN_KEY = "wenxian_admin_token";
 const BASE = "/api/admin";
@@ -85,6 +96,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const adminApi = {
   login: (username: string, password: string) => request<LoginResponse>("/login", { method: "POST", body: JSON.stringify({ username, password }) }),
   changePassword: (oldPassword: string, newPassword: string) => request<{ ok: boolean; message: string }>("/change-password", { method: "POST", body: JSON.stringify({ oldPassword, newPassword }) }),
+  adminAccounts: () => request<AdminAccount[]>("/admin-accounts"),
+  createAdminAccount: (username: string, password: string) => request<AdminAccount>("/admin-accounts", { method: "POST", body: JSON.stringify({ username, password }) }),
+  updateAdminAccountStatus: (adminId: string, active: boolean) => request<{ ok: boolean }>(`/admin-accounts/${encodeURIComponent(adminId)}/status`, { method: "POST", body: JSON.stringify({ active }) }),
+  resetAdminAccountPassword: (adminId: string) => request<{ temporaryPassword: string }>(`/admin-accounts/${encodeURIComponent(adminId)}/temporary-password`, { method: "POST" }),
   dashboard: () => request<DashboardData>("/dashboard"),
   inviteCodes: (status = "") => request<InviteCodeItem[]>(`/invite-codes?status=${encodeURIComponent(status)}`),
   generateInviteCodes: (count: number, maxUses: number) => request<{ codes: string[]; count: number }>("/invite-codes", { method: "POST", body: JSON.stringify({ count, maxUses }) }),

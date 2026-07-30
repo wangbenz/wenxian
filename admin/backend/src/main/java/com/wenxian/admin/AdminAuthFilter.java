@@ -36,7 +36,7 @@ public class AdminAuthFilter implements Filter {
         }
 
         String uri = req.getRequestURI();
-        if (uri.endsWith("/api/admin/login") || uri.endsWith("/api/admin/setup")) {
+        if (uri.endsWith("/api/admin/login")) {
             chain.doFilter(request, response);
             return;
         }
@@ -51,7 +51,12 @@ public class AdminAuthFilter implements Filter {
 
         String tokenHash = sha256(auth.substring(7));
         Integer count = jdbc.queryForObject(
-                "SELECT count(*) FROM admin_session WHERE token_hash = ? AND expires_at > ?",
+                """
+                        SELECT count(*)
+                        FROM admin_session s
+                        JOIN admin_user u ON u.id = s.user_id
+                        WHERE s.token_hash = ? AND s.expires_at > ? AND u.status = 'ACTIVE'
+                        """,
                 Integer.class, tokenHash, Timestamp.from(Instant.now()));
         if (count == null || count == 0) {
             res.setStatus(401);

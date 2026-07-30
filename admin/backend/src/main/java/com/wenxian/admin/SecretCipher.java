@@ -27,6 +27,19 @@ final class SecretCipher {
         }
     }
 
+    static String decrypt(String packedValue, String masterKey) {
+        try {
+            byte[] packed = Base64.getDecoder().decode(packedValue);
+            byte[] iv = java.util.Arrays.copyOfRange(packed, 0, 12);
+            byte[] encrypted = java.util.Arrays.copyOfRange(packed, 12, packed.length);
+            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+            cipher.init(Cipher.DECRYPT_MODE, key(masterKey), new GCMParameterSpec(128, iv));
+            return new String(cipher.doFinal(encrypted), StandardCharsets.UTF_8);
+        } catch (Exception error) {
+            throw new IllegalStateException("模型密钥解密失败", error);
+        }
+    }
+
     private static SecretKeySpec key(String masterKey) throws Exception {
         return new SecretKeySpec(MessageDigest.getInstance("SHA-256")
                 .digest(masterKey.getBytes(StandardCharsets.UTF_8)), "AES");

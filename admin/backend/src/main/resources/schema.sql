@@ -3,7 +3,7 @@
 create table if not exists admin_user (
     id varchar(64) primary key,
     username varchar(64) not null unique,
-    password_hash varchar(128) not null comment 'SHA-256 哈希',
+    password_hash varchar(128) not null comment '管理密码安全哈希（兼容旧数据自动升级）',
     status varchar(16) not null default 'ACTIVE',
     created_at timestamp(6) not null
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;

@@ -22,3 +22,9 @@ spring:
 
 wenxian:
   ai-config-master-key: ${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}
+  admin:
+    initial-username: ${ADMIN_INITIAL_USERNAME:}
+    initial-password: ${ADMIN_INITIAL_PASSWORD:}
+
+deepseek:
+  api-key: ${DEEPSEEK_API_KEY:}

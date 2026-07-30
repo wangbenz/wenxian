@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -32,9 +34,12 @@ import java.util.UUID;
 @Service
 public class AdminService {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminService.class);
+
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper = new ObjectMapper();
     private final SecureRandom random = new SecureRandom();
+    private final BCryptPasswordEncoder adminPasswordEncoder = new BCryptPasswordEncoder(10);
     private final BCryptPasswordEncoder playerPasswordEncoder = new BCryptPasswordEncoder(10);
     private static final int SESSION_DAYS = 7;
     private static final long DASHBOARD_CACHE_MILLIS = 10_000;
@@ -42,29 +47,42 @@ public class AdminService {
             "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
     private static final int INVITE_CODE_LENGTH = 10;
     private final String aiConfigMasterKey;
+    private final String fallbackApiKey;
+    private final String initialAdminUsername;
+    private final String initialAdminPassword;
     private volatile Map<String, Object> dashboardCache;
     private volatile long dashboardCacheExpiresAt;
 
     @Autowired
     public AdminService(JdbcTemplate jdbc,
-                        @Value("${wenxian.ai-config-master-key:wenxian-local-config-key-change-me}") String aiConfigMasterKey) {
+                        @Value("${wenxian.ai-config-master-key:wenxian-local-config-key-change-me}") String aiConfigMasterKey,
+                        @Value("${deepseek.api-key:}") String fallbackApiKey,
+                        @Value("${wenxian.admin.initial-username:}") String initialAdminUsername,
+                        @Value("${wenxian.admin.initial-password:}") String initialAdminPassword) {
         this.jdbc = jdbc;
         this.aiConfigMasterKey = aiConfigMasterKey;
+        this.fallbackApiKey = fallbackApiKey == null ? "" : fallbackApiKey.strip();
+        this.initialAdminUsername = initialAdminUsername == null ? "" : initialAdminUsername.strip();
+        this.initialAdminPassword = initialAdminPassword == null ? "" : initialAdminPassword;
     }
 
     AdminService(JdbcTemplate jdbc) {
-        this(jdbc, "wenxian-local-config-key-change-me");
+        this(jdbc, "wenxian-local-config-key-change-me", "", "", "");
     }
 
     @PostConstruct
     void ensureDefaultUser() {
         int count = count("SELECT count(*) FROM admin_user");
         if (count == 0) {
-            String hash = sha256("wenxian@2025");
-            jdbc.update("""
-                    INSERT INTO admin_user(id, username, password_hash, status, created_at)
-                    VALUES (?, ?, ?, 'ACTIVE', ?)
-                    """, "admin-" + UUID.randomUUID(), "wenxian", hash, Timestamp.from(Instant.now()));
+            if (initialAdminUsername.isBlank() || initialAdminPassword.isBlank()) {
+                log.warn("管理台尚无管理员账号，且未配置 ADMIN_INITIAL_USERNAME / ADMIN_INITIAL_PASSWORD，已跳过默认账号创建");
+            } else {
+                String hash = adminPasswordEncoder.encode(initialAdminPassword);
+                jdbc.update("""
+                        INSERT INTO admin_user(id, username, password_hash, status, created_at)
+                        VALUES (?, ?, ?, 'ACTIVE', ?)
+                        """, "admin-" + UUID.randomUUID(), initialAdminUsername, hash, Timestamp.from(Instant.now()));
+            }
         }
         ensureGameplayConfig("account_public_turn_limit", "20");
         ensureGameplayConfig("custom_api_enabled", "true");
@@ -73,13 +91,20 @@ public class AdminService {
     // ---- auth ----
 
     public Map<String, Object> login(String username, String password) {
-        String hash = sha256(password);
         var users = jdbc.query(
-                "SELECT id FROM admin_user WHERE username = ? AND password_hash = ? AND status = 'ACTIVE'",
-                (row, idx) -> row.getString("id"), username, hash);
+                "SELECT id, password_hash FROM admin_user WHERE username = ? AND status = 'ACTIVE'",
+                (row, idx) -> Map.of("id", row.getString("id"), "passwordHash", row.getString("password_hash")), username);
         if (users.isEmpty()) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户名或密码错误");
 
-        String userId = users.getFirst();
+        Map<String, String> user = users.getFirst();
+        if (!matchesAdminPassword(password, user.get("passwordHash"))) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户名或密码错误");
+        }
+        String userId = user.get("id");
+        if (!user.get("passwordHash").startsWith("$2")) {
+            jdbc.update("UPDATE admin_user SET password_hash = ? WHERE id = ?",
+                    adminPasswordEncoder.encode(password), userId);
+        }
         String token = randomToken();
         String tokenHash = sha256(token);
         Instant now = Instant.now();
@@ -94,22 +119,95 @@ public class AdminService {
 
     @Transactional
     public void changePassword(String token, String oldPassword, String newPassword) {
-        String tokenHash = sha256(token);
-        var sessions = jdbc.query(
-                "SELECT user_id FROM admin_session WHERE token_hash = ? AND expires_at > ?",
-                (row, idx) -> row.getString("user_id"),
-                tokenHash, Timestamp.from(Instant.now()));
-        if (sessions.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"登录已过期，请重新登录");
+        String userId = authenticatedAdminId(token);
+        String currentHash = jdbc.queryForObject(
+                "SELECT password_hash FROM admin_user WHERE id = ?", String.class, userId);
+        if (!matchesAdminPassword(oldPassword, currentHash)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"旧密码不正确");
+        }
 
-        String userId = sessions.getFirst();
-        String oldHash = sha256(oldPassword);
-        int matched = count("SELECT count(*) FROM admin_user WHERE id = ? AND password_hash = ?", userId, oldHash);
-        if (matched == 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"旧密码不正确");
-
-        String newHash = sha256(newPassword);
+        String newHash = adminPasswordEncoder.encode(newPassword);
         jdbc.update("UPDATE admin_user SET password_hash = ? WHERE id = ?", newHash, userId);
         jdbc.update("DELETE FROM admin_session WHERE user_id = ?", userId);
         audit("CHANGE_PASSWORD", "管理员修改密码");
+    }
+
+    public List<Map<String, Object>> adminAccounts(String token) {
+        String currentAdminId = authenticatedAdminId(token);
+        Timestamp now = Timestamp.from(Instant.now());
+        return jdbc.query("""
+                SELECT u.id, u.username, u.status, u.created_at,
+                       max(s.created_at) AS last_login_at,
+                       coalesce(sum(case when s.expires_at > ? then 1 else 0 end), 0) AS active_sessions
+                FROM admin_user u
+                LEFT JOIN admin_session s ON s.user_id = u.id
+                GROUP BY u.id, u.username, u.status, u.created_at
+                ORDER BY case when u.status = 'ACTIVE' then 0 else 1 end, u.created_at
+                """, (row, index) -> {
+            Map<String, Object> account = new LinkedHashMap<>();
+            account.put("id", row.getString("id"));
+            account.put("username", row.getString("username"));
+            account.put("status", row.getString("status"));
+            account.put("createdAt", displayTime(row.getTimestamp("created_at")));
+            account.put("lastLoginAt", displayTime(row.getTimestamp("last_login_at")));
+            account.put("activeSessions", row.getInt("active_sessions"));
+            account.put("current", currentAdminId.equals(row.getString("id")));
+            return account;
+        }, now);
+    }
+
+    @Transactional
+    public Map<String, Object> createAdminAccount(String token, String username, String password) {
+        String operatorId = authenticatedAdminId(token);
+        String normalizedUsername = username == null ? "" : username.strip();
+        validateAdminCredentials(normalizedUsername, password);
+        try {
+            String id = "admin-" + UUID.randomUUID();
+            Instant now = Instant.now();
+            jdbc.update("""
+                    INSERT INTO admin_user(id, username, password_hash, status, created_at)
+                    VALUES (?, ?, ?, 'ACTIVE', ?)
+                    """, id, normalizedUsername, adminPasswordEncoder.encode(password), Timestamp.from(now));
+            audit("CREATE_ADMIN", "管理员 " + adminUsername(operatorId) + " 新增管理账号 " + normalizedUsername);
+            return Map.of("id", id, "username", normalizedUsername, "status", "ACTIVE",
+                    "createdAt", now.toString(), "lastLoginAt", "", "activeSessions", 0, "current", false);
+        } catch (org.springframework.dao.DuplicateKeyException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "该管理账号已存在");
+        }
+    }
+
+    @Transactional
+    public void updateAdminAccountStatus(String token, String targetId, boolean active) {
+        String operatorId = authenticatedAdminId(token);
+        Map<String, String> target = adminAccount(targetId);
+        String nextStatus = active ? "ACTIVE" : "DISABLED";
+        if (!active && operatorId.equals(targetId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能停用当前正在使用的管理账号");
+        }
+        if (!active && "ACTIVE".equals(target.get("status"))
+                && count("SELECT count(*) FROM admin_user WHERE status = 'ACTIVE'") <= 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "至少需要保留一个可用管理账号");
+        }
+        jdbc.update("UPDATE admin_user SET status = ? WHERE id = ?", nextStatus, targetId);
+        if (!active) jdbc.update("DELETE FROM admin_session WHERE user_id = ?", targetId);
+        audit("UPDATE_ADMIN_STATUS", "管理员 " + adminUsername(operatorId) + " 将管理账号 "
+                + target.get("username") + " 设为 " + (active ? "启用" : "停用"));
+    }
+
+    @Transactional
+    public String resetAdminAccountPassword(String token, String targetId) {
+        String operatorId = authenticatedAdminId(token);
+        if (operatorId.equals(targetId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前账号请使用“修改管理密码”功能");
+        }
+        Map<String, String> target = adminAccount(targetId);
+        String temporaryPassword = "Wx-" + randomCode(12);
+        jdbc.update("UPDATE admin_user SET password_hash = ? WHERE id = ?",
+                adminPasswordEncoder.encode(temporaryPassword), targetId);
+        jdbc.update("DELETE FROM admin_session WHERE user_id = ?", targetId);
+        audit("RESET_ADMIN_PASSWORD", "管理员 " + adminUsername(operatorId) + " 重置管理账号 "
+                + target.get("username") + " 的密码");
+        return temporaryPassword;
     }
 
     // ---- dashboard ----
@@ -531,6 +629,7 @@ public class AdminService {
         String from = """
                 FROM app_user u
                 LEFT JOIN game_save gs ON gs.user_id = u.id
+                LEFT JOIN user_ai_credential cred ON cred.user_id = u.id
                 LEFT JOIN (
                     SELECT user_id, count(*) archive_count
                     FROM game_life_archive GROUP BY user_id
@@ -541,7 +640,9 @@ public class AdminService {
         String sql = """
                 SELECT u.id, u.email, u.registered_at, u.last_login_at,
                        gs.id AS save_id, gs.state_json, gs.updated_at AS save_updated,
-                       coalesce(arc.archive_count, 0) AS archive_count
+                       coalesce(arc.archive_count, 0) AS archive_count,
+                       cred.masked_suffix credential_suffix, cred.status credential_status,
+                       cred.last_verified_at credential_verified_at
                 """ + from + where + " ORDER BY u.last_login_at DESC, u.registered_at DESC LIMIT ? OFFSET ?";
         List<Object> pageArgs = new ArrayList<>(args);
         pageArgs.add(limit);
@@ -579,6 +680,11 @@ public class AdminService {
             user.put("totalTokens", 0);
             user.put("saveUpdated", row.getTimestamp("save_updated") != null
                     ? displayTime(row.getTimestamp("save_updated")) : null);
+            user.put("credentialConfigured", row.getString("credential_status") != null);
+            user.put("credentialStatus", row.getString("credential_status") == null ? "" : row.getString("credential_status"));
+            user.put("credentialSuffix", row.getString("credential_suffix") == null ? "" : row.getString("credential_suffix"));
+            user.put("credentialVerifiedAt", row.getTimestamp("credential_verified_at") == null
+                    ? null : displayTime(row.getTimestamp("credential_verified_at")));
             return user;
         }, pageArgs.toArray());
 
@@ -792,13 +898,39 @@ public class AdminService {
     public List<Map<String, Object>> modelConfigs() {
         ensureModelRows();
         return jdbc.query("select provider_code, model_code, display_name, secret_ciphertext, active, updated_at from ai_model_config order by provider_code, model_code desc",
-                (row, idx) -> Map.<String, Object>of(
-                        "providerCode", row.getString("provider_code"),
-                        "modelCode", row.getString("model_code"),
-                        "displayName", row.getString("display_name"),
-                        "keyConfigured", row.getString("secret_ciphertext") != null && !row.getString("secret_ciphertext").isBlank(),
-                        "active", row.getBoolean("active"),
-                        "updatedAt", displayTime(row.getTimestamp("updated_at"))));
+                (row, idx) -> {
+                    String modelCode = row.getString("model_code");
+                    String ciphertext = row.getString("secret_ciphertext");
+                    boolean databaseKey = ciphertext != null && !ciphertext.isBlank();
+                    String key = "";
+                    String keyState = "MISSING";
+                    try {
+                        key = databaseKey ? SecretCipher.decrypt(ciphertext, aiConfigMasterKey) : fallbackApiKey;
+                        keyState = key.isBlank() ? "MISSING" : "CONFIGURED";
+                    } catch (IllegalStateException error) {
+                        keyState = "DECRYPT_ERROR";
+                    }
+                    List<Map<String, Object>> recent = jdbc.query("""
+                            select status, created_at from ai_usage_log
+                            where credential_source = 'PUBLIC' and substring_index(model, '@', 1) = ?
+                            order by created_at desc limit 1
+                            """, (usage, usageIndex) -> Map.<String, Object>of(
+                            "status", usage.getString("status"),
+                            "at", displayTime(usage.getTimestamp("created_at"))), modelCode);
+                    Map<String, Object> result = new LinkedHashMap<>();
+                    result.put("providerCode", row.getString("provider_code"));
+                    result.put("modelCode", modelCode);
+                    result.put("displayName", row.getString("display_name"));
+                    result.put("keyConfigured", !key.isBlank());
+                    result.put("keySource", databaseKey ? "DATABASE" : key.isBlank() ? "MISSING" : "SERVER_DEFAULT");
+                    result.put("keySuffix", suffix(key));
+                    result.put("keyState", keyState);
+                    result.put("active", row.getBoolean("active"));
+                    result.put("updatedAt", displayTime(row.getTimestamp("updated_at")));
+                    result.put("lastRequestStatus", recent.isEmpty() ? "" : recent.getFirst().get("status"));
+                    result.put("lastUsedAt", recent.isEmpty() ? "" : recent.getFirst().get("at"));
+                    return result;
+                });
     }
 
     @Transactional
@@ -835,9 +967,60 @@ public class AdminService {
 
     // ---- helpers ----
 
+    private String authenticatedAdminId(String token) {
+        if (token == null || token.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "登录已过期，请重新登录");
+        }
+        var sessions = jdbc.query("""
+                        SELECT s.user_id
+                        FROM admin_session s
+                        JOIN admin_user u ON u.id = s.user_id
+                        WHERE s.token_hash = ? AND s.expires_at > ? AND u.status = 'ACTIVE'
+                        """,
+                (row, index) -> row.getString("user_id"), sha256(token), Timestamp.from(Instant.now()));
+        if (sessions.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "登录已过期，请重新登录");
+        }
+        return sessions.getFirst();
+    }
+
+    private Map<String, String> adminAccount(String id) {
+        var accounts = jdbc.query("SELECT username, status FROM admin_user WHERE id = ?",
+                (row, index) -> Map.of("username", row.getString("username"), "status", row.getString("status")), id);
+        if (accounts.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "管理账号不存在");
+        return accounts.getFirst();
+    }
+
+    private String adminUsername(String id) {
+        return adminAccount(id).get("username");
+    }
+
+    private static void validateAdminCredentials(String username, String password) {
+        if (!username.matches("^[A-Za-z0-9_.-]{3,32}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "账号需为 3-32 位字母、数字、点、横线或下划线");
+        }
+        if (password == null || password.length() < 8 || password.length() > 72) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "密码需为 8-72 位");
+        }
+    }
+
+    private boolean matchesAdminPassword(String password, String storedHash) {
+        if (password == null || storedHash == null) return false;
+        return storedHash.startsWith("$2")
+                ? adminPasswordEncoder.matches(password, storedHash)
+                : MessageDigest.isEqual(sha256(password).getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                        storedHash.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     private static String displayTime(Timestamp timestamp) {
         if (timestamp == null) return null;
         return timestamp.toLocalDateTime().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toString();
+    }
+
+    private static String suffix(String secret) {
+        if (secret == null || secret.isBlank()) return "";
+        int start = Math.max(0, secret.length() - 4);
+        return secret.substring(start);
     }
 
     private static Map<String, Object> emptyDailyUsage(String date) {
