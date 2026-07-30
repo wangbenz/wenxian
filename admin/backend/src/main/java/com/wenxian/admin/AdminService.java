@@ -832,6 +832,46 @@ public class AdminService {
         );
     }
 
+    public List<Map<String, Object>> currentTurnRanking(int requestedLimit) {
+        int limit = Math.max(1, Math.min(requestedLimit, 50));
+        List<Map<String, Object>> ranking = jdbc.query("""
+                SELECT u.id user_id, u.email, u.last_login_at,
+                       gs.id save_id, gs.state_json, gs.updated_at
+                FROM game_save gs
+                JOIN app_user u ON u.id = gs.user_id
+                WHERE u.status = 'ACTIVE'
+                """, (row, index) -> {
+            String playerName = "";
+            String realm = "";
+            int turn = 0;
+            try {
+                JsonNode state = mapper.readTree(row.getString("state_json"));
+                playerName = state.path("player").path("name").asText("");
+                realm = state.path("player").path("realm").asText("");
+                turn = Math.max(0, state.path("turn").asInt(0));
+            } catch (Exception ignored) { }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("userId", row.getString("user_id"));
+            item.put("email", row.getString("email"));
+            item.put("saveId", row.getString("save_id"));
+            item.put("playerName", playerName);
+            item.put("realm", realm);
+            item.put("turn", turn);
+            item.put("lastActiveAt", displayTime(row.getTimestamp("last_login_at")));
+            item.put("saveUpdatedAt", displayTime(row.getTimestamp("updated_at")));
+            return item;
+        });
+        ranking.sort((left, right) -> {
+            int byTurn = Integer.compare(
+                    ((Number) right.get("turn")).intValue(),
+                    ((Number) left.get("turn")).intValue());
+            if (byTurn != 0) return byTurn;
+            return String.valueOf(right.get("saveUpdatedAt"))
+                    .compareTo(String.valueOf(left.get("saveUpdatedAt")));
+        });
+        return ranking.stream().limit(limit).toList();
+    }
+
     public Map<String, Object> userDetail(String userId) {
         var users = jdbc.query("""
                 SELECT u.id, u.email, u.status, u.registered_at, u.last_login_at,

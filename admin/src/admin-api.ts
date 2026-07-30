@@ -48,6 +48,10 @@ export type UserRow = {
   credentialVerifiedAt?: string | null;
 };
 export type UserListResult = [{ total: number; page: number; size: number }, { rows: UserRow[] }];
+export type TurnRankingItem = {
+  userId: string; email: string; saveId: string; playerName: string; realm: string;
+  turn: number; lastActiveAt: string | null; saveUpdatedAt: string | null;
+};
 
 export type LifeSummary = {
   status: "CURRENT" | "ARCHIVED"; saveId: string; at: string; playerName: string;
@@ -114,6 +118,7 @@ export const adminApi = {
   inviteCodes: (status = "") => request<InviteCodeItem[]>(`/invite-codes?status=${encodeURIComponent(status)}`),
   generateInviteCodes: (count: number, maxUses: number) => request<{ codes: string[]; count: number }>("/invite-codes", { method: "POST", body: JSON.stringify({ count, maxUses }) }),
   users: (search = "", characterState = "", difficulty = "", realm = "", registeredDate = "", page = 0, size = 20) => request<UserListResult>(`/users?search=${encodeURIComponent(search)}&characterState=${characterState}&difficulty=${difficulty}&realm=${encodeURIComponent(realm)}&registeredDate=${encodeURIComponent(registeredDate)}&page=${page}&size=${size}`),
+  turnRanking: (limit = 10) => request<TurnRankingItem[]>(`/users/turn-ranking?limit=${limit}`),
   userDetail: (userId: string) => request<UserDetail>(`/users/${encodeURIComponent(userId)}`),
   resetPlayerPassword: (userId: string) => request<{ temporaryPassword: string }>(`/users/${encodeURIComponent(userId)}/temporary-password`, { method: "POST" }),
   unlockPlayerAuth: (userId: string) => request<{ ok: boolean; message: string }>(`/users/${encodeURIComponent(userId)}/unlock-auth`, { method: "POST" }),

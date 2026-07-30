@@ -118,6 +118,12 @@ public class AdminController {
         return adminService.users(search, characterState, difficulty, realm, registeredDate, page, size);
     }
 
+    @GetMapping("/users/turn-ranking")
+    public List<Map<String, Object>> currentTurnRanking(
+            @RequestParam(defaultValue = "10") int limit) {
+        return adminService.currentTurnRanking(limit);
+    }
+
     @GetMapping("/users/{userId}")
     public Map<String, Object> userDetail(@PathVariable String userId) {
         Map<String, Object> detail = adminService.userDetail(userId);

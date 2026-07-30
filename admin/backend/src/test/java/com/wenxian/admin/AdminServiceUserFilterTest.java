@@ -130,6 +130,27 @@ class AdminServiceUserFilterTest {
         assertEquals(0, service.usersReachingTurnMilestone(5));
     }
 
+    @Test
+    void ranksCurrentCharactersByTheirOwnTurnCount() {
+        insertUser("user-low", "low@example.com", "2026-07-30", 10);
+        insertUser("user-high", "high@example.com", "2026-07-30", 11);
+        jdbc.update("""
+                insert into game_save(id,user_id,state_json,updated_at)
+                values ('save-low','user-low','{"turn":3,"player":{"name":"低回合","realm":"凡俗"}}',current_timestamp)
+                """);
+        jdbc.update("""
+                insert into game_save(id,user_id,state_json,updated_at)
+                values ('save-high','user-high','{"turn":18,"player":{"name":"高回合","realm":"引气"}}',current_timestamp)
+                """);
+
+        List<Map<String, Object>> ranking = service.currentTurnRanking(10);
+
+        assertEquals(2, ranking.size());
+        assertEquals("user-high", ranking.getFirst().get("userId"));
+        assertEquals(18, ranking.getFirst().get("turn"));
+        assertEquals("高回合", ranking.getFirst().get("playerName"));
+    }
+
     private void insertUser(String id, String email, String date, int hour) {
         ZoneId shanghai = ZoneId.of("Asia/Shanghai");
         Timestamp registeredAt = Timestamp.from(LocalDate.parse(date).atTime(hour, 0)

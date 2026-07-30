@@ -1,6 +1,6 @@
 import "./App.css";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { adminApi, clearToken, isAuthenticated, setToken, type AdminAccount, type AgentExecution, type DashboardData, type GameplayConfig, type LifeSummary, type ModelConfig, type RegistrationConfig, type ReleaseNoteAdmin, type TurnPage, type TurnRow, type UserDetail, type UserRow } from "./admin-api";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { adminApi, clearToken, isAuthenticated, setToken, type AdminAccount, type AgentExecution, type DashboardData, type GameplayConfig, type LifeSummary, type ModelConfig, type RegistrationConfig, type ReleaseNoteAdmin, type TurnPage, type TurnRankingItem, type TurnRow, type UserDetail, type UserRow } from "./admin-api";
 
 type Page = "dashboard" | "users" | "releases" | "models" | "limits" | "operations" | "admins" | "logs";
 const NAV: Array<[Page, string, string]> = [
@@ -12,6 +12,7 @@ const NAV: Array<[Page, string, string]> = [
 const fmt = (value?: string | null) => value ? new Date(value).toLocaleString("zh-CN") : "—";
 const shanghaiDate = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date());
 const num = (value: number) => new Intl.NumberFormat("zh-CN").format(value || 0);
+const compactNum = (value: number) => new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(value || 0);
 const latency = (value: number) => value ? `${(value / 1000).toFixed(1)} 秒` : "—";
 const difficulty = (value: string) => value === "HARD" ? "困难" : "普通";
 const lifeEndReason = (value: LifeSummary["endReason"]) => value === "DEAD" ? "身死道消" : value === "RESTARTED" ? "主动重开" : value === "ACTIVE" ? "当前命卷" : "旧版记录";
@@ -52,6 +53,38 @@ function Shell({ onLogout }: { onLogout: () => void }) {
 }
 
 function State({ loading, error, children }: { loading: boolean; error: string; children: ReactNode }) { if (loading) return <div aria-live="polite" className="state state-loading"><i /><span>正在读取数据…</span></div>; if (error) return <div className="state error" role="alert">{error}</div>; return <>{children}</>; }
+
+type SelectOption = { value: string; label: string };
+
+function SelectMenu({ label, value, options, onChange }: {
+  label: string; value: string; options: SelectOption[]; onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (root.current && !root.current.contains(event.target as Node)) setOpen(false);
+    };
+    const closeEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    window.addEventListener("keydown", closeEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      window.removeEventListener("keydown", closeEscape);
+    };
+  }, []);
+  return <div className={open ? "select-menu open" : "select-menu"} ref={root}>
+    <button aria-expanded={open} aria-haspopup="listbox" aria-label={`${label}：${selected.label}`} className="select-trigger" onClick={() => setOpen((current) => !current)} type="button">
+      <span>{selected.label}</span><b aria-hidden="true">⌄</b>
+    </button>
+    {open && <div aria-label={label} className="select-options" role="listbox">{options.map((option) =>
+      <button aria-selected={option.value === value} key={option.value || "all"} onClick={() => { onChange(option.value); setOpen(false); }} role="option" type="button">{option.label}{option.value === value && <span aria-hidden="true">✓</span>}</button>
+    )}</div>}
+  </div>;
+}
 
 function Dashboard({ onSelectRegistrationDate }: { onSelectRegistrationDate: (date: string) => void }) {
   const query = useLoad<DashboardData>(() => adminApi.dashboard(), []);
@@ -101,19 +134,22 @@ function RegistrationTrend({ days, onSelectDate }: { days: DashboardData["dailyR
 }
 
 function TokenTrend({ days, trackingStartedAt }: { days: DashboardData["dailyTokens"]; trackingStartedAt: string }) {
-  const maximum = Math.max(1, ...days.flatMap((day) => [
+  const [range, setRange] = useState<7 | 14>(7);
+  const visibleDays = days.slice(-range);
+  const maximum = Math.max(1, ...visibleDays.flatMap((day) => [
     day.platformPromptTokens + day.platformCompletionTokens,
     day.customPromptTokens + day.customCompletionTokens,
   ]));
   const trackingNote = trackingStartedAt ? ` · 自 ${fmt(trackingStartedAt)} 起` : "";
-  return <Panel title={`近14日 Token 用量${trackingNote}`}><div className="token-legend"><span><i className="platform" />平台</span><span><i className="custom" />玩家自备</span></div><div className="token-trend">{days.map((day) => {
+  const title = <div className="panel-title-row"><span>近{range}日 Token 用量{trackingNote}</span><span className="range-switch" aria-label="Token 统计范围"><button aria-pressed={range === 7} onClick={() => setRange(7)} type="button">近7天</button><button aria-pressed={range === 14} onClick={() => setRange(14)} type="button">近14天</button></span></div>;
+  return <Panel title={title}><div className="token-legend"><span><i className="platform" />平台</span><span><i className="custom" />玩家自备</span></div><div className="token-trend-scroll"><div className="token-trend" style={{ gridTemplateColumns: `repeat(${range}, minmax(54px, 1fr))`, minWidth: range === 7 ? 500 : 880 }}>{visibleDays.map((day) => {
     const platform = day.platformPromptTokens + day.platformCompletionTokens;
     const custom = day.customPromptTokens + day.customCompletionTokens;
     return <article key={day.date} title={`${day.date}：平台 ${num(platform)}，玩家自备 ${num(custom)} Token`}>
       <div className="token-bars"><i className="platform" style={{ height: `${Math.max(platform > 0 ? 5 : 0, platform / maximum * 100)}%` }} /><i className="custom" style={{ height: `${Math.max(custom > 0 ? 5 : 0, custom / maximum * 100)}%` }} /></div>
-      <strong>{num(platform)} / {num(custom)}</strong><span>{day.date.slice(5)}</span><small>平台 {day.platformTurns} 回 · 玩家 {day.customTurns} 回</small>
+      <div className="token-values"><span><i className="platform" />{compactNum(platform)}</span><span><i className="custom" />{compactNum(custom)}</span></div><strong>{day.date.slice(5)}</strong><small>平台 {day.platformTurns} 回 · 玩家 {day.customTurns} 回</small>
     </article>;
-  })}</div><div className="table-scroll"><table className="usage-table"><thead><tr><th>日期</th><th>平台 Token</th><th>玩家 Token</th><th>平台回合</th><th>玩家回合</th><th>模型</th><th>模型请求</th><th>失败数</th><th>统计口径</th></tr></thead><tbody>{days.slice().reverse().map((day) => <tr key={day.date}><td>{day.date}</td><td>{num(day.platformPromptTokens + day.platformCompletionTokens)}</td><td>{num(day.customPromptTokens + day.customCompletionTokens)}</td><td>{num(day.platformTurns)}</td><td>{num(day.customTurns)}</td><td>{day.models || "—"}</td><td>{num(day.requests)}</td><td>{num(day.failures)}</td><td>{day.estimatedRequests > 0 ? "历史章节估算" : "逐次调用"}</td></tr>)}</tbody></table></div></Panel>;
+  })}</div></div><div className="table-scroll"><table className="usage-table"><thead><tr><th>日期</th><th>平台 Token</th><th>玩家 Token</th><th>平台回合</th><th>玩家回合</th><th>模型</th><th>模型请求</th><th>失败数</th><th>统计口径</th></tr></thead><tbody>{visibleDays.slice().reverse().map((day) => <tr key={day.date}><td>{day.date}</td><td>{num(day.platformPromptTokens + day.platformCompletionTokens)}</td><td>{num(day.customPromptTokens + day.customCompletionTokens)}</td><td>{num(day.platformTurns)}</td><td>{num(day.customTurns)}</td><td>{day.models || "—"}</td><td>{num(day.requests)}</td><td>{num(day.failures)}</td><td>{day.estimatedRequests > 0 ? "历史章节估算" : "逐次调用"}</td></tr>)}</tbody></table></div></Panel>;
 }
 
 function ModelUsage({ rows }: { rows: DashboardData["modelUsage"] }) {
@@ -124,8 +160,42 @@ function Users({ initialRegisteredDate = "" }: { initialRegisteredDate?: string 
   const [search, setSearch] = useState(""); const [debouncedSearch, setDebouncedSearch] = useState(""); const [state, setState] = useState(""); const [difficultyFilter, setDifficulty] = useState(""); const [registeredDate, setRegisteredDate] = useState(initialRegisteredDate); const [page, setPage] = useState(0); const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => { const timer = window.setTimeout(() => setDebouncedSearch(search), 350); return () => window.clearTimeout(timer); }, [search]);
   const query = useLoad(() => adminApi.users(debouncedSearch, state, difficultyFilter, "", registeredDate, page, 20), [debouncedSearch, state, difficultyFilter, registeredDate, page]);
+  const ranking = useLoad<TurnRankingItem[]>(() => adminApi.turnRanking(10), []);
   const meta = query.data?.[0]; const rows = query.data?.[1].rows ?? [];
-  return <><div className="filters"><label className="search-field"><span className="sr-only">搜索玩家</span><input placeholder="搜索完整邮箱、角色名、用户或存档 ID" value={search} onChange={(e) => { setSearch(e.currentTarget.value); setPage(0); }} /></label><label><span className="sr-only">注册日期</span><input aria-label="注册日期" type="date" value={registeredDate} onChange={(e) => { setRegisteredDate(e.currentTarget.value); setPage(0); }} /></label><label><span className="sr-only">角色状态</span><select aria-label="角色状态" value={state} onChange={(e) => { setState(e.currentTarget.value); setPage(0); }}><option value="">全部角色状态</option><option value="NONE">尚未创建角色</option><option value="CURRENT">当前有角色</option><option value="RESTARTED">仅有前世记录</option></select></label><label><span className="sr-only">游戏难度</span><select aria-label="游戏难度" value={difficultyFilter} onChange={(e) => { setDifficulty(e.currentTarget.value); setPage(0); }}><option value="">全部难度</option><option value="NORMAL">普通</option><option value="HARD">困难</option></select></label></div><div className="filter-shortcuts"><button onClick={() => { setRegisteredDate(shanghaiDate()); setState("NONE"); setPage(0); }} type="button">今日注册但未创建角色</button>{(registeredDate || state || difficultyFilter || search) && <button onClick={() => { setSearch(""); setRegisteredDate(""); setState(""); setDifficulty(""); setPage(0); }} type="button">清除筛选</button>}</div><State loading={query.loading} error={query.error}><Panel title={`玩家列表 · ${meta?.total ?? 0}${registeredDate ? ` · ${registeredDate} 注册` : ""}`}><div className="desktop-player-table"><Table label="玩家列表"><thead><tr><th>邮箱</th><th>当前角色</th><th>状态</th><th>难度</th><th>回合</th><th>密钥</th><th>前世</th><th>最近活动</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>{rows.map((user: UserRow) => <tr key={user.userId}><td>{user.email}<small title={user.userId}>{shortId(user.userId)}</small></td><td>{user.playerName || "尚未创建角色"}<small>{user.realm || "—"}</small></td><td><Badge value={user.characterState} /></td><td>{user.saveId ? difficulty(user.difficulty) : "—"}</td><td>{user.turnCount}</td><td>{user.credentialConfigured ? `•••• ${user.credentialSuffix}` : "平台"}</td><td>{user.archiveCount}</td><td>{fmt(user.lastLoginAt)}</td><td><button className="table-action" onClick={() => setSelected(user.userId)}>查看</button></td></tr>)}</tbody></Table></div><div className="mobile-player-list">{rows.map((user: UserRow) => <button className="player-card" key={user.userId} onClick={() => setSelected(user.userId)}><span className="player-card-main"><strong>{user.email}</strong><small>{user.playerName || "尚未创建角色"} · {user.realm || "未入世"}</small></span><span className="player-card-meta"><Badge value={user.characterState} /><small>{user.credentialConfigured ? `自备 •••• ${user.credentialSuffix}` : "平台密钥"}</small><small>{relativeTime(user.lastLoginAt)}</small><b aria-hidden="true">›</b></span></button>)}</div>{rows.length === 0 && <p className="empty-state">没有符合当前条件的玩家。</p>}<Pager page={page} size={20} total={meta?.total ?? 0} onPage={setPage} /></Panel></State>{selected && <UserDrawer userId={selected} onClose={() => setSelected(null)} />}</>;
+  return <>
+    <State loading={ranking.loading} error={ranking.error}>
+      {ranking.data && <TurnRanking rows={ranking.data} onSelect={setSelected} />}
+    </State>
+    <div className="filters">
+      <label className="search-field"><span className="sr-only">搜索玩家</span><input placeholder="搜索完整邮箱、角色名、用户或存档 ID" value={search} onChange={(e) => { setSearch(e.currentTarget.value); setPage(0); }} /></label>
+      <label><span className="sr-only">注册日期</span><input aria-label="注册日期" type="date" value={registeredDate} onChange={(e) => { setRegisteredDate(e.currentTarget.value); setPage(0); }} /></label>
+      <SelectMenu label="角色状态" value={state} onChange={(value) => { setState(value); setPage(0); }} options={[
+        { value: "", label: "全部角色状态" },
+        { value: "NONE", label: "尚未创建角色" },
+        { value: "CURRENT", label: "当前有角色" },
+        { value: "RESTARTED", label: "仅有前世记录" },
+      ]} />
+      <SelectMenu label="游戏难度" value={difficultyFilter} onChange={(value) => { setDifficulty(value); setPage(0); }} options={[
+        { value: "", label: "全部难度" },
+        { value: "NORMAL", label: "普通" },
+        { value: "HARD", label: "困难" },
+      ]} />
+    </div>
+    <div className="filter-shortcuts"><button onClick={() => { setRegisteredDate(shanghaiDate()); setState("NONE"); setPage(0); }} type="button">今日注册但未创建角色</button>{(registeredDate || state || difficultyFilter || search) && <button onClick={() => { setSearch(""); setRegisteredDate(""); setState(""); setDifficulty(""); setPage(0); }} type="button">清除筛选</button>}</div>
+    <State loading={query.loading} error={query.error}>
+      <Panel title={`玩家列表 · ${meta?.total ?? 0}${registeredDate ? ` · ${registeredDate} 注册` : ""}`}>
+        <div className="desktop-player-table"><Table label="玩家列表"><thead><tr><th>邮箱</th><th>当前角色</th><th>状态</th><th>难度</th><th>回合</th><th>密钥</th><th>前世</th><th>最近活动</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>{rows.map((user: UserRow) => <tr key={user.userId}><td>{user.email}<small title={user.userId}>{shortId(user.userId)}</small></td><td>{user.playerName || "尚未创建角色"}<small>{user.realm || "—"}</small></td><td><Badge value={user.characterState} /></td><td>{user.saveId ? difficulty(user.difficulty) : "—"}</td><td>{user.turnCount}</td><td>{user.credentialConfigured ? `•••• ${user.credentialSuffix}` : "平台"}</td><td>{user.archiveCount}</td><td>{fmt(user.lastLoginAt)}</td><td><button className="table-action" onClick={() => setSelected(user.userId)}>查看</button></td></tr>)}</tbody></Table></div>
+        <div className="mobile-player-list">{rows.map((user: UserRow) => <button className="player-card" key={user.userId} onClick={() => setSelected(user.userId)}><span className="player-card-main"><strong>{user.email}</strong><small>{user.playerName || "尚未创建角色"} · {user.realm || "未入世"}</small></span><span className="player-card-meta"><Badge value={user.characterState} /><small>{user.credentialConfigured ? `自备 •••• ${user.credentialSuffix}` : "平台密钥"}</small><small>{relativeTime(user.lastLoginAt)}</small><b aria-hidden="true">›</b></span></button>)}</div>
+        {rows.length === 0 && <p className="empty-state">没有符合当前条件的玩家。</p>}
+        <Pager page={page} size={20} total={meta?.total ?? 0} onPage={setPage} />
+      </Panel>
+    </State>
+    {selected && <UserDrawer userId={selected} onClose={() => setSelected(null)} />}
+  </>;
+}
+
+function TurnRanking({ rows, onSelect }: { rows: TurnRankingItem[]; onSelect: (userId: string) => void }) {
+  return <Panel title="当前角色回合榜 · 前 10 名"><div className="turn-ranking">{rows.map((row, index) => <button key={row.userId} onClick={() => onSelect(row.userId)} type="button"><span className={index < 3 ? `rank rank-${index + 1}` : "rank"}>{index + 1}</span><span className="rank-player"><strong>{row.playerName || "尚未命名"}</strong><small>{row.email}</small><small>{row.realm || "尚未入道"} · {relativeTime(row.lastActiveAt)}</small></span><b>{num(row.turn)}<small>回</small></b></button>)}</div>{rows.length === 0 && <p className="empty-state">目前还没有已创建角色的玩家。</p>}<p className="panel-note">只统计玩家当前命卷，前世回合不会累加；点击玩家可查看完整账号与历代角色。</p></Panel>;
 }
 
 function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }) {
