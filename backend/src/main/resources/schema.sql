@@ -140,6 +140,7 @@ create table if not exists game_life_archive (
     user_id varchar(64) not null,
     original_save_id varchar(80) not null,
     state_json longtext not null,
+    end_reason varchar(24) not null default 'LEGACY',
     ended_at timestamp(6) not null,
     index idx_life_archive_user (user_id, ended_at),
     constraint fk_life_archive_user foreign key (user_id) references app_user(id)

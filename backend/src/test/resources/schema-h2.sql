@@ -141,6 +141,7 @@ create table game_life_archive (
     user_id varchar(64) not null,
     original_save_id varchar(80) not null,
     state_json clob not null,
+    end_reason varchar(24) not null default 'LEGACY',
     ended_at timestamp not null,
     constraint fk_life_archive_user foreign key (user_id) references app_user(id)
 );

@@ -65,6 +65,8 @@ class SaveStoreTest {
 
             assertEquals(0, jdbc.queryForObject("select count(*) from game_save", Integer.class));
             assertEquals(1, jdbc.queryForObject("select count(*) from game_life_archive", Integer.class));
+            assertEquals("RESTARTED", jdbc.queryForObject(
+                    "select end_reason from game_life_archive", String.class));
             assertEquals(1, jdbc.queryForObject("select count(*) from game_life_turn_archive", Integer.class));
             assertEquals("向前行走", jdbc.queryForObject(
                     "select player_action from game_life_turn_archive", String.class));

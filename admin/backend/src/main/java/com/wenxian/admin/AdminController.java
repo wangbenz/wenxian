@@ -112,9 +112,10 @@ public class AdminController {
             @RequestParam(defaultValue = "") String characterState,
             @RequestParam(defaultValue = "") String difficulty,
             @RequestParam(defaultValue = "") String realm,
+            @RequestParam(defaultValue = "") String registeredDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return adminService.users(search, characterState, difficulty, realm, page, size);
+        return adminService.users(search, characterState, difficulty, realm, registeredDate, page, size);
     }
 
     @GetMapping("/users/{userId}")

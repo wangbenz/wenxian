@@ -2,6 +2,11 @@ export type LoginResponse = { ok: boolean; token: string };
 
 export type DashboardData = {
   totalUsers: number; usersWithCharacter: number; todayActive: number; onlinePlayers: number;
+  usersWithAnyCharacter: number; currentCharacters: number; historicalCharacters: number; totalCharacters: number;
+  usersWithHistoricalCharacters: number; deadCharacters: number; restartedCharacters: number;
+  activationFunnel: Array<{ key: string; label: string; users: number; conversion: number }>;
+  todayRegistrations: number; yesterdayRegistrations: number;
+  dailyRegistrations: Array<{ date: string; count: number }>;
   totalTurns: number; todayTurns: number; avgLatency: number; currentModel: string;
   totalPlatformTurns: number; totalCustomTurns: number; todayPlatformTurns: number; todayCustomTurns: number;
   customApiUsers: number; todayPublicInvocations: number;
@@ -10,6 +15,8 @@ export type DashboardData = {
   todayPlatformCacheHitTokens: number; todayPlatformCacheMissTokens: number;
   todayCustomPromptTokens: number; todayCustomCompletionTokens: number;
   totalPlatformTokens: number; totalCustomTokens: number;
+  todayPlatformAverageTokensPerChapter: number; todayCustomAverageTokensPerChapter: number;
+  lockedLoginPairs: number; platformKeyHealthy: boolean;
   usageTrackingStartedAt: string;
   dailyTokens: Array<{
     date: string; platformPromptTokens: number; platformCompletionTokens: number;
@@ -45,11 +52,14 @@ export type UserListResult = [{ total: number; page: number; size: number }, { r
 export type LifeSummary = {
   status: "CURRENT" | "ARCHIVED"; saveId: string; at: string; playerName: string;
   realm: string; race: string; difficulty: "NORMAL" | "HARD"; phase: string; turn: number; sceneTitle: string;
+  endReason: "ACTIVE" | "DEAD" | "RESTARTED" | "LEGACY"; endingTitle: string; endingDetail: string; totalTokens: number;
 };
 export type UserDetail = {
   user: { userId: string; email: string; status: string; registeredAt: string; lastLoginAt: string | null;
     passwordConfigured: boolean; passwordSetAt?: string | null; registrationNetwork?: string | null;
     credentialConfigured: boolean; credentialStatus?: string | null; credentialSuffix?: string | null; credentialVerifiedAt?: string | null };
+  accountSummary: { totalCharacters: number; currentCharacters: number; historicalCharacters: number;
+    totalTurns: number; totalTokens: number; longestLifeName: string; longestLifeTurns: number };
   currentLives: LifeSummary[]; historicalLives: LifeSummary[];
 };
 export type TurnPage = { total: number; page: number; size: number; rows: Array<{
@@ -103,7 +113,7 @@ export const adminApi = {
   dashboard: () => request<DashboardData>("/dashboard"),
   inviteCodes: (status = "") => request<InviteCodeItem[]>(`/invite-codes?status=${encodeURIComponent(status)}`),
   generateInviteCodes: (count: number, maxUses: number) => request<{ codes: string[]; count: number }>("/invite-codes", { method: "POST", body: JSON.stringify({ count, maxUses }) }),
-  users: (search = "", characterState = "", difficulty = "", realm = "", page = 0, size = 20) => request<UserListResult>(`/users?search=${encodeURIComponent(search)}&characterState=${characterState}&difficulty=${difficulty}&realm=${encodeURIComponent(realm)}&page=${page}&size=${size}`),
+  users: (search = "", characterState = "", difficulty = "", realm = "", registeredDate = "", page = 0, size = 20) => request<UserListResult>(`/users?search=${encodeURIComponent(search)}&characterState=${characterState}&difficulty=${difficulty}&realm=${encodeURIComponent(realm)}&registeredDate=${encodeURIComponent(registeredDate)}&page=${page}&size=${size}`),
   userDetail: (userId: string) => request<UserDetail>(`/users/${encodeURIComponent(userId)}`),
   resetPlayerPassword: (userId: string) => request<{ temporaryPassword: string }>(`/users/${encodeURIComponent(userId)}/temporary-password`, { method: "POST" }),
   unlockPlayerAuth: (userId: string) => request<{ ok: boolean; message: string }>(`/users/${encodeURIComponent(userId)}/unlock-auth`, { method: "POST" }),

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -86,6 +87,16 @@ public class AdminService {
         }
         ensureGameplayConfig("account_public_turn_limit", "20");
         ensureGameplayConfig("custom_api_enabled", "true");
+        ensureLifeArchiveEndReasonColumn();
+    }
+
+    private void ensureLifeArchiveEndReasonColumn() {
+        try {
+            jdbc.query("select end_reason from game_life_archive where 1=0",
+                    (row, index) -> row.getString(1));
+        } catch (DataAccessException missing) {
+            jdbc.execute("alter table game_life_archive add column end_reason varchar(24) not null default 'LEGACY'");
+        }
     }
 
     // ---- auth ----
@@ -227,7 +238,49 @@ public class AdminService {
         Integer onlinePlayers = jdbc.queryForObject(
                 "SELECT count(*) FROM app_user WHERE status = 'ACTIVE' AND last_login_at >= ?",
                 Integer.class, Timestamp.from(Instant.now().minus(Duration.ofMinutes(15))));
-        int totalSaves = count("SELECT count(*) FROM game_save");
+        Timestamp registrationsSince = Timestamp.from(today.minusDays(13)
+                .atStartOfDay(reportingZone).toInstant());
+        List<Map<String, Object>> rawDailyRegistrations = jdbc.query("""
+                SELECT DATE(registered_at) registration_date, count(*) registration_count
+                FROM app_user
+                WHERE registered_at >= ?
+                GROUP BY DATE(registered_at)
+                ORDER BY registration_date
+                """, (row, index) -> Map.<String, Object>of(
+                "date", row.getDate("registration_date").toLocalDate().toString(),
+                "count", row.getLong("registration_count")
+        ), registrationsSince);
+        Map<String, Long> registrationsByDate = new LinkedHashMap<>();
+        rawDailyRegistrations.forEach(day -> registrationsByDate.put(
+                String.valueOf(day.get("date")), ((Number) day.get("count")).longValue()));
+        List<Map<String, Object>> dailyRegistrations = new ArrayList<>();
+        for (int offset = 13; offset >= 0; offset--) {
+            String date = today.minusDays(offset).toString();
+            dailyRegistrations.add(Map.of(
+                    "date", date,
+                    "count", registrationsByDate.getOrDefault(date, 0L)
+            ));
+        }
+        long todayRegistrations = registrationsByDate.getOrDefault(today.toString(), 0L);
+        long yesterdayRegistrations = registrationsByDate.getOrDefault(today.minusDays(1).toString(), 0L);
+        int currentCharacters = count("SELECT count(*) FROM game_save");
+        int historicalCharacters = count("SELECT count(*) FROM game_life_archive");
+        int usersWithAnyCharacter = count("""
+                SELECT count(distinct user_id) FROM (
+                    SELECT user_id FROM game_save
+                    UNION ALL
+                    SELECT user_id FROM game_life_archive
+                ) characters
+                """);
+        int usersWithOneTurn = usersReachingTurnMilestone(1);
+        int usersWithThreeTurns = usersReachingTurnMilestone(3);
+        int usersWithFiveTurns = usersReachingTurnMilestone(5);
+        int usersWithHistoricalCharacters = count(
+                "SELECT count(distinct user_id) FROM game_life_archive");
+        int deadCharacters = count(
+                "SELECT count(*) FROM game_life_archive WHERE end_reason = 'DEAD' OR (end_reason = 'LEGACY' AND JSON_UNQUOTE(JSON_EXTRACT(state_json, '$.phase')) = 'dead')");
+        int restartedCharacters = count(
+                "SELECT count(*) FROM game_life_archive WHERE end_reason = 'RESTARTED'");
         Map<String, Number> turnMetrics = jdbc.queryForObject("""
                 SELECT count(*) total_turns,
                        coalesce(sum(case when created_at >= ? then 1 else 0 end), 0) today_turns,
@@ -283,6 +336,32 @@ public class AdminService {
         ));
         Timestamp trackingStartedAt = jdbc.queryForObject(
                 "SELECT min(created_at) FROM ai_usage_log", Timestamp.class);
+        Map<String, Number> todayChapterCosts = jdbc.queryForObject("""
+                SELECT coalesce(avg(case when model not like '%@USER' then prompt_tokens + completion_tokens end), 0) platform_average,
+                       coalesce(avg(case when model like '%@USER' then prompt_tokens + completion_tokens end), 0) custom_average
+                FROM (
+                    SELECT model, prompt_tokens, completion_tokens, created_at FROM game_turn
+                    UNION ALL
+                    SELECT model, prompt_tokens, completion_tokens, created_at FROM game_life_turn_archive
+                ) completed_turns
+                WHERE created_at >= ?
+                """, (row, index) -> Map.of(
+                "platformAverage", row.getDouble("platform_average"),
+                "customAverage", row.getDouble("custom_average")
+        ), todayStart);
+        int lockedLoginPairs = count("""
+                SELECT count(*) FROM (
+                    SELECT email_hash, ip_hash
+                    FROM auth_login_failure
+                    WHERE created_at >= ?
+                    GROUP BY email_hash, ip_hash
+                    HAVING count(*) >= 5
+                ) locked_pairs
+                """, Timestamp.from(Instant.now().minus(Duration.ofMinutes(10))));
+        boolean platformKeyHealthy = !fallbackApiKey.isBlank() || count("""
+                SELECT count(*) FROM ai_model_config
+                WHERE active = true AND secret_ciphertext is not null AND secret_ciphertext <> ''
+                """) > 0;
 
         Timestamp tokenSince = Timestamp.from(Instant.now().minus(Duration.ofDays(14)));
         List<Map<String, Object>> rawDailyTokens = jdbc.query("""
@@ -410,7 +489,24 @@ public class AdminService {
                 (row, index) -> row.getString(1)).stream().findFirst().orElse("V4 Pro");
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("totalUsers", totalUsers);
-        result.put("usersWithCharacter", totalSaves);
+        result.put("todayRegistrations", todayRegistrations);
+        result.put("yesterdayRegistrations", yesterdayRegistrations);
+        result.put("dailyRegistrations", dailyRegistrations);
+        result.put("usersWithCharacter", currentCharacters);
+        result.put("usersWithAnyCharacter", usersWithAnyCharacter);
+        result.put("currentCharacters", currentCharacters);
+        result.put("historicalCharacters", historicalCharacters);
+        result.put("totalCharacters", currentCharacters + historicalCharacters);
+        result.put("usersWithHistoricalCharacters", usersWithHistoricalCharacters);
+        result.put("deadCharacters", deadCharacters);
+        result.put("restartedCharacters", restartedCharacters);
+        result.put("activationFunnel", List.of(
+                funnelStage("REGISTERED", "注册账号", totalUsers, totalUsers),
+                funnelStage("CHARACTER", "创建角色", usersWithAnyCharacter, totalUsers),
+                funnelStage("TURN_1", "完成首章", usersWithOneTurn, totalUsers),
+                funnelStage("TURN_3", "达到3回合", usersWithThreeTurns, totalUsers),
+                funnelStage("TURN_5", "达到5回合", usersWithFiveTurns, totalUsers)
+        ));
         result.put("todayActive", todayActive);
         result.put("onlinePlayers", onlinePlayers == null ? 0 : onlinePlayers);
         result.put("totalTurns", turnMetrics.get("totalTurns"));
@@ -429,6 +525,12 @@ public class AdminService {
         result.put("todayCustomCompletionTokens", usageMetrics.get("customCompletion"));
         result.put("totalPlatformTokens", totalUsageMetrics.get("platformTokens"));
         result.put("totalCustomTokens", totalUsageMetrics.get("customTokens"));
+        result.put("todayPlatformAverageTokensPerChapter",
+                Math.round(todayChapterCosts.get("platformAverage").doubleValue()));
+        result.put("todayCustomAverageTokensPerChapter",
+                Math.round(todayChapterCosts.get("customAverage").doubleValue()));
+        result.put("lockedLoginPairs", lockedLoginPairs);
+        result.put("platformKeyHealthy", platformKeyHealthy);
         result.put("usageTrackingStartedAt", trackingStartedAt == null ? "" : displayTime(trackingStartedAt));
         result.put("avgLatency", Math.round(turnMetrics.get("avgLatency").doubleValue()));
         result.put("currentModel", currentModel);
@@ -448,6 +550,29 @@ public class AdminService {
         dashboardCache = snapshot;
         dashboardCacheExpiresAt = nowMillis + DASHBOARD_CACHE_MILLIS;
         return snapshot;
+    }
+
+    int usersReachingTurnMilestone(int milestone) {
+        return count("""
+                SELECT count(distinct user_id) FROM (
+                    SELECT gs.user_id, gt.save_id
+                    FROM game_save gs
+                    JOIN game_turn gt ON gt.save_id = gs.id
+                    GROUP BY gs.user_id, gt.save_id
+                    HAVING count(*) >= ?
+                    UNION ALL
+                    SELECT gla.user_id, glta.original_save_id
+                    FROM game_life_archive gla
+                    JOIN game_life_turn_archive glta ON glta.life_archive_id = gla.id
+                    GROUP BY gla.user_id, glta.original_save_id
+                    HAVING count(*) >= ?
+                ) milestone_users
+                """, milestone, milestone);
+    }
+
+    private Map<String, Object> funnelStage(String key, String label, int users, int totalUsers) {
+        int conversion = totalUsers <= 0 ? 0 : (int) Math.round(users * 100.0 / totalUsers);
+        return Map.of("key", key, "label", label, "users", users, "conversion", conversion);
     }
 
     public Map<String, Object> gameplayConfig() {
@@ -592,7 +717,7 @@ public class AdminService {
     }
 
     public List<Map<String, Object>> users(String search, String characterState, String difficulty,
-                                           String realmFilter, int page, int size) {
+                                           String realmFilter, String registeredDate, int page, int size) {
         int offset = Math.max(0, page) * Math.max(1, Math.min(size, 50));
         int limit = Math.max(1, Math.min(size, 50));
 
@@ -600,6 +725,7 @@ public class AdminService {
         String stateFilter = characterState == null ? "" : characterState.strip().toUpperCase();
         String difficultyFilter = difficulty == null ? "" : difficulty.strip().toUpperCase();
         String realmFilterValue = realmFilter == null ? "" : realmFilter.strip();
+        String registeredDateValue = registeredDate == null ? "" : registeredDate.strip();
         StringBuilder where = new StringBuilder(" WHERE u.status = 'ACTIVE' ");
         List<Object> args = new ArrayList<>();
         if (!searchValue.isBlank()) {
@@ -624,6 +750,18 @@ public class AdminService {
         if (!realmFilterValue.isBlank()) {
             where.append(" AND coalesce(JSON_UNQUOTE(JSON_EXTRACT(gs.state_json, '$.player.realm')), '') = ? ");
             args.add(realmFilterValue);
+        }
+        if (!registeredDateValue.isBlank()) {
+            LocalDate registrationDay;
+            try {
+                registrationDay = LocalDate.parse(registeredDateValue);
+            } catch (RuntimeException invalidDate) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "注册日期格式不正确");
+            }
+            ZoneId reportingZone = ZoneId.of("Asia/Shanghai");
+            where.append(" AND u.registered_at >= ? AND u.registered_at < ? ");
+            args.add(Timestamp.from(registrationDay.atStartOfDay(reportingZone).toInstant()));
+            args.add(Timestamp.from(registrationDay.plusDays(1).atStartOfDay(reportingZone).toInstant()));
         }
 
         String from = """
@@ -727,17 +865,54 @@ public class AdminService {
         }, userId);
         if (users.isEmpty()) return Map.of("error", "用户不存在");
 
-        var currentLives = jdbc.query("select id, state_json, updated_at from game_save where user_id = ?",
-                (row, idx) -> lifeSummary("CURRENT", row.getString("id"), row.getString("state_json"),
-                        displayTime(row.getTimestamp("updated_at"))), userId);
+        var currentLives = jdbc.query("""
+                SELECT gs.id, gs.state_json, gs.updated_at,
+                       coalesce(turns.turn_count, 0) turn_count,
+                       coalesce(turns.total_tokens, 0) total_tokens
+                FROM game_save gs
+                LEFT JOIN (
+                    SELECT save_id, count(*) turn_count,
+                           coalesce(sum(prompt_tokens + completion_tokens), 0) total_tokens
+                    FROM game_turn GROUP BY save_id
+                ) turns ON turns.save_id = gs.id
+                WHERE gs.user_id = ?
+                """, (row, idx) -> lifeSummary("CURRENT", "ACTIVE", row.getString("id"),
+                row.getString("state_json"), displayTime(row.getTimestamp("updated_at")),
+                row.getInt("turn_count"), row.getLong("total_tokens")), userId);
         var historicalLives = jdbc.query("""
-                select id, original_save_id, state_json, ended_at from game_life_archive
-                where user_id = ? order by ended_at desc
-                """, (row, idx) -> lifeSummary("ARCHIVED", row.getString("original_save_id"),
-                row.getString("state_json"), displayTime(row.getTimestamp("ended_at"))), userId);
+                SELECT gla.id, gla.original_save_id, gla.state_json, gla.end_reason, gla.ended_at,
+                       coalesce(turns.turn_count, 0) turn_count,
+                       coalesce(turns.total_tokens, 0) total_tokens
+                FROM game_life_archive gla
+                LEFT JOIN (
+                    SELECT life_archive_id, count(*) turn_count,
+                           coalesce(sum(prompt_tokens + completion_tokens), 0) total_tokens
+                    FROM game_life_turn_archive GROUP BY life_archive_id
+                ) turns ON turns.life_archive_id = gla.id
+                WHERE gla.user_id = ? ORDER BY gla.ended_at DESC
+                """, (row, idx) -> lifeSummary("ARCHIVED", row.getString("end_reason"),
+                row.getString("original_save_id"), row.getString("state_json"),
+                displayTime(row.getTimestamp("ended_at")), row.getInt("turn_count"),
+                row.getLong("total_tokens")), userId);
+
+        List<Map<String, Object>> allLives = new ArrayList<>(currentLives);
+        allLives.addAll(historicalLives);
+        long totalTurns = allLives.stream().mapToLong(life -> ((Number) life.getOrDefault("turn", 0)).longValue()).sum();
+        long totalTokens = allLives.stream().mapToLong(life -> ((Number) life.getOrDefault("totalTokens", 0)).longValue()).sum();
+        Map<String, Object> longestLife = allLives.stream()
+                .max(java.util.Comparator.comparingLong(life -> ((Number) life.getOrDefault("turn", 0)).longValue()))
+                .orElse(Map.of());
+        Map<String, Object> accountSummary = new LinkedHashMap<>();
+        accountSummary.put("totalCharacters", allLives.size());
+        accountSummary.put("currentCharacters", currentLives.size());
+        accountSummary.put("historicalCharacters", historicalLives.size());
+        accountSummary.put("totalTurns", totalTurns);
+        accountSummary.put("totalTokens", totalTokens);
+        accountSummary.put("longestLifeName", longestLife.getOrDefault("playerName", "—"));
+        accountSummary.put("longestLifeTurns", longestLife.getOrDefault("turn", 0));
 
         return Map.of("user", users.getFirst(), "currentLives", currentLives,
-                "historicalLives", historicalLives);
+                "historicalLives", historicalLives, "accountSummary", accountSummary);
     }
 
     @Transactional
@@ -821,11 +996,24 @@ public class AdminService {
         }, saveId, Math.max(1, Math.min(limit, 200)));
     }
 
-    private Map<String, Object> lifeSummary(String status, String saveId, String stateJson, String at) {
+    private Map<String, Object> lifeSummary(String status, String rawEndReason, String saveId,
+                                             String stateJson, String at, int turnCount, long totalTokens) {
         Map<String, Object> life = new LinkedHashMap<>();
         life.put("status", status);
         life.put("saveId", saveId);
         life.put("at", at);
+        life.put("totalTokens", totalTokens);
+        life.put("playerName", "尚未择定");
+        life.put("realm", "");
+        life.put("race", "");
+        life.put("difficulty", "NORMAL");
+        life.put("phase", "");
+        life.put("turn", turnCount);
+        life.put("sceneTitle", "");
+        life.put("endReason", rawEndReason == null || rawEndReason.isBlank()
+                ? ("CURRENT".equals(status) ? "ACTIVE" : "LEGACY") : rawEndReason);
+        life.put("endingTitle", "");
+        life.put("endingDetail", "");
         try {
             JsonNode state = mapper.readTree(stateJson);
             JsonNode player = state.path("player");
@@ -834,8 +1022,17 @@ public class AdminService {
             life.put("race", player.path("race").asText(""));
             life.put("difficulty", state.path("difficulty").asText("NORMAL"));
             life.put("phase", state.path("phase").asText(""));
-            life.put("turn", state.path("turn").asInt(0));
+            life.put("turn", Math.max(turnCount, state.path("turn").asInt(0)));
             life.put("sceneTitle", state.path("sceneTitle").asText(""));
+            String inferredEndReason = rawEndReason;
+            if ("LEGACY".equals(rawEndReason) && "dead".equals(state.path("phase").asText())) {
+                inferredEndReason = "DEAD";
+            }
+            life.put("endReason", inferredEndReason == null || inferredEndReason.isBlank()
+                    ? ("CURRENT".equals(status) ? "ACTIVE" : "LEGACY") : inferredEndReason);
+            JsonNode death = state.path("death");
+            life.put("endingTitle", death.path("title").asText(""));
+            life.put("endingDetail", death.path("detail").asText(""));
         } catch (Exception ignored) { }
         return life;
     }

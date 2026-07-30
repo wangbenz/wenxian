@@ -54,7 +54,7 @@ Let's Encrypt 证书覆盖 `wenxianlu.cn` 与 `www.wenxianlu.cn`，当前证书�
 - `user_session`：HttpOnly Cookie 会话摘要；
 - `game_save`：用户唯一存档及结构化 JSON 快照；
 - `game_turn_request`：行动请求幂等记录。
-- `game_life_archive`：死亡后转世重开时封存的前世快照。
+- `game_life_archive`：死亡或主动重开时封存的前世快照，并以 `end_reason` 区分 `DEAD`、`RESTARTED` 与无法追溯原因的旧记录 `LEGACY`。
 - `game_life_turn_archive`：前世逐回合文本、状态差量、Token 与耗时；新发生的重开和死亡均会完整归档。
 - `agent_conversation`：一张命卷对应一个持续会话及滚动摘要；
 - `agent_message`：按顺序保存玩家与 Agent 的完整消息；
@@ -189,7 +189,7 @@ GET    /api/v1/saves/{saveId}/threads
 GET    /api/v1/saves/{saveId}/world
 ```
 
-管理台接口另包含玩家多条件筛选、账号下当前/历史角色、逐角色回合分页与跳转、版本公告维护、模型切换、账号赠送回合、自备密钥开关、临时密码、登录解锁和操作日志。管理台可以显示完整邮箱以协助小范围测试用户找回账号，但这些接口仍受独立管理员会话保护。
+管理台接口另包含玩家多条件筛选、账号下当前/历史角色、逐角色回合分页与跳转、账号去重的激活漏斗、近 7/14 日注册趋势、版本公告维护、模型切换、账号赠送回合、自备密钥开关、临时密码、登录解锁和操作日志。激活漏斗的“三回合/五回合”必须由同一个角色达成，不能把多个前世的回合数相加。管理台可以显示完整邮箱以协助小范围测试用户找回账号，但这些接口仍受独立管理员会话保护。
 
 新账号注册数由 `gameplay_config.registration_max_users` 控制，默认 1000。注册事务会锁定该配置并核对 `app_user` 总数；达到上限时只拒绝 `/auth/register`，返回运营配置的满员提示和 QQ 联系说明。已有账号的 `/auth/login` 不读取该限制，因此不会受到影响。管理台“运营配置”页面可以实时修改上限和两段提示文案。
 

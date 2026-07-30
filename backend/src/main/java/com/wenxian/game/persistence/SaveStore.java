@@ -3,6 +3,8 @@ package com.wenxian.game.persistence;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wenxian.game.model.GameState;
+import jakarta.annotation.PostConstruct;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +20,16 @@ public class SaveStore {
     public SaveStore(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+    }
+
+    @PostConstruct
+    void ensureArchiveEndReasonColumn() {
+        try {
+            jdbcTemplate.query("select end_reason from game_life_archive where 1=0",
+                    (row, index) -> row.getString(1));
+        } catch (DataAccessException missing) {
+            jdbcTemplate.execute("alter table game_life_archive add column end_reason varchar(24) not null default 'LEGACY'");
+        }
     }
 
     public StoredSave find(String saveId) {
@@ -74,11 +86,12 @@ public class SaveStore {
     @Transactional
     public synchronized void archiveAndDelete(StoredSave save, String endReason) {
         String archiveId = "life-" + java.util.UUID.randomUUID();
+        String normalizedEndReason = "DEAD".equalsIgnoreCase(endReason) ? "DEAD" : "RESTARTED";
         jdbcTemplate.update("""
-                insert into game_life_archive(id, user_id, original_save_id, state_json, ended_at)
-                values (?, ?, ?, ?, ?)
+                insert into game_life_archive(id, user_id, original_save_id, state_json, end_reason, ended_at)
+                values (?, ?, ?, ?, ?, ?)
                 """, archiveId, save.userId, save.id,
-                write(save.state), Timestamp.from(Instant.now()));
+                write(save.state), normalizedEndReason, Timestamp.from(Instant.now()));
         jdbcTemplate.update("""
                 insert into game_life_turn_archive(
                     id, life_archive_id, original_save_id, turn_number, player_action,
