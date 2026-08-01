@@ -12,9 +12,9 @@ import java.util.List;
 public final class GameCatalog {
     private GameCatalog() {}
 
-    public static BootstrapResponse bootstrap() {
+    public static BootstrapResponse bootstrap(String version) {
         return new BootstrapResponse(
-                "问仙录", "V0.11", fixedWorld(),
+                "问仙录", version, fixedWorld(),
                 List.of(
                         new RaceView("HUMAN", "人族", "寿元短暂，却拥有最完整的宗门、丹道与传承体系。",
                                 List.of("传承选择丰富", "擅长组织与交易"), List.of("寿元最短", "凡俗身份束缚深"), "凡俗约六十至九十年"),
@@ -48,7 +48,19 @@ public final class GameCatalog {
         world.dangerRule = "世界不会等待主角。人物会衰老、突破、背叛和死亡；错失的机缘不会原地停留，死亡也不会自动回档。";
         world.regions = List.of("东陆九州", "北荒妖原", "南溟群岛", "西境灵墟");
         world.factions = List.of("九宗盟", "百妖庭", "灵墟古族", "问天司");
-        world.generatedBy = "fixed-canon:v0.1";
+        world.regionProfiles = List.of(
+                new GameState.RegionProfile("east-nine", "东陆九州", "凡人王朝、修仙宗门与商路最密集之地，也是多数人族故事的起点。", "九宗盟", "州内可由陆路往来，跨州通常需要数日；不得无代价瞬间抵达其他大域。"),
+                new GameState.RegionProfile("north-demon", "北荒妖原", "妖族部族与古老血脉盘踞的荒原，人族城寨只在南缘立足。", "百妖庭", "深入妖原需要向导、补给或妖族身份；跨越东陆边界至少需要长途跋涉。"),
+                new GameState.RegionProfile("south-isles", "南溟群岛", "海岛、雾潮与水府交错，散修、海商和灵族共同争夺航路。", "问天司", "岛际依赖舟船与潮期，风暴会改变航程，不能把海域写成相邻街巷。"),
+                new GameState.RegionProfile("west-spirit", "西境灵墟", "古战场、破碎秘境与灵族遗民并存，现实边界最不稳定。", "灵墟古族", "普通旅行必须沿安全驿道；穿越灵墟裂隙需要明确阵法、能力或外力来源。")
+        );
+        world.factionProfiles = List.of(
+                new GameState.FactionProfile("nine-sects", "九宗盟", "east-nine", "维护东陆宗门秩序并瓜分灵脉与弟子来源。"),
+                new GameState.FactionProfile("hundred-demons", "百妖庭", "north-demon", "协调妖族诸部，同时压制会动摇血脉秩序的异类。"),
+                new GameState.FactionProfile("spirit-clans", "灵墟古族", "west-spirit", "守护灵族旧契与灵墟深处尚未公开的历史。"),
+                new GameState.FactionProfile("heaven-inquiry", "问天司", "south-isles", "记录飞升异象、海上裂隙与绝天之变留下的证据。")
+        );
+        world.generatedBy = "fixed-canon:v0.2";
         return world;
     }
 
@@ -63,6 +75,7 @@ public final class GameCatalog {
         state.difficulty = setup.difficulty;
         state.phase = "talent";
         state.world = fixedWorld();
+        state.creationProfile = setup.creationProfile;
         state.worldYear = 3001;
         state.protagonistOptions = new ArrayList<>();
         state.sceneId = opening.sceneId;
@@ -76,6 +89,11 @@ public final class GameCatalog {
         state.player = new GameState.PlayerState(option.name, option.race, option.gender, option.age,
                 lifespanFor(option.race), option.identity, option.lifeGoal, option.goal, option.burden,
                 "凡俗", option.constitution, option.vitality, option.silver, option.insight, option.suspicion);
+        state.player.origin = option.origin;
+        state.player.trait = option.trait;
+        state.player.originPremise = option.originPremise;
+        state.economyVersion = CurrencyAuthority.ECONOMY_VERSION;
+        state.wallet = new GameState.Wallet(option.silver, 0, 0, 0);
         state.characters = new ArrayList<>(opening.characters);
         state.threads = new ArrayList<>(opening.threads);
         state.inventory = initialInventory(option);
@@ -111,7 +129,7 @@ public final class GameCatalog {
         selected.talentOptions = new ArrayList<>();
         selected.phase = "playing";
         selected.events.add(0, new GameState.ChronicleEvent(
-                "event-no-awakening", "凡骨入世",
+                "event-no-awakening", "本相入世",
                 selected.player.name + "没有强求额外天赋，只凭命格与选择踏入此世。",
                 selected.worldYear * 360 * 1440 + Math.max(0, selected.day - 1) * 1440 + selected.minute, "decision"
         ));
@@ -130,10 +148,6 @@ public final class GameCatalog {
         ArrayList<GameState.InventoryItem> result = new ArrayList<>();
         result.add(new GameState.InventoryItem("item-origin-token", "origin-token", "身世旧物", "KEY_ITEM",
                 "凡物", 1, "与这具身份的过去相连，价值尚未显现。", true));
-        if (option.silver > 0) {
-            result.add(new GameState.InventoryItem("item-copper", "copper-coin", "铜钱", "CURRENCY",
-                    "凡物", option.silver, "凡俗城镇通用的钱币。", false));
-        }
         return result;
     }
 

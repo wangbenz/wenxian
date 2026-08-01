@@ -103,3 +103,43 @@ test("keeps adjudication numbers out of the narrative character UI", async () =>
     assert.equal(prototype.includes(fragment), false, `numeric player UI leaked: ${fragment}`);
   }
 });
+
+test("uses the server quota instead of hardcoding twenty turns", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+
+  assert.equal(prototype.includes("赠送 20 个推演回合"), false);
+  assert.equal(prototype.includes("获赠 20 个推演回合"), false);
+  assert.equal(prototype.includes("nextAiSettings.turnLimit"), true);
+  assert.equal(prototype.includes("PUBLIC_TURN_LIMIT_REACHED"), true);
+});
+
+test("keeps adjudication rewrites separate from normal story choices", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+
+  assert.equal(prototype.includes("本轮未发生"), true);
+  assert.equal(prototype.includes("{!resolution && <section className=\"choice-list\""), true);
+  assert.equal(prototype.includes("返回原计划"), true);
+});
+
+test("separates authoritative origin from soft story preferences", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+  const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
+
+  assert.equal(prototype.includes("角色根源"), true);
+  assert.equal(prototype.includes("命格偏好"), true);
+  assert.equal(prototype.includes("本源 · {option.originPremise}"), true);
+  assert.equal(api.includes("originPremise: string"), true);
+});
+
+test("keeps restart safe and exposes the account key before entering the world", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+  const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
+
+  assert.equal(api.includes("restartSave:"), true);
+  assert.equal(api.includes("/restart`"), true);
+  assert.equal(prototype.includes("await gameApi.deleteSave(game.saveId)"), false);
+  assert.equal(prototype.includes("GenerationAccessCard"), true);
+  assert.equal(prototype.includes('["saves", "create", "fate", "talent"]'), true);
+  assert.equal(prototype.includes("接入自己的推演密钥"), true);
+  assert.equal(prototype.includes("返回原来的命卷"), true);
+});

@@ -86,7 +86,14 @@ public class AdminService {
             }
         }
         ensureGameplayConfig("account_public_turn_limit", "20");
+        ensureGameplayConfig("account_public_turn_limit_message", "本账号获赠的推演回合已经用完。你可以前往「世界」接入自己的推演密钥继续游玩。");
         ensureGameplayConfig("custom_api_enabled", "true");
+        ensureGameplayConfig("max_active_saves", "2");
+        ensureGameplayConfig("current_game_version", "V0.13");
+        ensureGameplayConfig("game_access_mode", "OPEN");
+        ensureGameplayConfig("game_access_notice_title", "命卷暂时封存");
+        ensureGameplayConfig("game_access_notice_content", "游戏正在更新中，请稍后再回来。");
+        ensureGameplayConfig("game_access_resume_at", "");
         ensureLifeArchiveEndReasonColumn();
     }
 
@@ -264,6 +271,7 @@ public class AdminService {
         long todayRegistrations = registrationsByDate.getOrDefault(today.toString(), 0L);
         long yesterdayRegistrations = registrationsByDate.getOrDefault(today.minusDays(1).toString(), 0L);
         int currentCharacters = count("SELECT count(*) FROM game_save");
+        int usersWithCurrentCharacter = count("SELECT count(distinct user_id) FROM game_save");
         int historicalCharacters = count("SELECT count(*) FROM game_life_archive");
         int usersWithAnyCharacter = count("""
                 SELECT count(distinct user_id) FROM (
@@ -485,6 +493,57 @@ public class AdminService {
                 Map.entry("lastUsedAt", displayTime(row.getTimestamp("last_used_at")))
         ));
 
+        Map<String, Map<String, Object>> versionMetricsByVersion = new LinkedHashMap<>();
+        jdbc.query("""
+                SELECT game_version,
+                       count(*) requests,
+                       coalesce(sum(prompt_tokens + completion_tokens), 0) tokens,
+                       coalesce(sum(case when status = 'FAILED' then 1 else 0 end), 0) failures,
+                       coalesce(avg(case when latency_ms > 0 then latency_ms end), 0) avg_latency,
+                       max(created_at) last_seen_at
+                FROM ai_usage_log
+                WHERE game_version <> 'UNKNOWN'
+                GROUP BY game_version
+                ORDER BY last_seen_at DESC
+                LIMIT 6
+                """, row -> {
+            Map<String, Object> metric = new LinkedHashMap<>();
+            metric.put("version", row.getString("game_version"));
+            metric.put("requests", row.getLong("requests"));
+            metric.put("tokens", row.getLong("tokens"));
+            metric.put("failures", row.getLong("failures"));
+            metric.put("avgLatency", Math.round(row.getDouble("avg_latency")));
+            metric.put("characters", 0L);
+            metric.put("turns", 0L);
+            metric.put("rejections", 0L);
+            metric.put("deaths", 0L);
+            versionMetricsByVersion.put(row.getString("game_version"), metric);
+        });
+        jdbc.query("""
+                SELECT game_version,
+                       coalesce(sum(case when event_type = 'CHARACTER_CREATED' then 1 else 0 end), 0) characters,
+                       coalesce(sum(case when event_type = 'TURN_COMPLETED' then 1 else 0 end), 0) turns,
+                       coalesce(sum(case when event_type = 'ACTION_REJECTED' then 1 else 0 end), 0) rejections,
+                       coalesce(sum(case when event_type = 'CHARACTER_DIED' then 1 else 0 end), 0) deaths
+                FROM game_analytics_event
+                GROUP BY game_version
+                """, row -> {
+            Map<String, Object> metric = versionMetricsByVersion.computeIfAbsent(
+                    row.getString("game_version"), version -> {
+                        Map<String, Object> created = new LinkedHashMap<>();
+                        created.put("version", version);
+                        created.put("requests", 0L);
+                        created.put("tokens", 0L);
+                        created.put("failures", 0L);
+                        created.put("avgLatency", 0L);
+                        return created;
+                    });
+            metric.put("characters", row.getLong("characters"));
+            metric.put("turns", row.getLong("turns"));
+            metric.put("rejections", row.getLong("rejections"));
+            metric.put("deaths", row.getLong("deaths"));
+        });
+
         String currentModel = jdbc.query("select display_name from ai_model_config where active = true limit 1",
                 (row, index) -> row.getString(1)).stream().findFirst().orElse("V4 Pro");
         Map<String, Object> result = new LinkedHashMap<>();
@@ -492,7 +551,7 @@ public class AdminService {
         result.put("todayRegistrations", todayRegistrations);
         result.put("yesterdayRegistrations", yesterdayRegistrations);
         result.put("dailyRegistrations", dailyRegistrations);
-        result.put("usersWithCharacter", currentCharacters);
+        result.put("usersWithCharacter", usersWithCurrentCharacter);
         result.put("usersWithAnyCharacter", usersWithAnyCharacter);
         result.put("currentCharacters", currentCharacters);
         result.put("historicalCharacters", historicalCharacters);
@@ -545,6 +604,7 @@ public class AdminService {
                 """, todayStart));
         result.put("dailyTokens", dailyTokens);
         result.put("modelUsage", modelUsage);
+        result.put("versionMetrics", new ArrayList<>(versionMetricsByVersion.values()));
         result.put("recentTurns", recentTurns);
         Map<String, Object> snapshot = Map.copyOf(result);
         dashboardCache = snapshot;
@@ -583,7 +643,18 @@ public class AdminService {
         Timestamp todayStart = Timestamp.from(today.atStartOfDay(reportingZone).toInstant());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("accountPublicTurnLimit", accountLimit);
+        result.put("limitMessage", configValue("account_public_turn_limit_message",
+                "本账号获赠的推演回合已经用完。你可以前往「世界」接入自己的推演密钥继续游玩。"));
         result.put("customApiEnabled", customEnabled);
+        int maxActiveSaves = Math.max(1, Math.min(2,
+                parsePositiveInt(configValue("max_active_saves", "2"), 2)));
+        result.put("maxActiveSaves", maxActiveSaves);
+        result.put("activeSaveCount", count("SELECT count(*) FROM game_save"));
+        result.put("usersWithMultipleSaves", count("""
+                SELECT count(*) FROM (
+                    SELECT user_id FROM game_save GROUP BY user_id HAVING count(*) > 1
+                ) multi_save_users
+                """));
         result.put("customApiUsers", count("SELECT count(*) FROM user_ai_credential WHERE status = 'ACTIVE'"));
         result.put("invalidCredentialUsers", count("SELECT count(*) FROM user_ai_credential WHERE status <> 'ACTIVE'"));
         result.put("todayPublicInvocations", count("SELECT coalesce(sum(used_count), 0) FROM user_daily_quota WHERE usage_date = ?", java.sql.Date.valueOf(today)));
@@ -598,15 +669,38 @@ public class AdminService {
     }
 
     @Transactional
-    public Map<String, Object> updateGameplayConfig(int accountPublicTurnLimit, boolean customApiEnabled) {
+    public Map<String, Object> updateGameplayConfig(int accountPublicTurnLimit, boolean customApiEnabled,
+                                                     String limitMessage, int maxActiveSaves) {
         if (accountPublicTurnLimit < 1 || accountPublicTurnLimit > 1000) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "账号赠送回合需在 1-1000 之间");
         }
+        if (maxActiveSaves < 1 || maxActiveSaves > 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "同账号存活角色上限只能设置为 1 或 2");
+        }
+        jdbc.queryForObject("select config_value from gameplay_config where config_key='max_active_saves' for update",
+                String.class);
+        int overLimitUsers = count("""
+                SELECT count(*) FROM (
+                    SELECT user_id FROM game_save GROUP BY user_id HAVING count(*) > ?
+                ) over_limit_users
+                """, maxActiveSaves);
+        if (overLimitUsers > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "当前有 " + overLimitUsers + " 个账号的存活角色超过新上限，请先处理后再调低");
+        }
+        String messageCandidate = limitMessage == null || limitMessage.isBlank()
+                ? configValue("account_public_turn_limit_message",
+                "本账号获赠的推演回合已经用完。你可以前往「世界」接入自己的推演密钥继续游玩。")
+                : limitMessage;
+        String safeLimitMessage = requiredConfigText(messageCandidate, "回合耗尽提示", 220);
         putGameplayConfig("account_public_turn_limit", String.valueOf(accountPublicTurnLimit));
+        putGameplayConfig("account_public_turn_limit_message", safeLimitMessage);
         putGameplayConfig("custom_api_enabled", String.valueOf(customApiEnabled));
+        putGameplayConfig("max_active_saves", String.valueOf(maxActiveSaves));
         dashboardCache = null;
         audit("UPDATE_GAMEPLAY_CONFIG", "账号赠送回合调整为 " + accountPublicTurnLimit
-                + " 回；玩家自备密钥" + (customApiEnabled ? "已开启" : "已关闭"));
+                + " 回；同账号存活角色上限 " + maxActiveSaves + "；玩家自备密钥"
+                + (customApiEnabled ? "已开启" : "已关闭") + "；更新回合耗尽提示");
         return gameplayConfig();
     }
 
@@ -766,7 +860,15 @@ public class AdminService {
 
         String from = """
                 FROM app_user u
-                LEFT JOIN game_save gs ON gs.user_id = u.id
+                LEFT JOIN game_save gs ON gs.id = (
+                    SELECT gs_recent.id FROM game_save gs_recent
+                    WHERE gs_recent.user_id = u.id
+                    ORDER BY gs_recent.updated_at DESC LIMIT 1
+                )
+                LEFT JOIN (
+                    SELECT user_id, count(*) active_save_count
+                    FROM game_save GROUP BY user_id
+                ) active_saves ON active_saves.user_id = u.id
                 LEFT JOIN user_ai_credential cred ON cred.user_id = u.id
                 LEFT JOIN (
                     SELECT user_id, count(*) archive_count
@@ -779,6 +881,7 @@ public class AdminService {
                 SELECT u.id, u.email, u.registered_at, u.last_login_at,
                        gs.id AS save_id, gs.state_json, gs.updated_at AS save_updated,
                        coalesce(arc.archive_count, 0) AS archive_count,
+                       coalesce(active_saves.active_save_count, 0) AS active_save_count,
                        cred.masked_suffix credential_suffix, cred.status credential_status,
                        cred.last_verified_at credential_verified_at
                 """ + from + where + " ORDER BY u.last_login_at DESC, u.registered_at DESC LIMIT ? OFFSET ?";
@@ -812,6 +915,7 @@ public class AdminService {
             user.put("race", race);
             user.put("difficulty", rowDifficulty);
             user.put("archiveCount", row.getInt("archive_count"));
+            user.put("activeSaveCount", row.getInt("active_save_count"));
             user.put("characterState", row.getString("save_id") == null
                     ? (row.getInt("archive_count") > 0 ? "RESTARTED" : "NONE") : "CURRENT");
             user.put("turnCount", turnCount);
@@ -906,7 +1010,7 @@ public class AdminService {
         if (users.isEmpty()) return Map.of("error", "用户不存在");
 
         var currentLives = jdbc.query("""
-                SELECT gs.id, gs.state_json, gs.updated_at,
+                SELECT gs.id, gs.slot_no, gs.state_json, gs.updated_at,
                        coalesce(turns.turn_count, 0) turn_count,
                        coalesce(turns.total_tokens, 0) total_tokens
                 FROM game_save gs
@@ -915,7 +1019,7 @@ public class AdminService {
                            coalesce(sum(prompt_tokens + completion_tokens), 0) total_tokens
                     FROM game_turn GROUP BY save_id
                 ) turns ON turns.save_id = gs.id
-                WHERE gs.user_id = ?
+                WHERE gs.user_id = ? ORDER BY gs.slot_no
                 """, (row, idx) -> lifeSummary("CURRENT", "ACTIVE", row.getString("id"),
                 row.getString("state_json"), displayTime(row.getTimestamp("updated_at")),
                 row.getInt("turn_count"), row.getLong("total_tokens")), userId);
@@ -1013,6 +1117,39 @@ public class AdminService {
         return Map.of("total", total, "page", page, "size", limit, "rows", turns);
     }
 
+    public List<Map<String, Object>> userAdjudications(String userId, String saveId, int limit) {
+        boolean ownsCurrent = count("select count(*) from game_save where id=? and user_id=?", saveId, userId) > 0;
+        boolean ownsArchive = count("select count(*) from game_life_archive where original_save_id=? and user_id=?", saveId, userId) > 0;
+        if (!ownsCurrent && !ownsArchive) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "该角色记录不存在");
+        }
+        return jdbc.query("""
+                select game_version, metadata_json, created_at
+                from game_analytics_event
+                where save_id=? and user_id=? and event_type='ACTION_REJECTED'
+                order by created_at desc limit ?
+                """, (row, idx) -> {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("version", row.getString("game_version"));
+            result.put("at", displayTime(row.getTimestamp("created_at")));
+            try {
+                JsonNode metadata = mapper.readTree(row.getString("metadata_json"));
+                result.put("turn", metadata.path("turn").asInt(0));
+                result.put("stage", metadata.path("stage").asText("UNKNOWN"));
+                result.put("reasonCode", metadata.path("reasonCode").asText("UNSPECIFIED"));
+                result.put("intentMode", metadata.path("intentMode").asText("UNKNOWN"));
+                result.put("actionType", metadata.path("actionType").asText("OTHER"));
+            } catch (Exception ignored) {
+                result.put("turn", 0);
+                result.put("stage", "UNKNOWN");
+                result.put("reasonCode", "UNSPECIFIED");
+                result.put("intentMode", "UNKNOWN");
+                result.put("actionType", "OTHER");
+            }
+            return result;
+        }, saveId, userId, Math.max(1, Math.min(limit, 100)));
+    }
+
     public List<Map<String, Object>> executions(String saveId, int limit, Integer turnNumber) {
         String turnFilter = turnNumber == null ? "" : " and turn_number = " + Math.max(0, turnNumber);
         return jdbc.query("""
@@ -1100,6 +1237,20 @@ public class AdminService {
         });
     }
 
+    public Map<String, Object> appVersion() {
+        return Map.of("version", configValue("current_game_version", "V0.13"));
+    }
+
+    public Map<String, Object> updateAppVersion(String rawVersion) {
+        String version = rawVersion == null ? "" : rawVersion.strip().toUpperCase();
+        if (!version.matches("V\\d+\\.\\d+(?:\\.\\d+)?")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "版本号格式应为 V0.13 或 V0.13.1");
+        }
+        putGameplayConfig("current_game_version", version);
+        audit("UPDATE_APP_VERSION", "当前游戏版本调整为 " + version);
+        return Map.of("version", version);
+    }
+
     @Transactional
     public Map<String, Object> saveReleaseNote(String id, String version, String title, String content,
                                                String status, boolean announceAll, boolean showOnLogin) {
@@ -1130,6 +1281,20 @@ public class AdminService {
         }
         audit("SAVE_RELEASE_NOTE", "保存版本公告 " + version + "（" + safeStatus + "）");
         return releaseNotes().stream().filter(note -> noteId.equals(note.get("id"))).findFirst().orElse(Map.of());
+    }
+
+    @Transactional
+    public Map<String, Object> clearLoginAnnouncement() {
+        List<String> pinnedVersions = jdbc.query(
+                "select version from release_note where status='PUBLISHED' and show_on_login=true",
+                (row, index) -> row.getString("version"));
+        int updated = jdbc.update("update release_note set show_on_login=false, updated_at=? where show_on_login=true",
+                Timestamp.from(Instant.now()));
+        String detail = updated == 0
+                ? "登录首页当前没有固定公告"
+                : "撤下登录首页公告：" + String.join("、", pinnedVersions);
+        audit("CLEAR_LOGIN_ANNOUNCEMENT", detail);
+        return Map.of("ok", true, "updated", updated, "message", detail);
     }
 
     public List<Map<String, Object>> modelConfigs() {
@@ -1200,6 +1365,89 @@ public class AdminService {
                         "detail", row.getString("detail"),
                         "at", displayTime(row.getTimestamp("operated_at"))),
                 Math.max(1, Math.min(limit, 200)));
+    }
+
+    public Map<String, Object> accessControl() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("mode", configValue("game_access_mode", "OPEN"));
+        result.put("title", configValue("game_access_notice_title", "命卷暂时封存"));
+        result.put("message", configValue("game_access_notice_content", "游戏正在更新中，请稍后再回来。"));
+        result.put("resumeAt", configValue("game_access_resume_at", ""));
+        result.put("whitelist", jdbc.query("""
+                select w.user_id, u.email, w.note, w.created_by, w.created_at, w.updated_at
+                from game_access_whitelist w
+                join app_user u on u.id=w.user_id
+                order by w.updated_at desc
+                """, (row, index) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("userId", row.getString("user_id"));
+            item.put("email", row.getString("email"));
+            item.put("note", row.getString("note"));
+            item.put("createdBy", row.getString("created_by"));
+            item.put("createdAt", displayTime(row.getTimestamp("created_at")));
+            item.put("updatedAt", displayTime(row.getTimestamp("updated_at")));
+            return item;
+        }));
+        return result;
+    }
+
+    @Transactional
+    public Map<String, Object> updateAccessControl(String mode, String title, String message, String resumeAt) {
+        String normalizedMode = "WHITELIST".equals(mode) ? "WHITELIST" : "OPEN";
+        if (title == null || title.isBlank() || title.length() > 80) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "提示标题需为 1-80 个字符");
+        }
+        if (message == null || message.isBlank() || message.length() > 220) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "提示内容需为 1-220 个字符");
+        }
+        String normalizedResumeAt = resumeAt == null ? "" : resumeAt.strip();
+        if (!normalizedResumeAt.isBlank()) try {
+            Instant.parse(normalizedResumeAt);
+        } catch (RuntimeException error) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "预计恢复时间格式不正确");
+        }
+        if ("WHITELIST".equals(normalizedMode)
+                && count("select count(*) from game_access_whitelist") == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请先加入至少一个测试账号，再开启白名单");
+        }
+        putGameplayConfig("game_access_mode", normalizedMode);
+        putGameplayConfig("game_access_notice_title", title.strip());
+        putGameplayConfig("game_access_notice_content", message.strip());
+        putGameplayConfig("game_access_resume_at", normalizedResumeAt);
+        audit("UPDATE_ACCESS_MODE", "游戏访问模式切换为 " + normalizedMode);
+        return accessControl();
+    }
+
+    @Transactional
+    public Map<String, Object> addAccessWhitelist(String email, String note) {
+        String normalizedEmail = email == null ? "" : email.strip().toLowerCase(java.util.Locale.ROOT);
+        String userId = jdbc.query("select id from app_user where email=? and status='ACTIVE'",
+                (row, index) -> row.getString(1), normalizedEmail).stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到该邮箱对应的有效账号"));
+        Timestamp now = Timestamp.from(Instant.now());
+        int updated = jdbc.update("update game_access_whitelist set note=?,updated_at=? where user_id=?",
+                note == null ? "" : note.strip(), now, userId);
+        if (updated == 0) jdbc.update("""
+                insert into game_access_whitelist(id,user_id,note,created_by,created_at,updated_at)
+                values (?,?,?,?,?,?)
+                """, "access-" + UUID.randomUUID(), userId, note == null ? "" : note.strip(),
+                "admin", now, now);
+        audit("ADD_ACCESS_WHITELIST", "加入灰度账号 " + normalizedEmail);
+        return accessControl();
+    }
+
+    @Transactional
+    public Map<String, Object> removeAccessWhitelist(String userId) {
+        if ("WHITELIST".equals(configValue("game_access_mode", "OPEN"))
+                && count("select count(*) from game_access_whitelist") <= 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "白名单模式至少保留一个测试账号；请先恢复全部开放或加入其他账号");
+        }
+        String email = jdbc.query("select email from app_user where id=?",
+                (row, index) -> row.getString(1), userId).stream().findFirst().orElse(userId);
+        jdbc.update("delete from game_access_whitelist where user_id=?", userId);
+        audit("REMOVE_ACCESS_WHITELIST", "移除灰度账号 " + email);
+        return accessControl();
     }
 
     // ---- helpers ----

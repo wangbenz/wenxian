@@ -152,6 +152,13 @@ public class AdminController {
         return adminService.userTurns(userId, saveId, page, size, turn);
     }
 
+    @GetMapping("/users/{userId}/lives/{saveId}/adjudications")
+    public List<Map<String, Object>> userAdjudications(@PathVariable String userId,
+                                                        @PathVariable String saveId,
+                                                        @RequestParam(defaultValue = "20") int limit) {
+        return adminService.userAdjudications(userId, saveId, limit);
+    }
+
     @GetMapping("/agent-executions/{saveId}")
     public List<Map<String, Object>> executions(@PathVariable String saveId,
                                                  @RequestParam(defaultValue = "50") int limit,
@@ -164,12 +171,27 @@ public class AdminController {
         return adminService.releaseNotes();
     }
 
+    @GetMapping("/app-version")
+    public Map<String, Object> appVersion() {
+        return adminService.appVersion();
+    }
+
+    @PostMapping("/app-version")
+    public Map<String, Object> updateAppVersion(@RequestBody Map<String, Object> body) {
+        return adminService.updateAppVersion(string(body.get("version")));
+    }
+
     @PostMapping("/release-notes")
     public Map<String, Object> saveReleaseNote(@RequestBody Map<String, Object> body) {
         return adminService.saveReleaseNote(string(body.get("id")), string(body.get("version")),
                 string(body.get("title")), string(body.get("content")),
                 string(body.get("status")).toUpperCase(), Boolean.TRUE.equals(body.get("announceAll")),
                 Boolean.TRUE.equals(body.get("showOnLogin")));
+    }
+
+    @DeleteMapping("/release-notes/login-announcement")
+    public Map<String, Object> clearLoginAnnouncement() {
+        return adminService.clearLoginAnnouncement();
     }
 
     @GetMapping("/model-configs")
@@ -191,7 +213,8 @@ public class AdminController {
     @PostMapping("/gameplay-config")
     public Map<String, Object> updateGameplayConfig(@RequestBody Map<String, Object> body) {
         return adminService.updateGameplayConfig(parseInt(body.get("accountPublicTurnLimit"), 20),
-                Boolean.TRUE.equals(body.get("customApiEnabled")));
+                Boolean.TRUE.equals(body.get("customApiEnabled")), string(body.get("limitMessage")),
+                parseInt(body.get("maxActiveSaves"), 2));
     }
 
     @GetMapping("/registration-config")
@@ -208,6 +231,27 @@ public class AdminController {
     @GetMapping("/operation-logs")
     public List<Map<String, Object>> operationLogs(@RequestParam(defaultValue = "100") int limit) {
         return adminService.operationLogs(limit);
+    }
+
+    @GetMapping("/access-control")
+    public Map<String, Object> accessControl() {
+        return adminService.accessControl();
+    }
+
+    @PostMapping("/access-control")
+    public Map<String, Object> updateAccessControl(@RequestBody Map<String, Object> body) {
+        return adminService.updateAccessControl(string(body.get("mode")), string(body.get("title")),
+                string(body.get("message")), string(body.get("resumeAt")));
+    }
+
+    @PostMapping("/access-control/whitelist")
+    public Map<String, Object> addAccessWhitelist(@RequestBody Map<String, Object> body) {
+        return adminService.addAccessWhitelist(string(body.get("email")), string(body.get("note")));
+    }
+
+    @DeleteMapping("/access-control/whitelist/{userId}")
+    public Map<String, Object> removeAccessWhitelist(@PathVariable String userId) {
+        return adminService.removeAccessWhitelist(userId);
     }
 
     private static String string(Object value) {

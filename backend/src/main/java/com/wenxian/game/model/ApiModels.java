@@ -43,6 +43,7 @@ public final class ApiModels {
             @NotBlank @Pattern(regexp = "MALE|FEMALE|UNSPECIFIED") String gender,
             @NotBlank @Pattern(regexp = "LONGEVITY|KINSHIP|POWER|TRUTH|FREEDOM") String lifeGoal,
             @NotBlank @Pattern(regexp = "NORMAL|HARD") String difficulty,
+            @Size(max = 160) String originPremise,
             @Size(max = 160) String preference
     ) {}
 
@@ -80,10 +81,20 @@ public final class ApiModels {
     ) {}
 
     public record ActionResolutionView(
-            String result, String title, String reason, List<String> suggestions
+            String result, String code, String title, String reason,
+            List<String> suggestions, boolean turnConsumed
     ) {}
 
     public record CurrentSaveResponse(boolean exists, GameResponse game) {}
+
+    public record SaveSummaryView(
+            String saveId, int slotNo, String phase, String playerName, String race,
+            String realm, String currentLocation, String sceneTitle, int turn, Instant updatedAt
+    ) {}
+
+    public record SaveListResponse(int maxActiveSaves, List<SaveSummaryView> saves) {}
+
+    public record AbandonSaveRequest(@NotBlank @Size(max = 12) String playerName) {}
 
     public record CharacterSheetResponse(
             GameState.PlayerState player,

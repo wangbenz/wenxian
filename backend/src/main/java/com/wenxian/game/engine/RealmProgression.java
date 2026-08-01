@@ -2,109 +2,101 @@ package com.wenxian.game.engine;
 
 import com.wenxian.game.model.GameState;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
 /**
- * Keeps the authoritative realm field consistent with explicit breakthrough evidence.
- * It intentionally ignores vague cultivation language so narration alone cannot grant levels.
+ * The sole authority for player major-realm transitions.
+ *
+ * Narrative prose is deliberately excluded: mentions of another person's realm,
+ * future possibilities and hypothetical breakthroughs must never mutate player state.
  */
 public final class RealmProgression {
-    private static final List<String> REALMS = List.of("凡俗", "引气", "筑基", "金丹", "元婴", "化神", "炼虚", "合道");
+    private static final List<String> REALMS = List.of(
+            "凡俗", "引气", "筑基", "金丹", "元婴", "化神", "炼虚", "合道"
+    );
+    private static final Set<String> RESULTS = Set.of("NONE", "FAILED", "SUCCESS");
 
     private RealmProgression() {}
 
-    public static Map<String, Object> completePatch(GameState state, Map<String, Object> patch,
-                                                     List<String> narrative, List<String> signals,
-                                                     AgentResult.AbilityChange abilityChange) {
-        Map<String, Object> completed = new LinkedHashMap<>(patch == null ? Map.of() : patch);
-        if (state.player == null) return completed;
-        List<String> evidence = collectEvidence(narrative, signals, abilityChange);
-        if (completed.containsKey("realm")) {
-            String normalized = normalizeRealmName(String.valueOf(completed.get("realm")));
-            if (normalized == null) throw new IllegalArgumentException("Agent 返回了未知境界");
-            int current = REALMS.indexOf(state.player.realm);
-            int proposed = REALMS.indexOf(normalized);
-            if (proposed == current) {
-                completed.remove("realm");
-                return completed;
-            }
-            if (current < 0 || proposed != current + 1) {
-                throw new IllegalArgumentException("境界只能依次突破，不能跨境或倒退");
-            }
-            if (evidence.stream().filter(value -> value != null && !value.isBlank())
-                    .noneMatch(value -> explicitlyReaches(value, normalized))) {
-                throw new IllegalArgumentException("境界变更缺少明确突破事实");
-            }
-            completed.put("realm", normalized);
-            return completed;
+    public static AgentResult.RealmTransition validate(
+            AgentResult.RealmTransition transition, GameState state, ActionIntent intent
+    ) {
+        if (transition == null) return null;
+        String result = normalizeResult(transition.result());
+        if (!"SUCCESS".equals(result)) return null;
+        if (state == null || state.player == null) {
+            throw new RealmValidationException("REALM_PLAYER_MISSING", "主角状态不存在，不能变更境界");
         }
-        String inferred = inferNextRealm(state.player.realm, evidence);
-        if (inferred != null) completed.put("realm", inferred);
-        return completed;
-    }
-
-    private static List<String> collectEvidence(List<String> narrative, List<String> signals,
-                                                 AgentResult.AbilityChange abilityChange) {
-        List<String> evidence = new ArrayList<>();
-        if (narrative != null) evidence.addAll(narrative);
-        if (signals != null) evidence.addAll(signals);
-        if (abilityChange != null) {
-            evidence.add(abilityChange.name());
-            evidence.add(abilityChange.stage());
-            evidence.add(abilityChange.source());
-            evidence.add(abilityChange.description());
+        if (intent == null || !"CULTIVATE".equals(intent.actionType()) || !intent.breakthroughAttempt()) {
+            throw new RealmValidationException("REALM_NOT_AUTHORIZED", "本轮不是明确的突破行动，不能改变境界");
         }
-        return evidence;
+
+        String current = normalizeRealm(state.player.realm);
+        String from = normalizeRealm(transition.fromRealm());
+        String to = normalizeRealm(transition.toRealm());
+        if (current == null || from == null || to == null) {
+            throw new RealmValidationException("REALM_VALUE_INVALID", "境界迁移字段无效");
+        }
+        if (!current.equals(from)) {
+            throw new RealmValidationException("REALM_ORIGIN_MISMATCH", "境界迁移起点与当前状态不一致");
+        }
+        String expected = nextRealm(current);
+        if (expected == null || !expected.equals(to)) {
+            throw new RealmValidationException("REALM_TARGET_INVALID", "境界只能依次突破到下一大境界");
+        }
+        if (transition.reason() == null || transition.reason().isBlank()) {
+            throw new RealmValidationException("REALM_REASON_MISSING", "境界迁移缺少突破结果说明");
+        }
+        return new AgentResult.RealmTransition("SUCCESS", current, expected, transition.reason().strip());
     }
 
-    public static boolean repairLegacyState(GameState state) {
-        if (state == null || state.player == null || state.abilities == null) return false;
-        List<String> evidence = new ArrayList<>();
-        state.abilities.forEach(ability -> {
-            evidence.add(ability.name);
-            evidence.add(ability.stage);
-            evidence.add(ability.source);
-            evidence.add(ability.description);
-        });
-        String inferred = inferNextRealm(state.player.realm, evidence);
-        if (inferred == null) return false;
-        state.player.realm = inferred;
-        return true;
+    public static void apply(GameState.PlayerState player, AgentResult.RealmTransition transition) {
+        if (transition == null) return;
+        if (player == null || !"SUCCESS".equals(transition.result())) {
+            throw new IllegalStateException("未校验的境界迁移不能写入状态");
+        }
+        String current = normalizeRealm(player.realm);
+        String from = normalizeRealm(transition.fromRealm());
+        String to = normalizeRealm(transition.toRealm());
+        if (current == null || from == null || to == null
+                || !current.equals(from) || !to.equals(nextRealm(current))) {
+            throw new IllegalStateException("境界迁移与当前权威状态不一致");
+        }
+        player.realm = to;
     }
 
-    private static String inferNextRealm(String currentRealm, List<String> evidence) {
-        int current = REALMS.indexOf(currentRealm);
-        if (current < 0 || current >= REALMS.size() - 1) return null;
-        String next = REALMS.get(current + 1);
-        return evidence.stream().filter(value -> value != null && !value.isBlank())
-                .anyMatch(value -> explicitlyReaches(value, next)) ? next : null;
+    static String nextRealm(String realm) {
+        String normalized = normalizeRealm(realm);
+        int index = REALMS.indexOf(normalized);
+        return index < 0 || index >= REALMS.size() - 1 ? null : REALMS.get(index + 1);
     }
 
-    private static boolean explicitlyReaches(String text, String realm) {
-        return switch (realm) {
-            case "引气" -> containsAny(text, "练气一层", "炼气一层", "引气一层", "踏入引气", "突破引气", "晋入引气", "引气成功");
-            case "筑基" -> containsAny(text, "突破筑基", "筑基成功", "筑基已成", "晋入筑基", "踏入筑基");
-            case "金丹" -> containsAny(text, "凝结金丹", "结成金丹", "结丹成功", "踏入金丹", "晋入金丹");
-            case "元婴" -> containsAny(text, "元婴已成", "凝成元婴", "突破元婴", "踏入元婴", "晋入元婴");
-            case "化神" -> containsAny(text, "化神已成", "突破化神", "踏入化神", "晋入化神");
-            case "炼虚" -> containsAny(text, "突破炼虚", "踏入炼虚", "晋入炼虚");
-            case "合道" -> containsAny(text, "突破合道", "踏入合道", "晋入合道");
-            default -> false;
-        };
+    private static String normalizeResult(String value) {
+        String normalized = value == null ? "NONE" : value.strip().toUpperCase();
+        if (!RESULTS.contains(normalized)) {
+            throw new RealmValidationException("REALM_RESULT_INVALID", "境界迁移结果无效");
+        }
+        return normalized;
     }
 
-    private static String normalizeRealmName(String proposed) {
-        if (proposed == null) return null;
-        String value = proposed.strip();
-        if (containsAny(value, "练气", "炼气")) return "引气";
-        return REALMS.stream().filter(value::contains).findFirst().orElse(null);
+    private static String normalizeRealm(String value) {
+        if (value == null || value.isBlank()) return null;
+        String normalized = value.strip();
+        if (normalized.contains("练气") || normalized.contains("炼气")) return "引气";
+        return REALMS.stream().filter(normalized::contains).findFirst().orElse(null);
     }
 
-    private static boolean containsAny(String text, String... markers) {
-        for (String marker : markers) if (text.contains(marker)) return true;
-        return false;
+    public static final class RealmValidationException extends IllegalArgumentException {
+        private final String code;
+
+        public RealmValidationException(String code, String message) {
+            super(code + ": " + message);
+            this.code = code;
+        }
+
+        public String code() {
+            return code;
+        }
     }
 }

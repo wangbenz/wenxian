@@ -27,7 +27,7 @@ class GameCatalogTalentTest {
 
         assertEquals("playing", state.phase);
         assertTrue(state.abilities.isEmpty());
-        assertEquals("凡骨入世", state.events.getFirst().title);
+        assertEquals("本相入世", state.events.getFirst().title);
     }
 
     private GameState talentState() {

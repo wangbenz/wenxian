@@ -23,13 +23,20 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class PlayerAiService {
     public static final String PUBLIC_SOURCE = "PUBLIC";
     public static final String USER_SOURCE = "USER";
     private static final String ACCOUNT_LIMIT_KEY = "account_public_turn_limit";
+    private static final String ACCOUNT_LIMIT_MESSAGE_KEY = "account_public_turn_limit_message";
     private static final String CUSTOM_API_KEY = "custom_api_enabled";
+    private static final String CONTACT_TEXT_KEY = "registration_contact_text";
+    private static final String DEFAULT_LIMIT_MESSAGE = "本账号获赠的推演回合已经用完。你可以前往「世界」接入自己的推演密钥继续游玩。";
+    private static final String DEFAULT_CONTACT_TEXT = "如需参与测试或反馈问题，请加入QQ群：1092478336。";
+    private static final Pattern SUPPORT_GROUP_PATTERN = Pattern.compile("(?<!\\d)(\\d{5,12})(?!\\d)");
     private static final ZoneId QUOTA_ZONE = ZoneId.of("Asia/Shanghai");
 
     private final JdbcTemplate jdbc;
@@ -51,6 +58,7 @@ public class PlayerAiService {
     @PostConstruct
     void ensureDefaults() {
         ensureConfig(ACCOUNT_LIMIT_KEY, "20");
+        ensureConfig(ACCOUNT_LIMIT_MESSAGE_KEY, DEFAULT_LIMIT_MESSAGE);
         ensureConfig(CUSTOM_API_KEY, "true");
     }
 
@@ -89,9 +97,18 @@ public class PlayerAiService {
         int limit = accountLimit();
         int used = usedTurns(userId);
         if (used >= limit) {
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
-                    "当前账号赠送的推演回合已经用完，可以在世界页接入自己的 DeepSeek API 继续游玩");
+            String contactText = configValue(CONTACT_TEXT_KEY, DEFAULT_CONTACT_TEXT);
+            throw new PublicTurnLimitException(
+                    configValue(ACCOUNT_LIMIT_MESSAGE_KEY, DEFAULT_LIMIT_MESSAGE),
+                    limit,
+                    contactText,
+                    supportGroup(contactText));
         }
+    }
+
+    private String supportGroup(String contactText) {
+        Matcher matcher = SUPPORT_GROUP_PATTERN.matcher(contactText == null ? "" : contactText);
+        return matcher.find() ? matcher.group(1) : "";
     }
 
     @Transactional

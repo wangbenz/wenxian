@@ -1,12 +1,12 @@
 import "./App.css";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { adminApi, clearToken, isAuthenticated, setToken, type AdminAccount, type AgentExecution, type DashboardData, type GameplayConfig, type LifeSummary, type ModelConfig, type RegistrationConfig, type ReleaseNoteAdmin, type TurnPage, type TurnRankingItem, type TurnRow, type UserDetail, type UserRow } from "./admin-api";
+import { adminApi, clearToken, isAuthenticated, setToken, type AccessControl, type ActionAdjudication, type AdminAccount, type AgentExecution, type DashboardData, type GameplayConfig, type LifeSummary, type ModelConfig, type RegistrationConfig, type ReleaseNoteAdmin, type TurnPage, type TurnRankingItem, type TurnRow, type UserDetail, type UserRow } from "./admin-api";
 
-type Page = "dashboard" | "users" | "releases" | "models" | "limits" | "operations" | "admins" | "logs";
+type Page = "dashboard" | "users" | "releases" | "models" | "limits" | "access" | "operations" | "admins" | "logs";
 const NAV: Array<[Page, string, string]> = [
   ["dashboard", "运营概览", "OVERVIEW"], ["users", "玩家档案", "PLAYERS"],
   ["releases", "版本公告", "RELEASES"],
-  ["models", "生成模型", "MODELS"], ["limits", "推演额度", "LIMITS"], ["operations", "运营配置", "OPERATIONS"],
+  ["models", "生成模型", "MODELS"], ["limits", "推演额度", "LIMITS"], ["access", "灰度访问", "ACCESS"], ["operations", "运营配置", "OPERATIONS"],
   ["admins", "管理账号", "ADMINS"], ["logs", "操作记录", "AUDIT"],
 ];
 const fmt = (value?: string | null) => value ? new Date(value).toLocaleString("zh-CN") : "—";
@@ -15,7 +15,7 @@ const num = (value: number) => new Intl.NumberFormat("zh-CN").format(value || 0)
 const compactNum = (value: number) => new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(value || 0);
 const latency = (value: number) => value ? `${(value / 1000).toFixed(1)} 秒` : "—";
 const difficulty = (value: string) => value === "HARD" ? "困难" : "普通";
-const lifeEndReason = (value: LifeSummary["endReason"]) => value === "DEAD" ? "身死道消" : value === "RESTARTED" ? "主动重开" : value === "ACTIVE" ? "当前命卷" : "旧版记录";
+const lifeEndReason = (value: LifeSummary["endReason"]) => value === "DEAD" ? "身死道消" : value === "ABANDONED" ? "主动封存" : value === "RESTARTED" ? "主动重开" : value === "ACTIVE" ? "当前命卷" : "旧版记录";
 const keySource = (value: ModelConfig["keySource"]) => value === "DATABASE" ? "管理台配置" : value === "SERVER_DEFAULT" ? "服务器备用" : "尚未配置";
 
 function useOverlay(onClose: () => void) {
@@ -48,8 +48,9 @@ function Login({ onDone }: { onDone: () => void }) {
 
 function Shell({ onLogout }: { onLogout: () => void }) {
   const [page, setPage] = useState<Page>("dashboard"); const [open, setOpen] = useState(false); const [securityOpen, setSecurityOpen] = useState(false); const [registrationDate, setRegistrationDate] = useState("");
+  const version = useLoad(() => adminApi.appVersion(), []);
   const item = NAV.find(([id]) => id === page)!;
-  return <div className="admin-shell"><aside aria-label="管理台导航" className={open ? "sidebar open" : "sidebar"}><button aria-label="关闭导航菜单" className="sidebar-close" onClick={() => setOpen(false)}>×</button><div className="sidebar-brand"><strong>问仙录</strong><span>试玩运营台 · V0.11</span></div><nav>{NAV.map(([id, label, english]) => <button aria-current={page === id ? "page" : undefined} key={id} onClick={() => { if (id === "users") setRegistrationDate(""); setPage(id); setOpen(false); }}><small>{english}</small>{label}</button>)}</nav><div className="sidebar-actions"><button onClick={() => { setSecurityOpen(true); setOpen(false); }}>修改管理密码</button><button onClick={onLogout}>退出管理台</button></div></aside>{open && <button aria-label="关闭导航菜单" className="sidebar-mask" onClick={() => setOpen(false)} />}<main className="admin-main"><header><button aria-expanded={open} aria-label="打开导航菜单" className="menu" onClick={() => setOpen(true)}><span aria-hidden="true">☰</span></button><div><p>{item[2]}</p><h1>{item[1]}</h1></div><span className="environment">内部试玩环境</span></header><section className="admin-content">{page === "dashboard" && <Dashboard onSelectRegistrationDate={(date) => { setRegistrationDate(date); setPage("users"); }} />}{page === "users" && <Users initialRegisteredDate={registrationDate} />}{page === "releases" && <Releases />}{page === "models" && <Models />}{page === "limits" && <Limits />}{page === "operations" && <Operations />}{page === "admins" && <AdminAccounts />}{page === "logs" && <Logs />}</section></main>{securityOpen && <ChangePasswordModal onClose={() => setSecurityOpen(false)} onChanged={onLogout} />}</div>;
+  return <div className="admin-shell"><aside aria-label="管理台导航" className={open ? "sidebar open" : "sidebar"}><button aria-label="关闭导航菜单" className="sidebar-close" onClick={() => setOpen(false)}>×</button><div className="sidebar-brand"><strong>问仙录</strong><span>试玩运营台 · {version.data?.version ?? "同步中"}</span></div><nav>{NAV.map(([id, label, english]) => <button aria-current={page === id ? "page" : undefined} key={id} onClick={() => { if (id === "users") setRegistrationDate(""); setPage(id); setOpen(false); }}><small>{english}</small>{label}</button>)}</nav><div className="sidebar-actions"><button onClick={() => { setSecurityOpen(true); setOpen(false); }}>修改管理密码</button><button onClick={onLogout}>退出管理台</button></div></aside>{open && <button aria-label="关闭导航菜单" className="sidebar-mask" onClick={() => setOpen(false)} />}<main className="admin-main"><header><button aria-expanded={open} aria-label="打开导航菜单" className="menu" onClick={() => setOpen(true)}><span aria-hidden="true">☰</span></button><div><p>{item[2]}</p><h1>{item[1]}</h1></div><span className="environment">内部试玩环境</span></header><section className="admin-content">{page === "dashboard" && <Dashboard onSelectRegistrationDate={(date) => { setRegistrationDate(date); setPage("users"); }} />}{page === "users" && <Users initialRegisteredDate={registrationDate} />}{page === "releases" && <Releases currentVersion={version.data?.version ?? ""} onVersionChanged={version.reload} />}{page === "models" && <Models />}{page === "limits" && <Limits />}{page === "access" && <AccessControlPage />}{page === "operations" && <Operations />}{page === "admins" && <AdminAccounts />}{page === "logs" && <Logs />}</section></main>{securityOpen && <ChangePasswordModal onClose={() => setSecurityOpen(false)} onChanged={onLogout} />}</div>;
 }
 
 function State({ loading, error, children }: { loading: boolean; error: string; children: ReactNode }) { if (loading) return <div aria-live="polite" className="state state-loading"><i /><span>正在读取数据…</span></div>; if (error) return <div className="state error" role="alert">{error}</div>; return <>{children}</>; }
@@ -107,7 +108,12 @@ function Dashboard({ onSelectRegistrationDate }: { onSelectRegistrationDate: (da
     ["玩家每章 Token", num(query.data.todayCustomAverageTokensPerChapter), "今日自备密钥章节平均"],
     ["平台回合总量", num(query.data.totalPlatformTurns), `今日 ${num(query.data.todayPlatformTurns)}`], ["玩家回合总量", num(query.data.totalCustomTurns), `今日 ${num(query.data.todayCustomTurns)}`], ["自备密钥玩家", num(query.data.customApiUsers), "当前已启用"], ["平均生成", latency(query.data.avgLatency), "成功回合耗时"], ["当前模型", query.data.currentModel, "新请求立即生效"],
   ] : [];
-  return <State loading={query.loading} error={query.error}>{query.data && <><OperationalAlerts data={query.data} /><MetricSection title="核心运营" items={core} primary /><ActivationFunnel stages={query.data.activationFunnel} /><MetricSection title="运行情况" items={activity} /><RegistrationTrend days={query.data.dailyRegistrations} onSelectDate={onSelectRegistrationDate} /><TokenTrend days={query.data.dailyTokens} trackingStartedAt={query.data.usageTrackingStartedAt} /><ModelUsage rows={query.data.modelUsage} /><Panel title="最近生成"><Table label="最近生成记录"><thead><tr><th>玩家</th><th>回合</th><th>行动</th><th>总 Token</th><th>生成耗时</th><th>发生时间</th></tr></thead><tbody>{query.data.recentTurns.map((turn, index) => <tr key={`${turn.at}-${index}`}><td>{turn.playerName || "未命名"}<small>{turn.realm}</small></td><td>{turn.turn}</td><td className="wide">{turn.action}</td><td>{num(turn.tokens)}</td><td>{latency(turn.latency)}</td><td>{fmt(turn.at)}</td></tr>)}</tbody></Table></Panel></>}</State>;
+  return <State loading={query.loading} error={query.error}>{query.data && <><OperationalAlerts data={query.data} /><MetricSection title="核心运营" items={core} primary /><ActivationFunnel stages={query.data.activationFunnel} /><MetricSection title="运行情况" items={activity} /><RegistrationTrend days={query.data.dailyRegistrations} onSelectDate={onSelectRegistrationDate} /><TokenTrend days={query.data.dailyTokens} trackingStartedAt={query.data.usageTrackingStartedAt} /><VersionMetrics rows={query.data.versionMetrics} /><ModelUsage rows={query.data.modelUsage} /><Panel title="最近生成"><Table label="最近生成记录"><thead><tr><th>玩家</th><th>回合</th><th>行动</th><th>总 Token</th><th>生成耗时</th><th>发生时间</th></tr></thead><tbody>{query.data.recentTurns.map((turn, index) => <tr key={`${turn.at}-${index}`}><td>{turn.playerName || "未命名"}<small>{turn.realm}</small></td><td>{turn.turn}</td><td className="wide">{turn.action}</td><td>{num(turn.tokens)}</td><td>{latency(turn.latency)}</td><td>{fmt(turn.at)}</td></tr>)}</tbody></Table></Panel></>}</State>;
+}
+
+function VersionMetrics({ rows }: { rows: DashboardData["versionMetrics"] }) {
+  if (!rows.length) return null;
+  return <Panel title="版本影响"><Table label="版本影响统计"><thead><tr><th>版本</th><th>角色</th><th>完成回合</th><th>拒绝行动</th><th>死亡</th><th>模型请求</th><th>总 Token</th><th>失败率</th><th>平均耗时</th></tr></thead><tbody>{rows.map((row) => <tr key={row.version}><td>{row.version}</td><td>{num(row.characters)}</td><td>{num(row.turns)}</td><td>{num(row.rejections)}</td><td>{num(row.deaths)}</td><td>{num(row.requests)}</td><td>{num(row.tokens)}</td><td>{row.requests ? `${((row.failures / row.requests) * 100).toFixed(1)}%` : "—"}</td><td>{latency(row.avgLatency)}</td></tr>)}</tbody></Table></Panel>;
 }
 
 function OperationalAlerts({ data }: { data: DashboardData }) {
@@ -184,8 +190,8 @@ function Users({ initialRegisteredDate = "" }: { initialRegisteredDate?: string 
     <div className="filter-shortcuts"><button onClick={() => { setRegisteredDate(shanghaiDate()); setState("NONE"); setPage(0); }} type="button">今日注册但未创建角色</button>{(registeredDate || state || difficultyFilter || search) && <button onClick={() => { setSearch(""); setRegisteredDate(""); setState(""); setDifficulty(""); setPage(0); }} type="button">清除筛选</button>}</div>
     <State loading={query.loading} error={query.error}>
       <Panel title={`玩家列表 · ${meta?.total ?? 0}${registeredDate ? ` · ${registeredDate} 注册` : ""}`}>
-        <div className="desktop-player-table"><Table label="玩家列表"><thead><tr><th>邮箱</th><th>当前角色</th><th>状态</th><th>难度</th><th>回合</th><th>密钥</th><th>前世</th><th>最近活动</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>{rows.map((user: UserRow) => <tr key={user.userId}><td>{user.email}<small title={user.userId}>{shortId(user.userId)}</small></td><td>{user.playerName || "尚未创建角色"}<small>{user.realm || "—"}</small></td><td><Badge value={user.characterState} /></td><td>{user.saveId ? difficulty(user.difficulty) : "—"}</td><td>{user.turnCount}</td><td>{user.credentialConfigured ? `•••• ${user.credentialSuffix}` : "平台"}</td><td>{user.archiveCount}</td><td>{fmt(user.lastLoginAt)}</td><td><button className="table-action" onClick={() => setSelected(user.userId)}>查看</button></td></tr>)}</tbody></Table></div>
-        <div className="mobile-player-list">{rows.map((user: UserRow) => <button className="player-card" key={user.userId} onClick={() => setSelected(user.userId)}><span className="player-card-main"><strong>{user.email}</strong><small>{user.playerName || "尚未创建角色"} · {user.realm || "未入世"}</small></span><span className="player-card-meta"><Badge value={user.characterState} /><small>{user.credentialConfigured ? `自备 •••• ${user.credentialSuffix}` : "平台密钥"}</small><small>{relativeTime(user.lastLoginAt)}</small><b aria-hidden="true">›</b></span></button>)}</div>
+        <div className="desktop-player-table"><Table label="玩家列表"><thead><tr><th>邮箱</th><th>最近角色</th><th>存活角色</th><th>状态</th><th>难度</th><th>回合</th><th>密钥</th><th>前世</th><th>最近活动</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>{rows.map((user: UserRow) => <tr key={user.userId}><td>{user.email}<small title={user.userId}>{shortId(user.userId)}</small></td><td>{user.playerName || "尚未创建角色"}<small>{user.realm || "—"}</small></td><td>{user.activeSaveCount}</td><td><Badge value={user.characterState} /></td><td>{user.saveId ? difficulty(user.difficulty) : "—"}</td><td>{user.turnCount}</td><td>{user.credentialConfigured ? `•••• ${user.credentialSuffix}` : "平台"}</td><td>{user.archiveCount}</td><td>{fmt(user.lastLoginAt)}</td><td><button className="table-action" onClick={() => setSelected(user.userId)}>查看</button></td></tr>)}</tbody></Table></div>
+        <div className="mobile-player-list">{rows.map((user: UserRow) => <button className="player-card" key={user.userId} onClick={() => setSelected(user.userId)}><span className="player-card-main"><strong>{user.email}</strong><small>{user.playerName || "尚未创建角色"} · {user.realm || "未入世"}</small><small>当前 {user.activeSaveCount} 份命卷 · 前世 {user.archiveCount}</small></span><span className="player-card-meta"><Badge value={user.characterState} /><small>{user.credentialConfigured ? `自备 •••• ${user.credentialSuffix}` : "平台密钥"}</small><small>{relativeTime(user.lastLoginAt)}</small><b aria-hidden="true">›</b></span></button>)}</div>
         {rows.length === 0 && <p className="empty-state">没有符合当前条件的玩家。</p>}
         <Pager page={page} size={20} total={meta?.total ?? 0} onPage={setPage} />
       </Panel>
@@ -195,7 +201,7 @@ function Users({ initialRegisteredDate = "" }: { initialRegisteredDate?: string 
 }
 
 function TurnRanking({ rows, onSelect }: { rows: TurnRankingItem[]; onSelect: (userId: string) => void }) {
-  return <Panel title="当前角色回合榜 · 前 10 名"><div className="turn-ranking">{rows.map((row, index) => <button key={row.userId} onClick={() => onSelect(row.userId)} type="button"><span className={index < 3 ? `rank rank-${index + 1}` : "rank"}>{index + 1}</span><span className="rank-player"><strong>{row.playerName || "尚未命名"}</strong><small>{row.email}</small><small>{row.realm || "尚未入道"} · {relativeTime(row.lastActiveAt)}</small></span><b>{num(row.turn)}<small>回</small></b></button>)}</div>{rows.length === 0 && <p className="empty-state">目前还没有已创建角色的玩家。</p>}<p className="panel-note">只统计玩家当前命卷，前世回合不会累加；点击玩家可查看完整账号与历代角色。</p></Panel>;
+  return <Panel title="当前角色回合榜 · 前 10 名"><div className="turn-ranking">{rows.map((row, index) => <button key={row.saveId} onClick={() => onSelect(row.userId)} type="button"><span className={index < 3 ? `rank rank-${index + 1}` : "rank"}>{index + 1}</span><span className="rank-player"><strong>{row.playerName || "尚未命名"}</strong><small>{row.email}</small><small>{row.realm || "尚未入道"} · {relativeTime(row.lastActiveAt)}</small></span><b>{num(row.turn)}<small>回</small></b></button>)}</div>{rows.length === 0 && <p className="empty-state">目前还没有已创建角色的玩家。</p>}<p className="panel-note">按当前存活命卷统计，前世回合不会累加；点击角色可查看完整账号与历代记录。</p></Panel>;
 }
 
 function UserDrawer({ userId, onClose }: { userId: string; onClose: () => void }) {
@@ -219,9 +225,11 @@ function TurnDrawer({ userId, life, onClose }: { userId: string; life: LifeSumma
   const [jump, setJump] = useState("");
   const [selected, setSelected] = useState<TurnRow | null>(null);
   const query = useLoad<TurnPage>(() => adminApi.userTurns(userId, life.saveId, page, 20, jump), [userId, life.saveId, page, jump]);
+  const adjudications = useLoad<ActionAdjudication[]>(() => adminApi.userAdjudications(userId, life.saveId), [userId, life.saveId]);
   return <aside aria-labelledby="turn-drawer-title" aria-modal="true" className="drawer drawer-wide" role="dialog">
     <header className="drawer-header"><div><p className="kicker">LIFE TURNS</p><h2 id="turn-drawer-title">{life.playerName} · {life.status === "CURRENT" ? "今世" : "前世"}</h2></div><button aria-label="关闭回合记录" className="drawer-close" onClick={onClose}>×</button></header>
     <div className="turn-toolbar"><input inputMode="numeric" placeholder="跳到回合" value={jump} onChange={(e) => { setJump(e.currentTarget.value.replace(/\D/g, "")); setPage(0); }} /><span>共 {query.data?.total ?? 0} 回</span></div>
+    <State loading={adjudications.loading} error={adjudications.error}>{adjudications.data?.length ? <section className="adjudication-log"><h3>近期未执行行动</h3><div>{adjudications.data.map((item, index) => <article key={`${item.at}-${index}`}><strong>第 {item.turn} 回 · {item.reasonCode}</strong><span>{item.intentMode} / {item.actionType} · {item.stage}</span><small>{fmt(item.at)} · {item.version}</small></article>)}</div></section> : null}</State>
     <State loading={query.loading} error={query.error}><Table label="角色回合记录"><thead><tr><th>回合</th><th>玩家行动</th><th>输入 Token</th><th>输出 Token</th><th>总 Token</th><th>生成耗时</th><th>发生时间</th><th>状态</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>{query.data?.rows.map((turn) => <tr key={turn.turn}><td>{turn.turn}</td><td className="wide">{turn.action}</td><td>{num(turn.promptTokens)}</td><td>{num(turn.completionTokens)}</td><td>{num(turn.totalTokens)}</td><td>{latency(turn.latency)}</td><td>{fmt(turn.at)}</td><td><Badge value={turn.status} /></td><td><button className="table-action" onClick={() => setSelected(turn)}>详情</button></td></tr>)}</tbody></Table><Pager page={page} size={20} total={query.data?.total ?? 0} onPage={setPage} /></State>
     {selected && <TurnDetailModal saveId={life.saveId} turn={selected} onClose={() => setSelected(null)} />}
   </aside>;
@@ -238,11 +246,32 @@ function TurnDetailModal({ saveId, turn, onClose }: { saveId: string; turn: Turn
   </section></div>;
 }
 
-function Releases() {
+function Releases({ currentVersion, onVersionChanged }: { currentVersion: string; onVersionChanged: () => void }) {
   const query = useLoad<ReleaseNoteAdmin[]>(() => adminApi.releaseNotes(), []);
   const [editing, setEditing] = useState<Partial<ReleaseNoteAdmin> | null>(null);
-  const create = () => setEditing({ version: "V0.11", title: "", content: "", status: "DRAFT", announceAll: false, showOnLogin: false });
-  return <><div className="page-intro"><div><h2>版本公告</h2><p>管理玩家进入游戏时看到的更新说明和重要通知。</p></div><button className="primary" onClick={create}>新建版本公告</button></div><State loading={query.loading} error={query.error}><div className="release-grid">{query.data?.map((note) => <article className="release-card" key={note.id}><div className="release-meta"><Badge value={note.status} /><span>{note.version}</span><small>{fmt(note.updatedAt)}</small></div><h2>{note.title}</h2><p className="release-copy">{note.content}</p><footer><span>{note.showOnLogin ? "登录页置顶" : note.announceAll ? `全员公告 · ${note.readCount} 人已读` : "仅版本记录"}</span><button className="table-action" onClick={() => setEditing(note)}>编辑公告</button></footer></article>)}</div>{query.data?.length === 0 && <p className="empty-state">还没有版本公告。</p>}</State>{editing && <ReleaseEditor note={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); query.reload(); }} />}</>;
+  const [versionDraft, setVersionDraft] = useState("");
+  const [versionBusy, setVersionBusy] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => setVersionDraft(currentVersion), [currentVersion]);
+  const create = () => setEditing({ version: currentVersion, title: "", content: "", status: "DRAFT", announceAll: false, showOnLogin: false });
+  const pinned = query.data?.find((note) => note.status === "PUBLISHED" && note.showOnLogin);
+  const saveVersion = async () => {
+    setVersionBusy(true); setMessage("");
+    try {
+      const updated = await adminApi.updateAppVersion(versionDraft);
+      setVersionDraft(updated.version); setMessage(`当前游戏版本已调整为 ${updated.version}`); onVersionChanged();
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : "版本保存失败"); }
+    finally { setVersionBusy(false); }
+  };
+  const clearPinned = async () => {
+    if (!pinned || clearing) return;
+    setClearing(true); setMessage("");
+    try { const result = await adminApi.clearLoginAnnouncement(); setMessage(result.message); query.reload(); }
+    catch (reason) { setMessage(reason instanceof Error ? reason.message : "撤下失败"); }
+    finally { setClearing(false); }
+  };
+  return <><div className="page-intro"><div><h2>版本公告</h2><p>“全员公告”控制登录后的单次弹窗；“登录页公告”是独立的长期展示位。</p></div><button className="primary" disabled={!currentVersion} onClick={create}>新建版本公告</button></div><section className="app-version-control"><div><span>当前游戏版本</span><strong>{currentVersion || "正在同步"}</strong><p>H5、世界页和管理台统一读取此版本；发版后再调整，避免提前影响线上展示。</p></div><div><input aria-label="当前游戏版本" maxLength={16} onChange={(event) => setVersionDraft(event.currentTarget.value)} placeholder="V0.13" value={versionDraft} /><button className="secondary" disabled={versionBusy || !versionDraft.trim() || versionDraft === currentVersion} onClick={() => void saveVersion()}>{versionBusy ? "保存中…" : "更新版本"}</button></div></section><State loading={query.loading} error={query.error}>{pinned ? <section className="login-announcement-status"><div><span>当前登录页公告</span><strong>{pinned.version} · {pinned.title}</strong><p>发布其他未勾选登录页展示的公告，不会自动撤下这一条。</p></div><button className="danger-link" disabled={clearing} onClick={() => void clearPinned()}>{clearing ? "正在撤下…" : "停止登录页展示"}</button></section> : <section className="login-announcement-status empty"><div><span>当前登录页公告</span><strong>未展示</strong><p>玩家打开登录页时不会看到版本公告。</p></div></section>}{message && <p className="notice" role="status">{message}</p>}<div className="release-grid">{query.data?.map((note) => <article className="release-card" key={note.id}><div className="release-meta"><Badge value={note.status} /><span>{note.version}</span><small>{fmt(note.updatedAt)}</small></div><h2>{note.title}</h2><p className="release-copy">{note.content}</p><footer><span>{note.showOnLogin ? "登录页置顶" : note.announceAll ? `全员公告 · ${note.readCount} 人已读` : "仅版本记录"}</span><button className="table-action" onClick={() => setEditing(note)}>编辑公告</button></footer></article>)}</div>{query.data?.length === 0 && <p className="empty-state">还没有版本公告。</p>}</State>{editing && <ReleaseEditor note={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); query.reload(); }} />}</>;
 }
 
 function ReleaseEditor({ note, onClose, onSaved }: { note: Partial<ReleaseNoteAdmin>; onClose: () => void; onSaved: () => void }) {
@@ -256,7 +285,7 @@ function ReleaseEditor({ note, onClose, onSaved }: { note: Partial<ReleaseNoteAd
     catch (reason) { setError(reason instanceof Error ? reason.message : "保存失败"); }
     finally { setBusy(false); }
   };
-  return <div className="modal-mask"><section aria-labelledby="release-editor-title" aria-modal="true" className="modal" role="dialog"><header className="drawer-header"><div><p className="kicker">RELEASE NOTE</p><h2 id="release-editor-title">版本公告</h2></div><button aria-label="关闭公告编辑" className="drawer-close" onClick={onClose}>×</button></header><div className="form-grid"><label>版本<input value={form.version ?? ""} onChange={(e) => setForm({ ...form, version: e.currentTarget.value })} /></label><label>当前状态<input disabled value={form.status === "PUBLISHED" ? "已发布" : form.status === "ARCHIVED" ? "已归档" : "草稿"} /></label><label className="full">标题<input value={form.title ?? ""} onChange={(e) => setForm({ ...form, title: e.currentTarget.value })} /></label><label className="full">更新内容<textarea rows={9} value={form.content ?? ""} onChange={(e) => setForm({ ...form, content: e.currentTarget.value })} /></label><label className="check full"><input type="checkbox" checked={form.announceAll ?? false} onChange={(e) => setForm({ ...form, announceAll: e.currentTarget.checked, showOnLogin: e.currentTarget.checked ? form.showOnLogin : false })} />发布后向全部玩家公告一次</label><label className="check full"><input type="checkbox" disabled={!form.announceAll} checked={form.showOnLogin ?? false} onChange={(e) => setForm({ ...form, showOnLogin: e.currentTarget.checked })} />同时固定展示在登录首页（同时只保留一条）</label>{form.announceAll && form.status !== "PUBLISHED" && <p className="release-warning full">当前仍是草稿。只有点击“发布并全员公告”后，玩家端才会弹出或显示在登录页。</p>}{error && <p className="error full" role="alert">{error}</p>}</div><div className="modal-actions"><button className="secondary" disabled={busy} onClick={() => void save("DRAFT")}>保存草稿</button>{note.id && <button className="danger-link" disabled={busy} onClick={() => void save("ARCHIVED")}>归档并撤下</button>}<button className="primary" disabled={busy} onClick={() => void save("PUBLISHED")}>{busy ? "正在保存…" : form.announceAll ? "发布并全员公告" : "发布版本记录"}</button></div></section></div>;
+  return <div className="modal-mask"><section aria-labelledby="release-editor-title" aria-modal="true" className="modal" role="dialog"><header className="drawer-header"><div><p className="kicker">RELEASE NOTE</p><h2 id="release-editor-title">版本公告</h2></div><button aria-label="关闭公告编辑" className="drawer-close" onClick={onClose}>×</button></header><div className="form-grid"><label>版本<input value={form.version ?? ""} onChange={(e) => setForm({ ...form, version: e.currentTarget.value })} /></label><label>当前状态<input disabled value={form.status === "PUBLISHED" ? "已发布" : form.status === "ARCHIVED" ? "已归档" : "草稿"} /></label><label className="full">标题<input value={form.title ?? ""} onChange={(e) => setForm({ ...form, title: e.currentTarget.value })} /></label><label className="full">更新内容<textarea rows={9} value={form.content ?? ""} onChange={(e) => setForm({ ...form, content: e.currentTarget.value })} /></label><label className="check full"><input type="checkbox" checked={form.announceAll ?? false} onChange={(e) => setForm({ ...form, announceAll: e.currentTarget.checked, showOnLogin: e.currentTarget.checked ? form.showOnLogin : false })} />发布后向全部玩家公告一次</label><label className="check full"><input type="checkbox" disabled={!form.announceAll} checked={form.showOnLogin ?? false} onChange={(e) => setForm({ ...form, showOnLogin: e.currentTarget.checked })} />将本公告固定展示在登录首页（同时只保留一条）</label>{form.announceAll && !form.showOnLogin && <p className="release-warning full">本公告不会替换或撤下当前登录页公告；如需完全停止展示，请在公告列表顶部点击“停止登录页展示”。</p>}{form.announceAll && form.status !== "PUBLISHED" && <p className="release-warning full">当前仍是草稿。只有点击“发布并全员公告”后，玩家端才会弹出或显示在登录页。</p>}{error && <p className="error full" role="alert">{error}</p>}</div><div className="modal-actions"><button className="secondary" disabled={busy} onClick={() => void save("DRAFT")}>保存草稿</button>{note.id && <button className="danger-link" disabled={busy} onClick={() => void save("ARCHIVED")}>归档并撤下</button>}<button className="primary" disabled={busy} onClick={() => void save("PUBLISHED")}>{busy ? "正在保存…" : form.announceAll ? "发布并全员公告" : "发布版本记录"}</button></div></section></div>;
 }
 
 function Models() {
@@ -280,19 +309,23 @@ function Models() {
 function Limits() {
   const query = useLoad<GameplayConfig>(() => adminApi.gameplayConfig(), []);
   const [limit, setLimit] = useState(20);
+  const [limitMessage, setLimitMessage] = useState("");
   const [customEnabled, setCustomEnabled] = useState(true);
+  const [maxActiveSaves, setMaxActiveSaves] = useState(2);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   useEffect(() => {
     if (!query.data) return;
     setLimit(query.data.accountPublicTurnLimit);
+    setLimitMessage(query.data.limitMessage);
     setCustomEnabled(query.data.customApiEnabled);
+    setMaxActiveSaves(query.data.maxActiveSaves);
   }, [query.data]);
   const save = async () => {
     setBusy(true); setMessage("");
     try {
-      await adminApi.updateGameplayConfig(limit, customEnabled);
-      setMessage("账号回合设置已生效。");
+      await adminApi.updateGameplayConfig(limit, customEnabled, limitMessage, maxActiveSaves);
+      setMessage("账号回合与命卷设置已生效。");
       query.reload();
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "保存失败");
@@ -303,7 +336,66 @@ function Limits() {
     ["今日自备回合", num(query.data.todayCustomTurns), "玩家密钥承担"],
     ["自备密钥玩家", num(query.data.customApiUsers), "当前有效"],
     ["异常密钥", num(query.data.invalidCredentialUsers), "需玩家重新设置"],
-  ].map(([label, value, note]) => <article className="metric" key={label}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>)}</div><Panel title="账号回合规则"><div className="config-form"><label>每个账号赠送回合<input max="1000" min="1" type="number" value={limit} onChange={(event) => setLimit(Number(event.currentTarget.value))} /></label><label className="check"><input checked={customEnabled} type="checkbox" onChange={(event) => setCustomEnabled(event.currentTarget.checked)} />允许玩家接入自己的 DeepSeek API Key</label><p>新账号默认获得 20 个推演回合，不按日期重置。使用自己的密钥不会消耗赠送回合，但仍保持单个存档一次只能提交一个行动。</p>{message && <p className="notice">{message}</p>}<button className="primary" disabled={busy || limit < 1 || limit > 1000} onClick={() => void save()}>{busy ? "正在保存…" : "保存回合规则"}</button></div></Panel></>}</State>;
+    ["双命卷账号", num(query.data.usersWithMultipleSaves), `当前共 ${num(query.data.activeSaveCount)} 份存活命卷`],
+  ].map(([label, value, note]) => <article className="metric" key={label}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>)}</div><Panel title="账号回合与命卷规则"><div className="config-form"><label>每个账号赠送回合<input max="1000" min="1" type="number" value={limit} onChange={(event) => setLimit(Number(event.currentTarget.value))} /></label><label>同账号最大存活角色<select value={maxActiveSaves} onChange={(event) => setMaxActiveSaves(Number(event.currentTarget.value))}><option value={1}>1 个</option><option value={2}>2 个</option></select></label><label>回合耗尽时的提示<textarea maxLength={220} rows={4} value={limitMessage} onChange={(event) => setLimitMessage(event.currentTarget.value)} /></label><label className="check"><input checked={customEnabled} type="checkbox" onChange={(event) => setCustomEnabled(event.currentTarget.checked)} />允许玩家接入自己的 DeepSeek API Key</label><p>调低角色上限前，系统会检查现有账号；存在超限账号时会拒绝保存，不会自动删除玩家数据。</p>{message && <p className="notice">{message}</p>}<button className="primary" disabled={busy || limit < 1 || limit > 1000 || !limitMessage.trim()} onClick={() => void save()}>{busy ? "正在保存…" : "保存账号规则"}</button></div></Panel></>}</State>;
+}
+
+function AccessControlPage() {
+  const query = useLoad<AccessControl>(() => adminApi.accessControl(), []);
+  const [mode, setMode] = useState<AccessControl["mode"]>("OPEN");
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [resumeAt, setResumeAt] = useState("");
+  const [email, setEmail] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    if (!query.data) return;
+    setMode(query.data.mode); setTitle(query.data.title); setMessage(query.data.message);
+    setResumeAt(query.data.resumeAt ? new Date(query.data.resumeAt).toISOString().slice(0, 16) : "");
+  }, [query.data]);
+  const save = async () => {
+    setBusy(true); setNotice("");
+    try {
+      await adminApi.updateAccessControl({ mode, title, message, resumeAt: resumeAt ? new Date(resumeAt).toISOString() : "" });
+      setNotice(mode === "WHITELIST" ? "灰度白名单已开启，非名单玩家将收到更新提示。" : "全量访问已恢复。");
+      query.reload();
+    } catch (reason) { setNotice(reason instanceof Error ? reason.message : "保存失败"); }
+    finally { setBusy(false); }
+  };
+  const add = async () => {
+    if (!email.trim()) return;
+    setBusy(true); setNotice("");
+    try { await adminApi.addAccessWhitelist(email.trim(), note.trim()); setEmail(""); setNote(""); setNotice("测试账号已加入。"); query.reload(); }
+    catch (reason) { setNotice(reason instanceof Error ? reason.message : "添加失败"); }
+    finally { setBusy(false); }
+  };
+  const remove = async (userId: string) => {
+    setBusy(true); setNotice("");
+    try { await adminApi.removeAccessWhitelist(userId); setNotice("测试账号已移除。"); query.reload(); }
+    catch (reason) { setNotice(reason instanceof Error ? reason.message : "移除失败"); }
+    finally { setBusy(false); }
+  };
+  return <State loading={query.loading} error={query.error}>{query.data && <>
+    <div className="metric-grid">{[
+      ["当前访问模式", query.data.mode === "WHITELIST" ? "灰度白名单" : "全部开放", query.data.mode === "WHITELIST" ? "仅测试账号可进入" : "所有有效账号可进入"],
+      ["测试账号", num(query.data.whitelist.length), "已加入白名单"],
+    ].map(([label, value, help]) => <article className="metric" key={label}><span>{label}</span><strong>{value}</strong><small>{help}</small></article>)}</div>
+    <Panel title="灰度访问开关"><div className="config-form">
+      <label>访问模式<select value={mode} onChange={(event) => setMode(event.currentTarget.value as AccessControl["mode"])}><option value="OPEN">全部开放</option><option value="WHITELIST">仅白名单</option></select></label>
+      <label>更新提示标题<input maxLength={80} value={title} onChange={(event) => setTitle(event.currentTarget.value)} /></label>
+      <label>更新提示内容<textarea maxLength={220} rows={5} value={message} onChange={(event) => setMessage(event.currentTarget.value)} /></label>
+      <label>预计恢复时间（可不填）<input type="datetime-local" value={resumeAt} onChange={(event) => setResumeAt(event.currentTarget.value)} /></label>
+      <p>{mode === "WHITELIST" ? "开启后，名单账号可正常登录和游玩；其余账号即使已有会话也会被拦截，存档不会改变。" : "当前不会限制玩家进入。提示文案仍会保留，供下次灰度使用。"}</p>
+      {notice && <p className="notice" role="status">{notice}</p>}
+      <button className="primary" disabled={busy || !title.trim() || !message.trim()} onClick={() => void save()}>{busy ? "正在保存…" : "保存访问规则"}</button>
+    </div></Panel>
+    <Panel title="测试账号白名单"><div className="config-form access-add-form"><label>玩家邮箱<input inputMode="email" placeholder="player@example.com" type="email" value={email} onChange={(event) => setEmail(event.currentTarget.value)} /></label><label>备注（可不填）<input maxLength={200} placeholder="例如：核心玩法测试" value={note} onChange={(event) => setNote(event.currentTarget.value)} /></label><button className="secondary" disabled={busy || !email.trim()} onClick={() => void add()}>加入测试账号</button></div>
+      <Table label="灰度测试账号"><thead><tr><th>邮箱</th><th>备注</th><th>加入时间</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>{query.data.whitelist.map((item) => <tr key={item.userId}><td className="wide">{item.email}</td><td>{item.note || "—"}</td><td>{fmt(item.createdAt)}</td><td><button className="danger-link" disabled={busy} onClick={() => void remove(item.userId)}>移除</button></td></tr>)}</tbody></Table>
+      {query.data.whitelist.length === 0 && <p className="empty">还没有测试账号。至少加入一个账号后才能开启白名单。</p>}
+    </Panel>
+  </>}</State>;
 }
 
 function Operations() {

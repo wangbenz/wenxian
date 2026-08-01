@@ -10,6 +10,7 @@
 - The core loop must support both quick choices and free-text actions.
 - A single world timeline is authoritative. Every named character has an independent record and evolves against the same timeline.
 - Keep product documentation compact: one game-design document and one Agent/data architecture document.
+- Keep release history in `docs/version-history.md`. Every release-oriented commit must update the matching version entry for H5, admin, and backend/data changes; do not hardcode the displayed version in either frontend.
 
 ## Editing Boundary
 
@@ -26,6 +27,14 @@
 - Use browser-native focus and keyboard behavior. When the composer is focused, hide the bottom navigation so it does not compete with the soft keyboard.
 - Every control must remain keyboard accessible and have an accessible name.
 - Preserve server persistence with a read-only browser cache when offline. Never run a local rules Agent in place of DeepSeek.
+
+## Account Turn Quota Contract
+
+- The platform-sponsored turn limit is authoritative in `gameplay_config.account_public_turn_limit`. It is a cumulative per-account limit, does not reset daily, and changing it applies to both existing and new accounts.
+- Never hardcode the sponsored turn count in H5 copy. Registration success, Adventure usage, World settings, remaining turns, and exhaustion handling must use the backend `AiSettings.turnLimit`, `usedTurns`, and `remainingTurns`.
+- The exhaustion message is managed from the admin Limits page and stored in `gameplay_config.account_public_turn_limit_message`. Player support/QQ copy reuses `gameplay_config.registration_contact_text` so operators maintain contact information in one place.
+- Exhaustion is a normal business outcome, not a model failure. The backend returns HTTP 429 with code `PUBLIC_TURN_LIMIT_REACHED`; H5 must show the dedicated ink-style dialog with the configured message, support contact, QQ copy action when a group number is present, and a route to World/key settings. Do not replace it with “天机紊乱”.
+- A valid player-owned generation key bypasses the sponsored-turn limit and must not increment sponsored usage. Genuine network/provider/5xx failures may still use the generic “天机紊乱” presentation.
 
 ## Deployment and Data Safety
 

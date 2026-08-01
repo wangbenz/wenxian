@@ -46,10 +46,12 @@ create table user_session (
 
 create table game_save (
     id varchar(80) primary key,
-    user_id varchar(64) not null unique,
+    user_id varchar(64) not null,
+    slot_no smallint not null default 1,
     state_json clob not null,
     revision bigint not null,
     updated_at timestamp not null,
+    unique(user_id, slot_no),
     constraint fk_save_user foreign key (user_id) references app_user(id)
 );
 
@@ -92,6 +94,7 @@ create table ai_usage_log (
     provider varchar(32) not null default 'DEEPSEEK',
     credential_source varchar(20) not null,
     model varchar(120) not null,
+    game_version varchar(32) not null default 'UNKNOWN',
     status varchar(20) not null,
     prompt_tokens integer not null default 0,
     completion_tokens integer not null default 0,
@@ -99,6 +102,16 @@ create table ai_usage_log (
     cache_miss_tokens integer not null default 0,
     latency_ms bigint not null default 0,
     error_detail varchar(1000) not null default '',
+    created_at timestamp not null
+);
+
+create table game_analytics_event (
+    id varchar(80) primary key,
+    user_id varchar(64) not null,
+    save_id varchar(80),
+    game_version varchar(32) not null,
+    event_type varchar(48) not null,
+    metadata_json varchar(1000) not null default '{}',
     created_at timestamp not null
 );
 
@@ -198,6 +211,15 @@ create table ai_model_config (
 create table gameplay_config (
     config_key varchar(64) primary key,
     config_value varchar(255) not null,
+    updated_at timestamp not null
+);
+
+create table game_access_whitelist (
+    id varchar(64) primary key,
+    user_id varchar(64) not null unique,
+    note varchar(200) not null default '',
+    created_by varchar(64) not null default 'system',
+    created_at timestamp not null,
     updated_at timestamp not null
 );
 

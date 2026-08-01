@@ -18,7 +18,7 @@ public class RuntimeAiConfigService {
 
     public RuntimeAiConfigService(JdbcTemplate jdbc,
                                   @Value("${deepseek.api-key:}") String fallbackApiKey,
-                                  @Value("${deepseek.model:deepseek-v4-pro}") String fallbackModel,
+                                  @Value("${deepseek.model:deepseek-v4-flash}") String fallbackModel,
                                   @Value("${game.ai-config-master-key:wenxian-local-config-key-change-me}") String masterKey,
                                   @Value("${game.ai-config-force-environment:false}") boolean forceEnvironment) {
         this.jdbc = jdbc;

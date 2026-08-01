@@ -40,6 +40,7 @@ public class AuthService {
     private final String ipHashPepper;
     private final int registrationsPerIpPerDay;
     private final int loginFailuresPerWindow;
+    private final AccessPolicyService accessPolicy;
 
     @Autowired
     public AuthService(JdbcTemplate jdbcTemplate,
@@ -48,7 +49,8 @@ public class AuthService {
                        @Value("${game.auth.idle-hours:12}") int idleHours,
                        @Value("${game.auth.ip-hash-pepper:wenxian-local-ip-pepper-change-me}") String ipHashPepper,
                        @Value("${game.auth.registrations-per-ip-per-day:1}") int registrationsPerIpPerDay,
-                       @Value("${game.auth.login-failures-per-window:5}") int loginFailuresPerWindow) {
+                       @Value("${game.auth.login-failures-per-window:5}") int loginFailuresPerWindow,
+                       AccessPolicyService accessPolicy) {
         this.jdbcTemplate = jdbcTemplate;
         this.bootstrapInviteCode = bootstrapInviteCode == null ? "" : bootstrapInviteCode.strip();
         this.sessionDays = Math.max(1, Math.min(sessionDays, 365));
@@ -56,11 +58,12 @@ public class AuthService {
         this.ipHashPepper = ipHashPepper == null ? "" : ipHashPepper;
         this.registrationsPerIpPerDay = Math.max(1, Math.min(registrationsPerIpPerDay, 20));
         this.loginFailuresPerWindow = Math.max(3, Math.min(loginFailuresPerWindow, 30));
+        this.accessPolicy = accessPolicy;
     }
 
     AuthService(JdbcTemplate jdbcTemplate, String bootstrapInviteCode, int sessionDays) {
         this(jdbcTemplate, bootstrapInviteCode, sessionDays, 12,
-                "test-ip-pepper", 1, 5);
+                "test-ip-pepper", 1, 5, new AccessPolicyService(jdbcTemplate));
     }
 
     @PostConstruct
@@ -81,6 +84,7 @@ public class AuthService {
 
     @Transactional
     public LoginOutcome register(String rawEmail, String rawPassword, String clientIp) {
+        accessPolicy.assertRegistrationAllowed();
         String email = normalizeEmail(rawEmail);
         String password = validatePassword(rawPassword);
         if (findUserByEmail(email) != null) {
@@ -145,6 +149,8 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "邮箱或密码错误");
         }
 
+        accessPolicy.assertAllowed(user.userId());
+
         jdbcTemplate.update("delete from auth_login_failure where email_hash=? and ip_hash=?",
                 emailHash, ipHash);
         jdbcTemplate.update("update app_user set last_login_at=? where id=?",
@@ -183,6 +189,7 @@ public class AuthService {
                 Timestamp.from(now.minus(Duration.ofHours(idleHours))))
                 .stream().findFirst().orElse(null);
         if (user != null) {
+            accessPolicy.assertAllowed(user.userId());
             jdbcTemplate.update("update user_session set created_at=? where token_hash=?",
                     Timestamp.from(now), tokenHash);
             jdbcTemplate.update("update app_user set last_login_at=? where id=?",
@@ -217,6 +224,7 @@ public class AuthService {
         jdbcTemplate.update("delete from user_release_receipt where user_id=?", userId);
         jdbcTemplate.update("delete from user_daily_quota where user_id=?", userId);
         jdbcTemplate.update("delete from user_ai_credential where user_id=?", userId);
+        jdbcTemplate.update("delete from game_access_whitelist where user_id=?", userId);
         jdbcTemplate.update("delete from user_session where user_id=?", userId);
         jdbcTemplate.update("delete from auth_login_failure where email_hash=?",
                 TokenHasher.sha256(user.email()));

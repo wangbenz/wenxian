@@ -17,9 +17,7 @@ import java.util.UUID;
 
 @Repository
 public class AgentConversationStore {
-    private static final int FULL_HISTORY_CHARACTER_BUDGET = 14_000;
-    private static final int RECENT_HISTORY_CHARACTER_BUDGET = 8_000;
-    private static final int RECENT_MESSAGE_LIMIT = 6;
+    private static final int RECENT_MEMORY_EVENTS = 10;
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
 
@@ -55,33 +53,12 @@ public class AgentConversationStore {
     }
 
     public List<Map<String, Object>> loadHistory(String saveId, GameState state) {
-        String conversationId = ensure(saveId, "deepseek-v4-pro");
-        List<MessageRow> rows = jdbc.query("""
-                        select role, content from agent_message where conversation_id = ? order by id asc
-                        """, (row, index) -> new MessageRow(row.getString("role"), row.getString("content")),
-                conversationId);
-        int total = rows.stream().mapToInt(row -> row.content().length()).sum();
-        List<Map<String, Object>> result = new ArrayList<>();
-        if (total <= FULL_HISTORY_CHARACTER_BUDGET) {
-            rows.forEach(row -> result.add(Map.of("role", row.role(), "content", row.content())));
-            return result;
-        }
-
-        String summary = buildSummary(state);
+        String conversationId = ensure(saveId, "deepseek-v4-flash");
+        String summary = buildStoryMemory(state);
         jdbc.update("update agent_conversation set summary = ?, updated_at = ? where id = ?",
                 summary, Timestamp.from(Instant.now()), conversationId);
-        result.add(Map.of("role", "user", "content", "【此前命卷摘要】\n" + summary));
-        int retained = 0;
-        List<MessageRow> recent = new ArrayList<>();
-        for (int index = rows.size() - 1;
-             index >= 0 && retained < RECENT_HISTORY_CHARACTER_BUDGET && recent.size() < RECENT_MESSAGE_LIMIT;
-             index--) {
-            MessageRow row = rows.get(index);
-            recent.addFirst(row);
-            retained += row.content().length();
-        }
-        recent.forEach(row -> result.add(Map.of("role", row.role(), "content", row.content())));
-        return result;
+        if (summary.isBlank()) return List.of();
+        return List.of(Map.of("role", "user", "content", "【此前命卷提要】\n" + summary));
     }
 
     public void recordTurn(String requestId, String saveId, String conversationId, int turnNumber,
@@ -110,22 +87,33 @@ public class AgentConversationStore {
         }
     }
 
-    private String buildSummary(GameState state) {
+    private String buildStoryMemory(GameState state) {
+        if (state == null || state.events == null || state.events.size() <= 1) return "";
         Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("player", state.player);
-        summary.put("worldTime", Map.of("year", state.worldYear, "day", state.day, "minute", state.minute));
-        summary.put("location", state.currentLocation);
-        summary.put("abilities", state.abilities);
-        summary.put("inventory", state.inventory);
-        summary.put("characters", state.characters);
-        summary.put("threads", state.threads);
-        summary.put("recentEvents", state.events.stream().limit(6).toList());
+        // Event 0 describes the current chapter and is already present in currentNarrative.
+        List<GameState.ChronicleEvent> older = state.events.subList(1, state.events.size());
+        List<GameState.ChronicleEvent> selected = new ArrayList<>();
+        if (older.size() > RECENT_MEMORY_EVENTS) {
+            GameState.ChronicleEvent origin = older.getLast();
+            selected.add(origin);
+            selected.addAll(older.subList(0, RECENT_MEMORY_EVENTS));
+        } else {
+            selected.addAll(older);
+        }
+        summary.put("pastEvents", selected.stream().map(event -> Map.of(
+                "title", safe(event.title),
+                "detail", safe(event.detail),
+                "at", event.at,
+                "kind", safe(event.kind)
+        )).toList());
         return json(summary);
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 
     private long absoluteTime(GameState state) {
         return (long) state.worldYear * 360L * 1440L + (long) Math.max(0, state.day - 1) * 1440L + state.minute;
     }
-
-    private record MessageRow(String role, String content) {}
 }

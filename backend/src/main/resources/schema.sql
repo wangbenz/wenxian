@@ -50,10 +50,13 @@ create table if not exists user_session (
 
 create table if not exists game_save (
     id varchar(80) primary key,
-    user_id varchar(64) not null unique,
+    user_id varchar(64) not null,
+    slot_no smallint not null default 1,
     state_json longtext not null,
     revision bigint not null,
     updated_at timestamp(6) not null,
+    unique key uk_game_save_user_slot (user_id, slot_no),
+    index idx_game_save_user_updated (user_id, updated_at),
     constraint fk_save_user foreign key (user_id) references app_user(id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
 
@@ -98,6 +101,7 @@ create table if not exists ai_usage_log (
     provider varchar(32) not null default 'DEEPSEEK',
     credential_source varchar(20) not null,
     model varchar(120) not null,
+    game_version varchar(32) not null default 'UNKNOWN',
     status varchar(20) not null,
     prompt_tokens integer not null default 0,
     completion_tokens integer not null default 0,
@@ -110,6 +114,19 @@ create table if not exists ai_usage_log (
     index idx_ai_usage_source_created (credential_source, created_at),
     index idx_ai_usage_provider_model (provider, model, created_at),
     index idx_ai_usage_save (save_id, created_at)
+) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+
+create table if not exists game_analytics_event (
+    id varchar(80) primary key,
+    user_id varchar(64) not null,
+    save_id varchar(80),
+    game_version varchar(32) not null,
+    event_type varchar(48) not null,
+    metadata_json varchar(1000) not null default '{}',
+    created_at datetime(6) not null,
+    index idx_analytics_version_event (game_version, event_type, created_at),
+    index idx_analytics_user_created (user_id, created_at),
+    index idx_analytics_save_created (save_id, created_at)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
 
 create table if not exists game_turn (
@@ -201,6 +218,16 @@ create table if not exists gameplay_config (
     config_key varchar(64) primary key,
     config_value varchar(255) not null,
     updated_at timestamp(6) not null
+) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+
+create table if not exists game_access_whitelist (
+    id varchar(64) primary key,
+    user_id varchar(64) not null unique,
+    note varchar(200) not null default '',
+    created_by varchar(64) not null default 'system',
+    created_at timestamp(6) not null,
+    updated_at timestamp(6) not null,
+    index idx_access_whitelist_user (user_id)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
 
 create table if not exists user_ai_credential (

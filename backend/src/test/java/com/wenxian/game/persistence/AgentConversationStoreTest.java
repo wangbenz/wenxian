@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AgentConversationStoreTest {
 
     @Test
-    void summarizesLongHistoryAndKeepsOnlyRecentCompleteMessages() {
+    void buildsCompactEventMemoryWithoutReplayingStoredChapters() {
         EmbeddedDatabase database = new EmbeddedDatabaseBuilder()
                 .setType(EmbeddedDatabaseType.H2)
                 .addScript("schema-h2.sql")
@@ -52,14 +52,23 @@ class AgentConversationStoreTest {
             state.day = 3;
             state.minute = 600;
             state.currentLocation = "青木镇";
+            state.events.add(new GameState.ChronicleEvent(
+                    "event-current", "当前章节", "与当前正文对应，不应在前情重复。", 600, "decision"));
+            state.events.add(new GameState.ChronicleEvent(
+                    "event-recent", "旧庙得讯", "你从守庙人口中得知山门将开。", 500, "gain"));
+            state.events.add(new GameState.ChronicleEvent(
+                    "event-origin", "离开故乡", "你在雨夜离开了旧村。", 100, "decision"));
             List<Map<String, Object>> history = store.loadHistory("save-context", state);
             String combined = history.stream().map(message -> String.valueOf(message.get("content")))
                     .reduce("", (left, right) -> left + right);
 
-            assertTrue(String.valueOf(history.getFirst().get("content")).contains("此前命卷摘要"));
-            assertTrue(history.size() <= 17);
-            assertTrue(combined.length() < 32_000);
-            assertTrue(combined.contains("章节-11"));
+            assertTrue(String.valueOf(history.getFirst().get("content")).contains("此前命卷提要"));
+            assertTrue(history.size() == 1);
+            assertTrue(combined.length() < 2_000);
+            assertTrue(combined.contains("旧庙得讯"));
+            assertTrue(combined.contains("离开故乡"));
+            assertFalse(combined.contains("当前章节"));
+            assertFalse(combined.contains("章节-11"));
             assertFalse(combined.contains("章节-0-"));
             assertTrue(jdbc.queryForObject(
                     "select char_length(summary) > 0 from agent_conversation where id = ?",

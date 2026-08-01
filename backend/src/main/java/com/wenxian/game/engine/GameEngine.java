@@ -22,6 +22,8 @@ public class GameEngine {
 
     public GameState apply(GameState current, AgentResult result) {
         GameState next = copy(current);
+        // Repair a stale daily counter before applying the turn. This mainly protects
+        // legacy saves that were persisted after midnight without being refreshed.
         refreshDailyAbilities(next);
         int absoluteMinute = next.minute + result.elapsed();
         next.day += absoluteMinute / 1440;
@@ -31,19 +33,30 @@ public class GameEngine {
             next.worldYear += 1;
             if (next.player != null) next.player.age += 1;
         }
+        // A turn may itself span one or more days (resting, travelling or seclusion).
+        // Refresh again at the resulting world date so the following action can use a
+        // DAILY ability immediately, rather than requiring an unrelated extra turn.
+        refreshDailyAbilities(next);
         next.turn += 1;
         next.sceneId = result.sceneId();
         next.sceneTitle = result.sceneTitle() == null ? next.sceneTitle : result.sceneTitle();
-        next.currentLocation = result.currentLocation() == null ? next.currentLocation : result.currentLocation();
+        applyLocationTransition(next, result);
         next.narrative = new ArrayList<>(result.narrative());
         next.signals = new ArrayList<>(result.signals());
         next.choices = result.choices() == null ? next.choices : new ArrayList<>(result.choices());
 
         applyPlayerPatch(next.player, result.playerPatch());
+        RealmProgression.apply(next.player, result.realmTransition());
         applyCharacterPatch(next, result.characterPatch());
+        applyCharacterChanges(next, result.characterChanges());
         applyThreadPatch(next, result.threadPatch());
+        applyThreadChanges(next, result.threadChanges());
         applyInventoryChange(next, result.inventoryChange());
+        applyInventoryChanges(next, result.inventoryChanges());
+        CurrencyAuthority.apply(next, result.currencyChanges());
         applyAbilityChange(next, result.abilityChange());
+        applyAbilityChanges(next, result.abilityChanges());
+        applyAdjudicatedCondition(next.player, result.adjudication());
 
         AgentResult.EventDraft draft = result.event();
         next.events.add(0, new GameState.ChronicleEvent(
@@ -51,7 +64,8 @@ public class GameEngine {
                 draft.title(), draft.detail(), absoluteTime(next), draft.kind()
         ));
 
-        if ("DEAD".equals(result.outcome()) || next.player != null && next.player.vitality <= 0) {
+        if ("DEAD".equals(result.outcome())
+                || result.adjudication() != null && result.adjudication().allowsDeath()) {
             sealDeadLife(next, draft);
         }
         return next;
@@ -82,14 +96,16 @@ public class GameEngine {
         patch.forEach((key, value) -> {
             int number = value instanceof Number n ? n.intValue() : 0;
             switch (key) {
-                case "vitality" -> player.vitality = clamp(number, 0, 100);
-                case "silver" -> player.silver = clamp(number, 0, 999_999);
+                // Legacy numeric vitality is no longer accepted from narrative output.
+                case "vitality" -> { }
+                case "condition" -> setCondition(player, String.valueOf(value));
+                case "silver" -> throw new IllegalArgumentException("货币不能通过通用角色补丁修改");
                 case "insight" -> player.insight = clamp(number, 0, 10);
                 case "suspicion" -> player.suspicion = clamp(number, 0, 100);
                 case "identity" -> player.identity = String.valueOf(value);
                 case "goal" -> player.goal = String.valueOf(value);
                 case "burden" -> player.burden = String.valueOf(value);
-                case "realm" -> player.realm = validRealmChange(player.realm, String.valueOf(value));
+                case "realm" -> throw new IllegalArgumentException("境界不能通过通用角色补丁修改");
                 case "constitution" -> player.constitution = String.valueOf(value);
                 default -> { }
             }
@@ -121,6 +137,11 @@ public class GameEngine {
         }
     }
 
+    private void applyInventoryChanges(GameState state, java.util.List<AgentResult.InventoryChange> changes) {
+        if (changes == null) return;
+        changes.forEach(change -> applyInventoryChange(state, change));
+    }
+
     private void applyAbilityChange(GameState state, AgentResult.AbilityChange change) {
         if (change == null) return;
         GameState.AbilityRecord existing = state.abilities.stream()
@@ -143,26 +164,26 @@ public class GameEngine {
         }
     }
 
-    private void refreshDailyAbilities(GameState state) {
+    private void applyAbilityChanges(GameState state, java.util.List<AgentResult.AbilityChange> changes) {
+        if (changes == null) return;
+        changes.forEach(change -> applyAbilityChange(state, change));
+    }
+
+    public boolean refreshDailyAbilities(GameState state) {
         int day = absoluteDay(state);
+        boolean[] changed = {false};
         state.abilities.forEach(ability -> {
             if ("DAILY".equals(ability.resetRule) && ability.lastResetDay < day) {
                 ability.remainingUses = ability.maxUses;
                 ability.lastResetDay = day;
+                changed[0] = true;
             }
         });
+        return changed[0];
     }
 
     private int absoluteDay(GameState state) {
         return state.worldYear * 360 + Math.max(0, state.day - 1);
-    }
-
-    private String validRealmChange(String current, String proposed) {
-        var realms = java.util.List.of("凡俗", "引气", "筑基", "金丹", "元婴", "化神", "炼虚", "合道");
-        int currentIndex = realms.indexOf(current);
-        int proposedIndex = realms.indexOf(proposed);
-        if (proposedIndex < 0 || currentIndex < 0 || proposedIndex > currentIndex + 1) return current;
-        return proposed;
     }
 
     private int absoluteTime(GameState state) {
@@ -179,11 +200,51 @@ public class GameEngine {
                     case "location" -> character.location = String.valueOf(value);
                     case "relation" -> character.relation = String.valueOf(value);
                     case "identity" -> character.identity = String.valueOf(value);
+                    case "realm" -> character.realm = validCharacterRealm(String.valueOf(value));
+                    case "condition" -> character.condition = validCondition(String.valueOf(value), character.condition);
+                    case "combatProfile" -> character.combatProfile = String.valueOf(value);
                     default -> { }
                 }
             });
             character.lastSeenAt = state.minute;
         });
+    }
+
+    private String validCharacterRealm(String value) {
+        if (value == null) return "UNKNOWN";
+        if ("UNKNOWN".equals(value)) return value;
+        return java.util.List.of("凡俗", "引气", "筑基", "金丹", "元婴", "化神", "炼虚", "合道")
+                .contains(value) ? value : "UNKNOWN";
+    }
+
+    private String validCondition(String value, String fallback) {
+        if (value == null) return fallback;
+        return java.util.Set.of("STABLE", "WOUNDED", "SEVERE", "DYING").contains(value)
+                ? value : fallback;
+    }
+
+    private void applyCharacterChanges(GameState state, java.util.List<AgentResult.CharacterChange> changes) {
+        if (changes == null) return;
+        for (AgentResult.CharacterChange change : changes) {
+            if (change == null) continue;
+            GameState.CharacterRecord existing = state.characters.stream()
+                    .filter(value -> change.id().equals(value.id)).findFirst().orElse(null);
+            if (existing == null && "ADD".equals(change.operation())) {
+                state.characters.add(new GameState.CharacterRecord(change.id(), change.name(), change.identity(),
+                        validCharacterRealm(change.realm()), validCondition(change.condition(), "STABLE"),
+                        change.combatProfile(), change.state(), change.location(), change.relation(), state.minute));
+            } else if (existing != null) {
+                existing.name = change.name();
+                existing.identity = change.identity();
+                existing.realm = validCharacterRealm(change.realm());
+                existing.condition = validCondition(change.condition(), existing.condition);
+                existing.combatProfile = change.combatProfile();
+                existing.state = change.state();
+                existing.location = change.location();
+                existing.relation = change.relation();
+                existing.lastSeenAt = state.minute;
+            }
+        }
     }
 
     private void applyThreadPatch(GameState state, AgentResult.EntityPatch patch) {
@@ -200,7 +261,44 @@ public class GameEngine {
         );
     }
 
+    private void applyThreadChanges(GameState state, java.util.List<AgentResult.EntityPatch> changes) {
+        if (changes == null) return;
+        changes.forEach(change -> applyThreadPatch(state, change));
+    }
+
+    private void applyLocationTransition(GameState state, AgentResult result) {
+        LocationAuthority.repairLegacyState(state);
+        AgentResult.LocationTransition transition = result.locationTransition();
+        if (transition == null) {
+            return;
+        }
+        state.currentLocation = transition.toLocationName();
+        state.currentLocationId = transition.toLocationId();
+        if (state.knownLocations.stream().noneMatch(location -> transition.toLocationId().equals(location.id))) {
+            state.knownLocations.add(new GameState.LocationRecord(
+                    transition.toLocationId(), transition.toLocationName(), transition.scope(),
+                    transition.fromLocationId(), LocationAuthority.absoluteTime(state)));
+        }
+    }
+
     private int clamp(int value, int minimum, int maximum) {
         return Math.max(minimum, Math.min(maximum, value));
+    }
+
+    private void applyAdjudicatedCondition(GameState.PlayerState player, ConflictVerdict verdict) {
+        if (player == null || verdict == null || verdict.playerConditionAfter() == null) return;
+        setCondition(player, verdict.playerConditionAfter());
+    }
+
+    private void setCondition(GameState.PlayerState player, String condition) {
+        if (condition == null) return;
+        if (!java.util.Set.of("STABLE", "WOUNDED", "SEVERE", "DYING").contains(condition)) return;
+        player.condition = condition;
+        player.vitality = switch (condition) {
+            case "WOUNDED" -> 35;
+            case "SEVERE" -> 15;
+            case "DYING" -> 5;
+            default -> 60;
+        };
     }
 }

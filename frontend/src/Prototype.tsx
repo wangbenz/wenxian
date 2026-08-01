@@ -21,19 +21,23 @@ import {
   gameApi,
   type ApiSnapshot,
   type AiSettings,
+  type AccessStatus,
   type AuthResponse,
   type BootstrapResponse,
   type CharacterDraft,
   type Choice,
   type GameState,
   type ReleaseNote,
+  type SaveSummary,
   type SyncMode,
 } from "./game-api";
 
 type TabId = "adventure" | "character" | "chronicle" | "world";
-type AppStage = "loading" | "login" | "create" | "fate" | "talent" | "game";
+type AppStage = "loading" | "login" | "saves" | "create" | "fate" | "talent" | "game";
 type ThemeMode = "system" | "paper" | "night";
 type FontSizeMode = "compact" | "standard" | "large";
+type TurnLimitNotice = { message: string; contactText: string; supportGroup: string };
+type MaintenanceNotice = Pick<AccessStatus, "title" | "message" | "resumeAt">;
 
 const CACHE_KEY = "wenxian-readonly-cache-v2";
 const THEME_KEY = "wenxian-theme";
@@ -44,11 +48,15 @@ const DEFAULT_DRAFT: CharacterDraft = {
   gender: "",
   lifeGoal: "LONGEVITY",
   difficulty: "NORMAL",
+  originPremise: "",
   preference: "",
 };
 
+const RACE_NAMES: Record<string, string> = { HUMAN: "人族", DEMON: "妖族", SPIRIT: "灵族" };
+
 function errorMessage(error: unknown) {
   if (!(error instanceof ApiError)) return "命卷暂时无法响应，请稍后重试";
+  if (error.code === "PUBLIC_TURN_LIMIT_REACHED") return error.message;
   if ([502, 503, 504].includes(error.status) || /DeepSeek|Agent|Java|API|后端|模型/i.test(error.message)) {
     return "天机暂时紊乱，本次变化没有写入命卷，请稍后重试";
   }
@@ -143,33 +151,46 @@ function LoginView({
   error,
   offline,
   announcement,
+  accessStatus,
   onAuthenticate,
 }: {
   isBusy: boolean;
   error: string;
   offline: boolean;
   announcement: ReleaseNote | null;
+  accessStatus: AccessStatus | null;
   onAuthenticate: (mode: "login" | "register", email: string, password: string) => void;
 }) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [accessNoticeOpen, setAccessNoticeOpen] = useState(Boolean(accessStatus?.restricted));
   const mismatch = mode === "register" && confirmation.length > 0 && confirmation !== password;
+
+  useEffect(() => {
+    setAccessNoticeOpen(Boolean(accessStatus?.restricted));
+    if (accessStatus?.restricted) setMode("login");
+  }, [accessStatus?.restricted, accessStatus?.title, accessStatus?.message, accessStatus?.resumeAt]);
 
   return (
     <section className="entry-card login-card">
       <div className="entry-seal" aria-hidden="true">问</div>
       <p className="eyebrow">ENTER XUANXU REALM</p>
       <h1>{mode === "login" ? "续写你的命卷" : "领取一份新命卷"}</h1>
-      <p className="entry-lead">{mode === "login" ? "使用邮箱与密码继续自己的单机存档。老用户首次登录时，初始密码为完整邮箱地址。" : "新账号赠送 20 个推演回合，请填写长期可用的真实邮箱。"}</p>
-      {announcement && <aside className="entry-announcement" aria-label="最新公告">
-        <div><span>{announcement.version}</span><strong>{announcement.title}</strong></div>
+      <p className="entry-lead">{mode === "login" ? "使用邮箱与密码继续自己的单机存档。老用户首次登录时，初始密码为完整邮箱地址。" : "新账号将获赠平台推演回合，请填写长期可用的真实邮箱。"}</p>
+      {announcement && <details className="entry-announcement entry-announcement-fold">
+        <summary>
+          <span>{announcement.version}</span>
+          <strong>{announcement.title}</strong>
+          <small className="fold-open">展开</small>
+          <small className="fold-close">收起</small>
+        </summary>
         <p>{announcement.content}</p>
-      </aside>}
+      </details>}
       <div className="login-mode-switch" role="tablist" aria-label="登录方式">
         <button aria-selected={mode === "login"} onClick={() => { setMode("login"); setConfirmation(""); }} role="tab" type="button">登录</button>
-        <button aria-selected={mode === "register"} onClick={() => setMode("register")} role="tab" type="button">注册新账号</button>
+        <button aria-selected={mode === "register"} disabled={Boolean(accessStatus?.restricted)} onClick={() => setMode("register")} role="tab" type="button">{accessStatus?.restricted ? "更新期间暂停注册" : "注册新账号"}</button>
       </div>
       <form
         className="entry-form"
@@ -214,6 +235,7 @@ function LoginView({
       </form>
       {(error || offline) && <p className="entry-error">{error || "命卷暂时无法开启，请稍后重试。"}</p>}
       <p className="entry-footnote">当前暂不发送验证码，请务必使用自己的真实邮箱。验证码功能上线后，无法接收邮件的账号可能无法找回。</p>
+      {accessStatus?.restricted && accessNoticeOpen && <MaintenanceDialog closeLabel="测试账号登录" notice={accessStatus} onClose={() => setAccessNoticeOpen(false)} />}
     </section>
   );
 }
@@ -227,6 +249,7 @@ function CharacterCreationView({
   onDraft,
   onGenerateName,
   onCreate,
+  onCancelRestart,
   onLogout,
 }: {
   bootstrap: BootstrapResponse;
@@ -237,8 +260,19 @@ function CharacterCreationView({
   onDraft: (patch: Partial<CharacterDraft>) => void;
   onGenerateName: () => void;
   onCreate: () => void;
+  onCancelRestart?: () => void;
   onLogout: () => void;
 }) {
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const requestFates = () => {
+    if (!draft.playerName.trim()) {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    onCreate();
+  };
+
   return (
     <div className="creation-view">
       <section className="world-intro-card compact-world-card">
@@ -291,6 +325,7 @@ function CharacterCreationView({
             <label>
               <span>自定义或随机生成</span>
               <input
+                ref={nameInputRef}
                 maxLength={6}
                 onChange={(event) => onDraft({ playerName: event.currentTarget.value })}
                 placeholder="2—6个汉字"
@@ -334,6 +369,18 @@ function CharacterCreationView({
           <p className="difficulty-note">难度在本世开启后不会中途改变；重开命卷时可以重新选择。</p>
         </fieldset>
 
+        <label className="preference-field origin-premise-field">
+          <span>角色根源 <small>必须遵守 · 可留空</small></span>
+          <textarea
+            maxLength={160}
+            onChange={(event) => onDraft({ originPremise: event.currentTarget.value })}
+            placeholder={draft.race === "SPIRIT" ? "例如：一块矿石在灵脉中孕育百年后生出灵智。" : draft.race === "DEMON" ? "例如：山中白狐幼崽，刚刚第一次化形。" : "例如：边城药农之子，自幼能看见常人忽略的灵光。"}
+            rows={3}
+            value={draft.originPremise}
+          />
+          <small className="field-explanation">这是角色不可随意改写的出身事实，但不能借此直接获得高阶修为或无条件力量。</small>
+        </label>
+
         <label className="preference-field">
           <span>命格偏好 <small>可留空</small></span>
           <textarea
@@ -346,9 +393,10 @@ function CharacterCreationView({
         </label>
 
         {error && <p className="entry-error">{error}</p>}
-        <button className="primary-entry-button" disabled={isBusy || !draft.gender || !draft.race || !draft.playerName.trim()} onClick={onCreate} type="button">
+        <button className="primary-entry-button" disabled={isBusy} onClick={requestFates} type="button">
           {isBusy ? "天机正在推演三种命格…" : "生成三种命格"}<ArrowRightIcon />
         </button>
+        {onCancelRestart && <button className="text-button" disabled={isBusy} onClick={onCancelRestart} type="button">返回原来的命卷</button>}
         <button className="text-button" disabled={isBusy} onClick={onLogout} type="button">退出当前邮箱</button>
       </section>
     </div>
@@ -381,12 +429,13 @@ function FateSelectionView({
         <p className="world-summary">姓名与种族已定，选择其中一段出身后，命卷才会正式开始流动。</p>
       </section>
       <section className="fate-selection" aria-labelledby="fate-title">
-        <div className="section-heading-copy"><p className="eyebrow">CHOOSE A MORTAL LIFE</p><h2 id="fate-title">择一命格入世</h2><span>每一种出身都有独立关系、缺陷与未偿之债。</span></div>
+        <div className="section-heading-copy"><p className="eyebrow">CHOOSE ONE LIFE</p><h2 id="fate-title">择一命格入世</h2><span>种族与根源已经确定，每一种命格拥有不同的身份、关系与未偿之债。</span></div>
         <div className="fate-grid" aria-busy={isBusy}>
           {game.protagonistOptions.map((option, index) => (
             <button aria-pressed={selectedId === option.id} className="fate-card" data-selected={selectedId === option.id} key={option.id} onClick={() => onSelect(option.id)} type="button">
               <span className="fate-number">命 {index + 1}</span>
-              <div className="fate-name"><strong>{option.name}</strong><small>{option.age}岁 · {option.identity}</small></div>
+              <div className="fate-name"><strong>{option.name}</strong><small>{RACE_NAMES[option.race] ?? option.race} · {option.age}岁 · {option.identity}</small></div>
+              {option.originPremise && <span className="origin-anchor">本源 · {option.originPremise}</span>}
               <p>{option.origin}</p>
               <dl><div><dt>异处</dt><dd>{option.trait}</dd></div><div><dt>所求</dt><dd>{option.goal}</dd></div><div><dt>旧债</dt><dd>{option.burden}</dd></div></dl>
             </button>
@@ -423,7 +472,7 @@ function TalentSelectionView({ game, selectedId, isBusy, error, onSelect, onEnte
   </div>;
 }
 
-function AdventureView({ game, choices, resolution, aiSettings, isBusy, offline, error, onChoice, onSuggestion }: { game: GameState; choices: Choice[]; resolution?: ApiSnapshot["actionResolution"]; aiSettings: AiSettings | null; isBusy: boolean; offline: boolean; error: string; onChoice: (id: string) => void; onSuggestion: (action: string) => void }) {
+function AdventureView({ game, choices, resolution, aiSettings, isBusy, offline, error, onChoice, onSuggestion, onResolutionDismiss }: { game: GameState; choices: Choice[]; resolution?: ApiSnapshot["actionResolution"]; aiSettings: AiSettings | null; isBusy: boolean; offline: boolean; error: string; onChoice: (id: string) => void; onSuggestion: (action: string) => void; onResolutionDismiss: () => void }) {
   return (
     <div className="adventure-view">
       <section className="scene-heading" aria-labelledby="scene-title"><span className="leaf-mark" aria-hidden="true">〆</span><div><p className="eyebrow">当前场景</p><h1 id="scene-title">{game.sceneTitle}</h1></div></section>
@@ -431,21 +480,22 @@ function AdventureView({ game, choices, resolution, aiSettings, isBusy, offline,
       <section className="narrative" aria-label="剧情">{game.narrative.map((paragraph, index) => <p data-beat={index > 0 && index % 3 === 0 ? "new" : undefined} key={`${index}-${paragraph}`}>{paragraph}</p>)}</section>
       {game.signals.length > 0 && <section className="signal-strip" aria-label="局势变化">{game.signals.map((signal, index) => <span className={index % 2 ? "signal-danger" : "signal-safe"} key={`${index}-${signal}`}>{signal}</span>)}</section>}
       {resolution && <section className="action-resolution" data-result={resolution.result} role="status">
-        <p className="eyebrow">{resolution.result === "CLARIFY" ? "行动待明" : "世界裁决"}</p>
+        <p className="eyebrow">本轮未发生 · {resolution.result === "CLARIFY" ? "行动待明" : "世界裁决"}</p>
         <h2>{resolution.title}</h2>
         <p>{resolution.reason}</p>
-        <div className="resolution-suggestions" aria-label="可尝试的行动">
-          {resolution.suggestions.map((suggestion) => <button disabled={isBusy || offline} key={suggestion} onClick={() => onSuggestion(suggestion)} type="button">{suggestion}<ChevronRightIcon aria-hidden="true" /></button>)}
+        <div className="resolution-suggestions" aria-label="可改写的行动">
+          {resolution.suggestions.map((suggestion) => <button disabled={isBusy || offline} key={suggestion} onClick={() => onSuggestion(suggestion)} type="button"><span><small>可改为</small>{suggestion}</span><ChevronRightIcon aria-hidden="true" /></button>)}
         </div>
+        <button className="resolution-dismiss" disabled={isBusy} onClick={onResolutionDismiss} type="button">返回原计划</button>
       </section>}
       {isBusy && <AgentProgress />}
-      <section className="choice-list" aria-busy={isBusy} aria-label="可选行动">
+      {!resolution && <section className="choice-list" aria-busy={isBusy} aria-label="可选行动">
         {choices.map((choice, index) => (
           <button className="choice-card" data-tone={choice.tone ?? "default"} disabled={isBusy || offline} key={choice.id} onClick={() => onChoice(choice.id)} type="button">
             <span className="choice-seal" aria-hidden="true">{index + 1}</span><span className="choice-copy"><strong>{choice.label}</strong><small>{choice.hint}</small></span><ChevronRightIcon aria-hidden="true" />
           </button>
         ))}
-      </section>
+      </section>}
       {offline && !isBusy && <div className="agent-thinking offline-note" role="status"><LightningBoltIcon /><span>命卷暂时无法续写，已有经历仍可查阅。</span></div>}
       {error && !isBusy && <p className="turn-error" role="alert">{error}</p>}
       {aiSettings && <p className="daily-chapter-usage">{aiSettings.usingCustomApi ? "正在使用自己的推演密钥 · 不消耗赠送回合" : `当前账号回合 ${aiSettings.usedTurns}/${aiSettings.turnLimit}`}</p>}
@@ -466,22 +516,50 @@ function AgentProgress() {
 function CharacterView({ game }: { game: GameState }) {
   const player = game.player;
   if (!player) return null;
+  const inventory = game.inventory.filter((item) => item.category !== "CURRENCY");
+  const copperWen = game.wallet?.copperWen ?? player.silver ?? 0;
+  const mortalMoney = formatMortalMoney(copperWen);
+  const spiritMoney = formatSpiritMoney(game.wallet);
   return (
     <div className="record-view">
       <div className="page-title-row"><div><p className="eyebrow">CHARACTER RECORD</p><h1>角色</h1></div><span className="turn-badge">第 {game.turn + 1} 回</span></div>
-      <section className="hero-card"><div className="hero-avatar"><PersonIcon /></div><div><h2>{player.name}</h2><p>{player.identity} · {player.realm} · {player.constitution}</p><small>{player.age}/{player.lifespan}岁 · {player.race}</small></div><span className="realm-stamp">{player.realm}</span></section>
-      <section className="life-purpose-card"><p><strong>此生所求</strong>{player.goal}</p><p><strong>未偿旧债</strong>{player.burden}</p></section>
+      <section className="hero-card"><div className="hero-avatar"><PersonIcon /></div><div><h2>{player.name}</h2><p>{player.identity} · {player.realm} · {player.constitution}</p><small>{player.age}/{player.lifespan}岁 · {RACE_NAMES[player.race] ?? player.race}</small></div><span className="realm-stamp">{player.realm}</span></section>
+      <section className="life-purpose-card">{player.origin && <p><strong>此身来处</strong>{player.origin}</p>}{player.originPremise && <p><strong>本源设定</strong>{player.originPremise}</p>}<p><strong>此生所求</strong>{player.goal}</p><p><strong>未偿旧债</strong>{player.burden}</p></section>
       <section className="record-section"><div className="section-label"><LightningBoltIcon /><h2>天赋与功法</h2><span>{game.abilities.length}</span></div><div className="ability-list">
         {game.abilities.map((ability) => <article className="ability-row" key={ability.id}><div><h3>{ability.name}<small>{ability.type === "TALENT" ? "天赋" : ability.type === "TECHNIQUE" ? "功法" : ability.type === "SPELL" ? "术法" : "异能"} · {ability.stage}</small></h3><p>{ability.description}</p><span>缘起：{ability.source}</span></div></article>)}
       </div></section>
-      <section className="record-section"><div className="section-label"><BackpackIcon /><h2>行囊</h2><span>{game.inventory.length}</span></div><div className="inventory-list">
-        {game.inventory.map((item) => <article className="inventory-item" key={item.id}><div><h3>{item.name}<small>{item.quality} · ×{item.quantity}</small></h3><p>{item.description}</p></div></article>)}
+      <section className="record-section"><div className="section-label"><span className="section-glyph">泉</span><h2>随身财物</h2></div><div className="wallet-card">
+        <p><span>凡俗钱财</span><strong>{mortalMoney}</strong></p>
+        <p><span>修行资粮</span><strong>{spiritMoney}</strong></p>
+        <small>凡俗钱财与灵石分别记账，只有剧情中真实发生的交易才会增减。</small>
+      </div></section>
+      <section className="record-section"><div className="section-label"><BackpackIcon /><h2>行囊</h2><span>{inventory.length}</span></div><div className="inventory-list">
+        {inventory.map((item) => <article className="inventory-item" key={item.id}><div><h3>{item.name}<small>{item.quality} · ×{item.quantity}</small></h3><p>{item.description}</p></div></article>)}
       </div></section>
       <section className="record-section"><div className="section-label"><IdCardIcon /><h2>已登场角色</h2><span>{game.characters.length}</span></div><div className="character-list">
         {game.characters.map((character) => <article className="character-row" key={character.id}><div className="mini-avatar">{character.name.slice(0, 1)}</div><div><h3>{character.name}<small>{character.identity}</small></h3><p>{character.state}</p><span>{character.location} · {character.relation}</span></div></article>)}
       </div></section>
     </div>
   );
+}
+
+function formatMortalMoney(value: number) {
+  const total = Math.max(0, Math.floor(value || 0));
+  const gold = Math.floor(total / 10000);
+  const silver = Math.floor((total % 10000) / 1000);
+  const copper = total % 1000;
+  const parts = [gold > 0 ? `${gold}两金` : "", silver > 0 ? `${silver}两银` : "", copper > 0 || total === 0 ? `${copper}文` : ""];
+  return parts.filter(Boolean).join(" · ");
+}
+
+function formatSpiritMoney(wallet: GameState["wallet"]) {
+  if (!wallet) return "尚无灵石";
+  const parts = [
+    wallet.highSpiritStones > 0 ? `上品 ${wallet.highSpiritStones}` : "",
+    wallet.middleSpiritStones > 0 ? `中品 ${wallet.middleSpiritStones}` : "",
+    wallet.lowSpiritStones > 0 ? `下品 ${wallet.lowSpiritStones}` : "",
+  ];
+  return parts.filter(Boolean).join(" · ") || "尚无灵石";
 }
 
 function ChronicleView({ game }: { game: GameState }) {
@@ -593,12 +671,38 @@ function ResetConfirmDialog({
   );
 }
 
-function WorldView({ game, version, releaseNotes, syncMode, email, passwordConfigured, aiSettings, theme, fontSize, onTheme, onFontSize, onAiSettings, onPasswordSettings, onReset, onLogout, onDeleteAccount }: { game: GameState; version: string; releaseNotes: ReleaseNote[]; syncMode: SyncMode; email: string; passwordConfigured: boolean; aiSettings: AiSettings | null; theme: ThemeMode; fontSize: FontSizeMode; onTheme: (theme: ThemeMode) => void; onFontSize: (fontSize: FontSizeMode) => void; onAiSettings: () => void; onPasswordSettings: () => void; onReset: () => void; onLogout: () => void; onDeleteAccount: () => void }) {
+function SaveCards({ saves, currentSaveId, maxActiveSaves, isBusy, onOpen, onCreate, onAbandon }: { saves: SaveSummary[]; currentSaveId?: string; maxActiveSaves: number; isBusy: boolean; onOpen: (save: SaveSummary) => void; onCreate: () => void; onAbandon: (save: SaveSummary) => void }) {
+  return <div className="save-card-list">{saves.map((save) => <article className="save-slot-card" data-current={save.saveId === currentSaveId} key={save.saveId}><button className="save-slot-main" disabled={isBusy} onClick={() => onOpen(save)} type="button"><span>命卷 {save.slotNo}{save.saveId === currentSaveId ? " · 当前" : ""}</span><strong>{save.playerName}</strong><p>{save.realm} · {save.currentLocation || "尚未入世"}</p><small>第 {save.turn} 回 · {new Date(save.updatedAt).toLocaleDateString("zh-CN")}</small></button><button className="save-slot-abandon" disabled={isBusy} onClick={() => onAbandon(save)} type="button">封存</button></article>)}{saves.length < maxActiveSaves && <button className="new-save-card" disabled={isBusy} onClick={onCreate} type="button"><span>＋</span><strong>开启新的命卷</strong><small>与现有角色分别经历、共享账号回合</small></button>}</div>;
+}
+
+function SaveSelectionView({ saves, maxActiveSaves, isBusy, onOpen, onCreate, onAbandon, onLogout }: { saves: SaveSummary[]; maxActiveSaves: number; isBusy: boolean; onOpen: (save: SaveSummary) => void; onCreate: () => void; onAbandon: (save: SaveSummary) => void; onLogout: () => void }) {
+  return <div className="record-view save-selection-view"><div className="page-title-row"><div><p className="eyebrow">YOUR DESTINY SCROLLS</p><h1>选择命卷</h1></div><ReaderIcon className="title-icon" /></div><p className="save-selection-copy">同一账号可以保留 {maxActiveSaves} 名仍在世的角色。每份命卷拥有独立的经历、人物关系与天机上下文。</p><SaveCards isBusy={isBusy} maxActiveSaves={maxActiveSaves} onAbandon={onAbandon} onCreate={onCreate} onOpen={onOpen} saves={saves} /><button className="reset-button save-logout" onClick={onLogout} type="button">退出邮箱</button></div>;
+}
+
+function GenerationAccessCard({ settings, isBusy, onOpen }: { settings: AiSettings; isBusy: boolean; onOpen: () => void }) {
+  const title = settings.usingCustomApi
+    ? "自己的推演密钥已启用"
+    : `账号赠送回合 ${settings.usedTurns}/${settings.turnLimit}`;
+  const detail = settings.usingCustomApi
+    ? `当前密钥尾号 ${settings.maskedSuffix ?? "已隐藏"}，命格、天赋和正文都会使用自己的密钥。`
+    : settings.remainingTurns > 0
+      ? `还可使用 ${settings.remainingTurns} 回；也可以提前接入自己的密钥。`
+      : "赠送回合已用完，接入自己的密钥后仍可重开和续写命卷。";
+  return <section className="generation-access-card"><div><span>命卷推演</span><strong>{title}</strong><p>{detail}</p></div><button disabled={isBusy || !settings.customApiEnabled} onClick={onOpen} type="button">{settings.credentialConfigured ? "管理密钥" : "接入密钥"}</button></section>;
+}
+
+function AbandonSaveDialog({ save, isBusy, onCancel, onConfirm }: { save: SaveSummary; isBusy: boolean; onCancel: () => void; onConfirm: () => void }) {
+  const [confirmation, setConfirmation] = useState("");
+  return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog credential-dialog" role="dialog"><div className="ink-dialog-seal">藏</div><p className="eyebrow">ARCHIVE THIS DESTINY</p><h2>封存「{save.playerName}」的命卷</h2><p>封存后这名角色将不再出现在游戏中，但经历会作为前世记录保留，管理员仍可协助核查。此操作不会返还已经使用的账号回合。</p><label className="credential-field">请输入角色名“{save.playerName}”<input autoComplete="off" value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} /></label><div className="ink-dialog-actions"><button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">继续此世</button><button className="ink-dialog-confirm destructive" disabled={isBusy || confirmation !== save.playerName} onClick={onConfirm} type="button">确认封存</button></div></section></div>;
+}
+
+function WorldView({ game, saves, maxActiveSaves, version, releaseNotes, syncMode, email, passwordConfigured, aiSettings, theme, fontSize, isBusy, onOpenSave, onCreateSave, onAbandonSave, onTheme, onFontSize, onAiSettings, onPasswordSettings, onReset, onLogout, onDeleteAccount }: { game: GameState; saves: SaveSummary[]; maxActiveSaves: number; version: string; releaseNotes: ReleaseNote[]; syncMode: SyncMode; email: string; passwordConfigured: boolean; aiSettings: AiSettings | null; theme: ThemeMode; fontSize: FontSizeMode; isBusy: boolean; onOpenSave: (save: SaveSummary) => void; onCreateSave: () => void; onAbandonSave: (save: SaveSummary) => void; onTheme: (theme: ThemeMode) => void; onFontSize: (fontSize: FontSizeMode) => void; onAiSettings: () => void; onPasswordSettings: () => void; onReset: () => void; onLogout: () => void; onDeleteAccount: () => void }) {
   return (
     <div className="record-view">
       <div className="page-title-row"><div><p className="eyebrow">KNOWN WORLD</p><h1>世界</h1></div><GlobeIcon className="title-icon" /></div>
       <section className="location-card"><div className="location-art" /><div className="location-copy"><span><SewingPinFilledIcon /> 当前位置</span><h2>{game.sceneTitle} · {game.currentLocation}</h2><p>{game.world.summary}</p></div></section>
       <section className="world-law-card"><p><strong>修行法则</strong>{game.world.cultivationLaw}</p><p><strong>生存法则</strong>{game.world.dangerRule}</p><div>{game.world.factions.map((faction) => <span key={faction}>{faction}</span>)}</div></section>
+      <section className="record-section"><div className="section-label"><ReaderIcon /><h2>我的命卷</h2><span>{saves.length}/{maxActiveSaves}</span></div><SaveCards currentSaveId={game.saveId} isBusy={isBusy} maxActiveSaves={maxActiveSaves} onAbandon={onAbandonSave} onCreate={onCreateSave} onOpen={onOpenSave} saves={saves} /></section>
       <section className="record-section"><div className="section-label"><MagnifyingGlassIcon /><h2>未解线索</h2><span>{game.threads.length}</span></div><div className="thread-list">{game.threads.map((thread) => <article className="thread-card" key={thread.id}><div><h3>{thread.title}</h3><p>{thread.state}</p></div><span data-danger={thread.danger > 75 ? "high" : "normal"}>{dangerName(thread.danger)}</span></article>)}</div></section>
       <section className="agent-record-card"><span className="agent-dot" /><div><h2>{syncMode === "server" ? "本世命卷已同步" : "命卷暂时封存"}</h2><p>{syncMode === "server" ? "人物、纪事与未解线索均已妥善保存。" : "已有经历仍可查阅，暂时无法续写。"} 当前邮箱：{email || "未知"}</p></div></section>
       <section className="ai-settings-card"><div><p className="eyebrow">账号安全</p><h2>{passwordConfigured ? "登录密码已设置" : "请为旧账号设置密码"}</h2><p>{passwordConfigured ? "密码只用于登录，不会在页面或管理台中明文展示。" : "设置后可在其他设备使用邮箱和密码找回当前命卷。"}</p></div><button className="secondary-setting-button" onClick={onPasswordSettings} type="button">{passwordConfigured ? "修改密码" : "设置密码"}</button></section>
@@ -643,12 +747,37 @@ function ReleaseAnnouncementDialog({ note, onClose }: { note: ReleaseNote; onClo
   </section></div>;
 }
 
+function TurnLimitDialog({ notice, onClose, onCopyGroup, onOpenSettings }: { notice: TurnLimitNotice; onClose: () => void; onCopyGroup: () => void; onOpenSettings: () => void }) {
+  return <div className="ink-dialog-backdrop" role="presentation"><section aria-describedby="turn-limit-description" aria-labelledby="turn-limit-title" aria-modal="true" className="ink-dialog quota-dialog" role="dialog">
+    <div className="ink-dialog-seal" aria-hidden="true">续</div><p className="eyebrow">CONTINUE THIS CHAPTER</p><h2 id="turn-limit-title">赠送回合已用完</h2>
+    <p id="turn-limit-description">{notice.message}</p>
+    {notice.contactText && <div className="ink-dialog-note"><span>试玩交流</span><strong>{notice.contactText}</strong></div>}
+    <div className="ink-dialog-actions quota-actions">
+      <button className="ink-dialog-confirm" onClick={onOpenSettings} type="button">接入自己的推演密钥<ArrowRightIcon /></button>
+      {notice.supportGroup && <button className="ink-dialog-cancel" onClick={onCopyGroup} type="button">复制QQ群号</button>}
+      <button className="ink-dialog-cancel" onClick={onClose} type="button">暂时留在此页</button>
+    </div>
+  </section></div>;
+}
+
+function MaintenanceDialog({ notice, onClose, closeLabel = "知道了" }: { notice: MaintenanceNotice; onClose: () => void; closeLabel?: string }) {
+  return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog quota-dialog" role="dialog">
+    <div className="ink-dialog-seal" aria-hidden="true">候</div><p className="eyebrow">WORLD IS UPDATING</p>
+    <h2>{notice.title}</h2><p>{notice.message}</p>
+    {notice.resumeAt && <div className="ink-dialog-note"><span>预计恢复</span><strong>{new Date(notice.resumeAt).toLocaleString("zh-CN")}</strong></div>}
+    <div className="ink-dialog-actions single"><button autoFocus className="ink-dialog-confirm" onClick={onClose} type="button">{closeLabel}</button></div>
+  </section></div>;
+}
+
 export default function Prototype() {
   const [stage, setStage] = useState<AppStage>("loading");
   const [tab, setTab] = useState<TabId>("adventure");
   const [auth, setAuth] = useState<AuthResponse | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [snapshot, setSnapshot] = useState<ApiSnapshot | null>(null);
+  const [saves, setSaves] = useState<SaveSummary[]>([]);
+  const [maxActiveSaves, setMaxActiveSaves] = useState(2);
+  const [abandonTarget, setAbandonTarget] = useState<SaveSummary | null>(null);
   const [draft, setDraft] = useState("");
   const [characterDraft, setCharacterDraft] = useState<CharacterDraft>(DEFAULT_DRAFT);
   const [nameAlternatives, setNameAlternatives] = useState<string[]>([]);
@@ -666,18 +795,22 @@ export default function Prototype() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [resetIntent, setResetIntent] = useState<"RESET" | "FATES" | null>(null);
+  const [restartTargetId, setRestartTargetId] = useState<string | null>(null);
   const [pendingRelease, setPendingRelease] = useState<ReleaseNote | null>(null);
   const [loginAnnouncement, setLoginAnnouncement] = useState<ReleaseNote | null>(null);
+  const [accessStatus, setAccessStatus] = useState<AccessStatus | null>(null);
   const [releaseNotes, setReleaseNotes] = useState<ReleaseNote[]>([]);
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null);
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [showPasswordSettings, setShowPasswordSettings] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [turnLimitNotice, setTurnLimitNotice] = useState<TurnLimitNotice | null>(null);
+  const [maintenanceNotice, setMaintenanceNotice] = useState<MaintenanceNotice | null>(null);
 
   const game = snapshot?.state ?? null;
   const choices = snapshot?.choices ?? game?.choices ?? [];
   const email = auth?.user?.email ?? "";
-  const showGameChrome = stage === "fate" || stage === "talent" || stage === "game";
+  const showGameChrome = stage === "saves" || stage === "fate" || stage === "talent" || stage === "game";
   const actualTheme = theme === "system" ? (systemDark ? "night" : "paper") : theme;
 
   const storeSnapshot = (next: ApiSnapshot) => {
@@ -691,6 +824,15 @@ export default function Prototype() {
     return next;
   };
 
+  const stageFor = (next: ApiSnapshot) => next.state.phase === "setup" ? "fate" : next.state.phase === "talent" ? "talent" : "game";
+
+  const refreshSaves = async () => {
+    const list = await gameApi.saves();
+    setSaves(list.saves);
+    setMaxActiveSaves(list.maxActiveSaves);
+    return list;
+  };
+
   const enterAuthenticatedFlow = async (nextAuth: AuthResponse) => {
     setAuth(nextAuth);
     setSyncMode("server");
@@ -700,26 +842,33 @@ export default function Prototype() {
     setPendingRelease(pending);
     setAiSettings(nextAiSettings);
     if (!nextAuth.passwordConfigured) setShowPasswordSettings(true);
-    if (nextAuth.hasSave) {
-      const current = await gameApi.currentSave();
-      if (current.exists && current.game) {
-        storeSnapshot(current.game);
-        setTab("adventure");
-        setStage(current.game.state.phase === "setup" ? "fate" : current.game.state.phase === "talent" ? "talent" : "game");
-        return;
-      }
+    const saveList = await refreshSaves();
+    if (saveList.saves.length > 1) {
+      setSnapshot(null);
+      setStage("saves");
+      return nextAiSettings;
+    }
+    if (saveList.saves.length === 1) {
+      const current = await gameApi.getSave(saveList.saves[0].saveId);
+      storeSnapshot(current);
+      setTab("adventure");
+      setStage(stageFor(current));
+      return nextAiSettings;
     }
     setSnapshot(null);
     setCharacterDraft(DEFAULT_DRAFT);
     setNameAlternatives([]);
     setGeneratedName("");
     setStage("create");
+    return nextAiSettings;
   };
 
   useEffect(() => {
     let active = true;
     (async () => {
       try {
+        const nextAccessStatus = await gameApi.accessStatus();
+        if (active) setAccessStatus(nextAccessStatus);
         void gameApi.latestPublicReleaseNote()
           .then((note) => { if (active) setLoginAnnouncement(note); })
           .catch(() => undefined);
@@ -731,8 +880,18 @@ export default function Prototype() {
           return;
         }
         await enterAuthenticatedFlow(session);
-      } catch {
+      } catch (caught) {
         if (!active) return;
+        if (caught instanceof ApiError && caught.code === "GAME_MAINTENANCE") {
+          setMaintenanceNotice({
+            title: typeof caught.details.title === "string" ? caught.details.title : "命卷暂时封存",
+            message: caught.message,
+            resumeAt: typeof caught.details.resumeAt === "string" ? caught.details.resumeAt : "",
+          });
+          setSyncMode("server");
+          setStage("login");
+          return;
+        }
         const cached = readCachedSnapshot();
         setSyncMode("offline");
         if (cached) {
@@ -745,6 +904,30 @@ export default function Prototype() {
     })();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (stage !== "login") return;
+    let active = true;
+    let loading = false;
+    const refreshLoginAnnouncement = async () => {
+      if (loading || document.visibilityState === "hidden") return;
+      loading = true;
+      try {
+        const note = await gameApi.latestPublicReleaseNote();
+        if (active) setLoginAnnouncement(note);
+      } catch { /* 登录页公告失败不阻断账号登录 */ }
+      finally { loading = false; }
+    };
+    const onVisibility = () => { if (document.visibilityState === "visible") void refreshLoginAnnouncement(); };
+    void refreshLoginAnnouncement();
+    window.addEventListener("focus", refreshLoginAnnouncement);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refreshLoginAnnouncement);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [stage]);
 
   useEffect(() => {
     if (!auth?.authenticated) return;
@@ -827,6 +1010,24 @@ export default function Prototype() {
         setError("登录状态已失效，请重新进入命卷。刚才填写的内容不会产生任何消耗。");
         return;
       }
+      if (caught instanceof ApiError && caught.code === "PUBLIC_TURN_LIMIT_REACHED") {
+        setTurnLimitNotice({
+          message: caught.message,
+          contactText: typeof caught.details.contactText === "string" ? caught.details.contactText : "",
+          supportGroup: typeof caught.details.supportGroup === "string" ? caught.details.supportGroup : "",
+        });
+        gameApi.aiSettings().then(setAiSettings).catch(() => undefined);
+        return;
+      }
+      if (caught instanceof ApiError && caught.code === "GAME_MAINTENANCE") {
+        setMaintenanceNotice({
+          title: typeof caught.details.title === "string" ? caught.details.title : "命卷暂时封存",
+          message: caught.message,
+          resumeAt: typeof caught.details.resumeAt === "string" ? caught.details.resumeAt : "",
+        });
+        setSyncMode("server");
+        return;
+      }
       setError(errorMessage(caught));
     } finally {
       busyRef.current = false;
@@ -838,8 +1039,8 @@ export default function Prototype() {
     const nextAuth = mode === "register"
       ? await gameApi.register(loginEmail, password)
       : await gameApi.login(loginEmail, password);
-    await enterAuthenticatedFlow(nextAuth);
-    setToast(nextAuth.newUser ? "新账号已登记，获赠 20 个推演回合" : "旧命卷已寻回");
+    const nextAiSettings = await enterAuthenticatedFlow(nextAuth);
+    setToast(nextAuth.newUser ? `新账号已登记，获赠 ${nextAiSettings.turnLimit} 个推演回合` : "旧命卷已寻回");
   });
 
   const generateName = () => runBusy(async () => {
@@ -871,10 +1072,21 @@ export default function Prototype() {
   };
 
   const createCharacter = () => runBusy(async () => {
+    if (!characterDraft.gender || !characterDraft.race) {
+      throw new ApiError("请先选择性别与种族，再推演命格", 400);
+    }
+    if (!characterDraft.playerName.trim()) {
+      throw new ApiError("请先输入角色名，或点击“随机雅名”生成一个名字", 400);
+    }
     const validation = await gameApi.validateName(characterDraft.playerName);
     if (!validation.valid) throw new ApiError(validation.message, 400);
-    const created = await gameApi.createSave({ ...characterDraft, playerName: validation.normalizedName });
+    const request = { ...characterDraft, playerName: validation.normalizedName };
+    const created = restartTargetId
+      ? await gameApi.restartSave(restartTargetId, request)
+      : await gameApi.createSave(request);
+    setRestartTargetId(null);
     storeSnapshot(created);
+    await refreshSaves();
     setSelectedFate("");
     setStage("fate");
     setToast("三份命格已经落定");
@@ -884,6 +1096,7 @@ export default function Prototype() {
     if (!game || !selectedFate) return;
     const started = await gameApi.chooseFate(game.saveId, selectedFate);
     storeSnapshot(started);
+    await refreshSaves();
     setSelectedTalent("");
     setStage("talent");
     setToast("命格已定，先天灵光正在显现");
@@ -899,14 +1112,14 @@ export default function Prototype() {
   const enterWithTalent = () => runBusy(async () => {
     if (!game || !selectedTalent) return;
     const next = await gameApi.selectTalent(game.saveId, selectedTalent);
-    storeSnapshot(next); setStage("game"); setTab("adventure");
+    storeSnapshot(next); await refreshSaves(); setStage("game"); setTab("adventure");
     setToast("天赋已入命，世界时间开始流动");
   });
 
   const enterWithoutTalent = () => runBusy(async () => {
     if (!game) return;
     const next = await gameApi.skipTalent(game.saveId);
-    storeSnapshot(next); setStage("game"); setTab("adventure");
+    storeSnapshot(next); await refreshSaves(); setStage("game"); setTab("adventure");
     setToast("一身清净，正式入世");
   });
 
@@ -916,6 +1129,7 @@ export default function Prototype() {
     setIsComposerFocused(false);
     const next = await gameApi.turn(game.saveId, snapshot.revision, inputType, payload);
     storeSnapshot(next);
+    await refreshSaves();
     gameApi.aiSettings().then(setAiSettings).catch(() => undefined);
     setDraft("");
     setTab("adventure");
@@ -923,27 +1137,94 @@ export default function Prototype() {
     if (!next.actionResolution) setToast("本回合已写入统一时间线");
   });
 
-  const recreate = () => runBusy(async () => {
+  const dismissResolution = () => {
+    setSnapshot((current) => current ? {
+      ...current,
+      choices: current.state.choices,
+      actionResolution: null,
+    } : current);
+  };
+
+  const prepareRestart = () => {
     if (!game) return;
-    await gameApi.deleteSave(game.saveId);
+    setRestartTargetId(game.saveId);
     setSnapshot(null);
-    window.localStorage.removeItem(CACHE_KEY);
-    await loadBootstrap();
     setCharacterDraft(DEFAULT_DRAFT);
     setNameAlternatives([]);
+    setGeneratedName("");
     setStage("create");
+  };
+
+  const cancelRestart = () => runBusy(async () => {
+    if (!restartTargetId) return;
+    const current = await gameApi.getSave(restartTargetId);
+    setRestartTargetId(null);
+    storeSnapshot(current);
+    setTab("adventure");
+    setStage(stageFor(current));
+  });
+
+  const openSave = (save: SaveSummary) => runBusy(async () => {
+    const next = await gameApi.getSave(save.saveId);
+    setRestartTargetId(null);
+    storeSnapshot(next);
+    await refreshSaves();
+    setTab("adventure");
+    setStage(stageFor(next));
+  });
+
+  const createAdditionalSave = () => {
+    if (saves.length >= maxActiveSaves) return;
+    setRestartTargetId(null);
+    setSnapshot(null);
+    setCharacterDraft(DEFAULT_DRAFT);
+    setNameAlternatives([]);
+    setGeneratedName("");
+    setStage("create");
+  };
+
+  const abandonSave = () => runBusy(async () => {
+    if (!abandonTarget) return;
+    const targetId = abandonTarget.saveId;
+    await gameApi.abandonSave(targetId, abandonTarget.playerName);
+    setAbandonTarget(null);
+    if (snapshot?.state.saveId === targetId) {
+      setSnapshot(null);
+      window.localStorage.removeItem(CACHE_KEY);
+    }
+    const list = await refreshSaves();
+    if (list.saves.length === 0) setStage("create");
+    else if (list.saves.length === 1) {
+      const next = await gameApi.getSave(list.saves[0].saveId);
+      storeSnapshot(next);
+      setTab("adventure");
+      setStage(stageFor(next));
+    }
+    else setStage("saves");
+    setToast("命卷已封存为前世记录");
   });
 
   const resetGame = () => {
     setResetIntent("RESET");
   };
 
+  const leaveDeath = () => runBusy(async () => {
+    setSnapshot(null);
+    window.localStorage.removeItem(CACHE_KEY);
+    const list = await refreshSaves();
+    setStage(list.saves.length > 0 ? "saves" : "create");
+    setTab("adventure");
+  });
+
   const logout = () => runBusy(async () => {
     await gameApi.logout();
     window.localStorage.removeItem(CACHE_KEY);
     setAuth(null);
     setSnapshot(null);
+    setSaves([]);
     setAiSettings(null);
+    setRestartTargetId(null);
+    setTurnLimitNotice(null);
     setStage("login");
     setSyncMode("server");
   });
@@ -976,10 +1257,27 @@ export default function Prototype() {
     setAuth(null);
     setSnapshot(null);
     setAiSettings(null);
+    setTurnLimitNotice(null);
     setStage("login");
     setSyncMode("server");
     setToast("账号与全部命卷已注销");
   });
+
+  const copySupportGroup = async () => {
+    if (!turnLimitNotice?.supportGroup) return;
+    try {
+      await navigator.clipboard.writeText(turnLimitNotice.supportGroup);
+      setToast(`QQ群号 ${turnLimitNotice.supportGroup} 已复制`);
+    } catch {
+      setToast(`请手动记录QQ群号：${turnLimitNotice.supportGroup}`);
+    }
+  };
+
+  const openTurnLimitSettings = () => {
+    setTurnLimitNotice(null);
+    setError("");
+    if (aiSettings?.customApiEnabled) setShowAiSettings(true);
+  };
 
   const headerText = useMemo(() => {
     if (game?.phase === "dead") return `${formatWorldTime(game.worldYear, game.day, game.minute)} · 此世已终`;
@@ -990,24 +1288,29 @@ export default function Prototype() {
   return (
     <div className="game-shell" data-composer-focused={isComposerFocused} data-entry={!showGameChrome} data-font-size={fontSize} data-keyboard-open={keyboardOffset > 80} data-theme={actualTheme} onFocusCapture={(event) => { const target = event.target; if (target instanceof HTMLElement && target.matches("input, textarea, select") && !target.closest(".action-composer")) revealFormControl(target); }} style={{ "--keyboard-offset": `${keyboardOffset}px` } as CSSProperties}>
       <div className="paper-background" aria-hidden="true" />
-      <header className="game-header"><div className="game-header-inner"><div className="brand-lockup"><strong>问仙录</strong><span>浮生一卷 · {bootstrap?.version ?? "V0.11"}</span></div><div className="world-clock"><span>{headerText}</span><small><SewingPinFilledIcon />{game?.phase === "playing" && game.player ? `${game.currentLocation} · ${game.player.realm} · ${conditionName(game.player.vitality)}` : game?.phase === "dead" && game.player ? `${game.currentLocation} · ${game.player.realm} · 已故` : syncMode === "offline" ? "命卷暂封" : "单机世界 · 命卷待启"}</small></div></div></header>
+      <header className="game-header"><div className="game-header-inner"><div className="brand-lockup"><strong>问仙录</strong><span>浮生一卷 · {bootstrap?.version ?? "版本同步中"}</span></div><div className="world-clock"><span>{headerText}</span><small><SewingPinFilledIcon />{game?.phase === "playing" && game.player ? `${game.currentLocation} · ${game.player.realm} · ${conditionName(game.player.vitality)}` : game?.phase === "dead" && game.player ? `${game.currentLocation} · ${game.player.realm} · 已故` : syncMode === "offline" ? "命卷暂封" : "单机世界 · 命卷待启"}</small></div></div></header>
       <div className="game-scroll" data-phase={game?.phase ?? stage} key={`${stage}-${tab}-${game?.turn ?? 0}`}><main className="screen-content" data-testid="game-content">
+        {aiSettings && (["saves", "create", "fate", "talent"] as AppStage[]).includes(stage) && <GenerationAccessCard isBusy={isBusy} onOpen={() => setShowAiSettings(true)} settings={aiSettings} />}
         {stage === "loading" && <LoadingView />}
-        {stage === "login" && <LoginView announcement={loginAnnouncement} error={error} isBusy={isBusy} offline={syncMode === "offline"} onAuthenticate={authenticate} />}
-        {stage === "create" && bootstrap && <CharacterCreationView alternatives={nameAlternatives} bootstrap={bootstrap} draft={characterDraft} error={error} isBusy={isBusy} onCreate={createCharacter} onDraft={updateCharacterDraft} onGenerateName={generateName} onLogout={() => void logout()} />}
+        {stage === "login" && <LoginView accessStatus={accessStatus} announcement={loginAnnouncement} error={error} isBusy={isBusy} offline={syncMode === "offline"} onAuthenticate={authenticate} />}
+        {stage === "saves" && <SaveSelectionView isBusy={isBusy} maxActiveSaves={maxActiveSaves} onAbandon={setAbandonTarget} onCreate={createAdditionalSave} onLogout={() => void logout()} onOpen={(save) => void openSave(save)} saves={saves} />}
+        {stage === "create" && bootstrap && <CharacterCreationView alternatives={nameAlternatives} bootstrap={bootstrap} draft={characterDraft} error={error} isBusy={isBusy} onCancelRestart={restartTargetId ? () => void cancelRestart() : undefined} onCreate={createCharacter} onDraft={updateCharacterDraft} onGenerateName={generateName} onLogout={() => void logout()} />}
         {stage === "fate" && game && <FateSelectionView error={error} game={game} isBusy={isBusy} onRecreate={() => setResetIntent("FATES")} onSelect={setSelectedFate} onStart={chooseFate} selectedId={selectedFate} />}
         {stage === "talent" && game && <TalentSelectionView error={error} game={game} isBusy={isBusy} onEnter={enterWithTalent} onReroll={rerollTalents} onSelect={setSelectedTalent} onSkip={enterWithoutTalent} selectedId={selectedTalent} />}
-        {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView aiSettings={aiSettings} choices={choices} error={error} game={game} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onSuggestion={(content) => void takeTurn("TEXT", { content })} resolution={snapshot?.actionResolution} />}
+        {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView aiSettings={aiSettings} choices={choices} error={error} game={game} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onResolutionDismiss={dismissResolution} onSuggestion={(content) => void takeTurn("TEXT", { content })} resolution={snapshot?.actionResolution} />}
         {stage === "game" && game?.phase === "playing" && tab === "character" && <CharacterView game={game} />}
         {stage === "game" && game?.phase === "playing" && tab === "chronicle" && <ChronicleView game={game} />}
-        {stage === "game" && game?.phase === "playing" && tab === "world" && <WorldView aiSettings={aiSettings} email={email} fontSize={fontSize} game={game} onAiSettings={() => setShowAiSettings(true)} onDeleteAccount={() => setShowDeleteAccount(true)} onFontSize={setFontSize} onLogout={() => void logout()} onPasswordSettings={() => setShowPasswordSettings(true)} onReset={resetGame} onTheme={setTheme} passwordConfigured={auth?.passwordConfigured ?? false} releaseNotes={releaseNotes} syncMode={syncMode} theme={theme} version={bootstrap?.version ?? "V0.11"} />}
-        {stage === "game" && game?.phase === "dead" && tab !== "chronicle" && <DeathView game={game} isBusy={isBusy} onChronicle={() => setTab("chronicle")} onLogout={() => void logout()} onRebirth={resetGame} />}
+        {stage === "game" && game?.phase === "playing" && tab === "world" && <WorldView aiSettings={aiSettings} email={email} fontSize={fontSize} game={game} isBusy={isBusy} maxActiveSaves={maxActiveSaves} onAbandonSave={setAbandonTarget} onAiSettings={() => setShowAiSettings(true)} onCreateSave={createAdditionalSave} onDeleteAccount={() => setShowDeleteAccount(true)} onFontSize={setFontSize} onLogout={() => void logout()} onOpenSave={(save) => void openSave(save)} onPasswordSettings={() => setShowPasswordSettings(true)} onReset={resetGame} onTheme={setTheme} passwordConfigured={auth?.passwordConfigured ?? false} releaseNotes={releaseNotes} saves={saves} syncMode={syncMode} theme={theme} version={bootstrap?.version ?? "版本同步中"} />}
+        {stage === "game" && game?.phase === "dead" && tab !== "chronicle" && <DeathView game={game} isBusy={isBusy} onChronicle={() => setTab("chronicle")} onLogout={() => void logout()} onRebirth={() => void leaveDeath()} />}
         {stage === "game" && game?.phase === "dead" && tab === "chronicle" && <div className="death-chronicle"><ChronicleView game={game} /><button className="reset-button" onClick={() => setTab("adventure")} type="button">返回终局结算</button></div>}
       </main></div>
-      {stage === "game" && game?.phase === "playing" && tab === "adventure" && <form className="action-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void takeTurn("TEXT", { content: draft.trim() }); }}><textarea aria-label="自由行动" maxLength={300} onBlur={() => window.setTimeout(() => setIsComposerFocused(false), 120)} onChange={(event) => setDraft(event.currentTarget.value)} onFocus={(event) => { const target = event.currentTarget; setIsComposerFocused(true); revealFormControl(target, 160); }} placeholder="可输入：使用物品、施展天赋或描述行动…" rows={1} value={draft} />{draft && <button aria-label="清空输入" className="clear-draft" onClick={() => setDraft("")} type="button"><Cross2Icon /></button>}<button className="act-button" disabled={!draft.trim() || isBusy || syncMode !== "server"} type="submit"><span>行动</span><EnterIcon /></button></form>}
+      {stage === "game" && game?.phase === "playing" && tab === "adventure" && <form className="action-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void takeTurn("TEXT", { content: draft.trim() }); }}><textarea aria-label="自由行动" maxLength={300} onBlur={() => window.setTimeout(() => setIsComposerFocused(false), 120)} onChange={(event) => setDraft(event.currentTarget.value)} onFocus={(event) => { const target = event.currentTarget; setIsComposerFocused(true); revealFormControl(target, 160); }} placeholder="输入行动、物品或天赋…" rows={1} value={draft} />{draft && <button aria-label="清空输入" className="clear-draft" onClick={() => setDraft("")} type="button"><Cross2Icon /></button>}<button className="act-button" disabled={!draft.trim() || isBusy || syncMode !== "server"} type="submit"><span>行动</span><EnterIcon /></button></form>}
       {stage === "game" && game?.phase === "playing" && !isComposerFocused && <nav className="bottom-nav" aria-label="主要导航">{([["adventure", "历练"], ["character", "角色"], ["chronicle", "纪事"], ["world", "世界"]] as Array<[TabId, string]>).map(([id, label]) => <button aria-current={tab === id ? "page" : undefined} key={id} onClick={() => { setError(""); setTab(id); }} type="button"><TabIcon id={id} /><span>{label}</span></button>)}</nav>}
-      {resetIntent && game && <ResetConfirmDialog game={game} intent={resetIntent} isBusy={isBusy} onCancel={() => setResetIntent(null)} onConfirm={() => { setResetIntent(null); void recreate(); }} />}
+      {resetIntent && game && <ResetConfirmDialog game={game} intent={resetIntent} isBusy={isBusy} onCancel={() => setResetIntent(null)} onConfirm={() => { setResetIntent(null); prepareRestart(); }} />}
+      {abandonTarget && <AbandonSaveDialog isBusy={isBusy} onCancel={() => setAbandonTarget(null)} onConfirm={() => void abandonSave()} save={abandonTarget} />}
       {pendingRelease && <ReleaseAnnouncementDialog note={pendingRelease} onClose={() => { const id = pendingRelease.id; setPendingRelease(null); setReleaseNotes((notes) => notes.map((note) => note.id === id ? { ...note, unread: false } : note)); void gameApi.markReleaseNoteRead(id); }} />}
+      {turnLimitNotice && <TurnLimitDialog notice={turnLimitNotice} onClose={() => setTurnLimitNotice(null)} onCopyGroup={() => void copySupportGroup()} onOpenSettings={openTurnLimitSettings} />}
+      {maintenanceNotice && <MaintenanceDialog notice={maintenanceNotice} onClose={() => setMaintenanceNotice(null)} />}
       {showAiSettings && aiSettings && <AiCredentialDialog error={error} isBusy={isBusy} onCancel={() => setShowAiSettings(false)} onDelete={() => void deleteAiCredential()} onSave={(key) => void saveAiCredential(key)} settings={aiSettings} />}
       {showPasswordSettings && <PasswordDialog configured={auth?.passwordConfigured ?? false} mandatory={auth?.authenticated === true && !auth.passwordConfigured} error={error} isBusy={isBusy} onCancel={() => setShowPasswordSettings(false)} onSave={(current, next) => void savePassword(current, next)} />}
       {showDeleteAccount && <DeleteAccountDialog isBusy={isBusy} onCancel={() => setShowDeleteAccount(false)} onConfirm={() => void deleteAccount()} />}

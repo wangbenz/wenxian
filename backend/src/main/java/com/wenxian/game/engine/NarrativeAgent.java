@@ -12,5 +12,10 @@ public interface NarrativeAgent {
                               RuntimeAiConfigService.RuntimeConfig config, String credentialSource) {
         return resolve(action, state, history);
     }
+    default AgentTurn resolve(String action, GameState state, List<Map<String, Object>> history,
+                              RuntimeAiConfigService.RuntimeConfig config, String credentialSource,
+                              ActionAdjudication adjudication) {
+        return resolve(action, state, history, config, credentialSource);
+    }
     String mode();
 }

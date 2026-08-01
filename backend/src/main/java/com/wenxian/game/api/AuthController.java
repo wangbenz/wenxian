@@ -3,6 +3,7 @@ package com.wenxian.game.api;
 import com.wenxian.game.auth.AuthService;
 import com.wenxian.game.auth.AuthService.LoginOutcome;
 import com.wenxian.game.auth.AuthService.UserIdentity;
+import com.wenxian.game.auth.AccessPolicyService;
 import com.wenxian.game.persistence.SaveStore;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -29,12 +30,19 @@ public class AuthController {
     private final AuthService authService;
     private final SaveStore saveStore;
     private final boolean secureCookie;
+    private final AccessPolicyService accessPolicy;
 
-    public AuthController(AuthService authService, SaveStore saveStore,
+    public AuthController(AuthService authService, SaveStore saveStore, AccessPolicyService accessPolicy,
                           @Value("${game.auth.secure-cookie:false}") boolean secureCookie) {
         this.authService = authService;
         this.saveStore = saveStore;
         this.secureCookie = secureCookie;
+        this.accessPolicy = accessPolicy;
+    }
+
+    @GetMapping("/access-status")
+    public AccessPolicyService.AccessStatus accessStatus() {
+        return accessPolicy.status();
     }
 
     @PostMapping("/login")

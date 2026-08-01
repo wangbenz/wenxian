@@ -15,7 +15,9 @@ import java.util.regex.Pattern;
 public class CharacterNameService {
     private static final Pattern VALID_NAME = Pattern.compile("^[\\p{IsHan}]{2,6}$");
     private static final Set<String> RESERVED = Set.of("管理员", "系统消息", "问仙录", "DeepSeek");
-    private static final List<String> SURNAMES = List.of("陆", "沈", "顾", "谢", "宁", "裴", "江", "苏", "林", "陈", "温", "楚", "许", "秦", "叶", "白");
+    private static final List<String> HUMAN_SURNAMES = List.of("陆", "沈", "顾", "谢", "宁", "裴", "江", "苏", "林", "陈", "温", "楚", "许", "秦", "叶", "白");
+    private static final List<String> DEMON_CLANS = List.of("玄", "赤", "苍", "烬", "离", "夜", "霜", "绯", "夙", "岚");
+    private static final List<String> SPIRIT_CLANS = List.of("青", "月", "云", "风", "雪", "雾", "星", "溪", "松", "露");
     private static final List<String> HUMAN_MALE_FIRST = List.of("沉", "照川", "临渊", "知白", "无咎", "怀山", "景行", "砚舟", "长风", "既明", "行简", "承安");
     private static final List<String> HUMAN_FEMALE_FIRST = List.of("晚禾", "清漪", "疏月", "知微", "映雪", "云岫", "令仪", "扶摇", "青棠", "静姝", "若蘅", "听雨");
     private static final List<String> HUMAN_NEUTRAL_FIRST = List.of("长安", "听澜", "砚秋", "清和", "逐月", "归宁", "望舒", "星回", "见素", "云深", "停舟", "南枝");
@@ -53,6 +55,12 @@ public class CharacterNameService {
 
     private String oneName(String race, String gender) {
         String identity = (race == null ? "" : race) + ":" + (gender == null ? "" : gender);
+        List<String> familyNames = switch (race == null ? "" : race) {
+            case "HUMAN" -> HUMAN_SURNAMES;
+            case "DEMON" -> DEMON_CLANS;
+            case "SPIRIT" -> SPIRIT_CLANS;
+            default -> throw new IllegalArgumentException("生成姓名前必须选择有效的性别与种族");
+        };
         List<String> firstNames = switch (identity) {
             case "HUMAN:FEMALE" -> HUMAN_FEMALE_FIRST;
             case "HUMAN:UNSPECIFIED" -> HUMAN_NEUTRAL_FIRST;
@@ -65,7 +73,7 @@ public class CharacterNameService {
             case "HUMAN:MALE" -> HUMAN_MALE_FIRST;
             default -> throw new IllegalArgumentException("生成姓名前必须选择有效的性别与种族");
         };
-        return SURNAMES.get(random.nextInt(SURNAMES.size()))
+        return familyNames.get(random.nextInt(familyNames.size()))
                 + firstNames.get(random.nextInt(firstNames.size()));
     }
 }

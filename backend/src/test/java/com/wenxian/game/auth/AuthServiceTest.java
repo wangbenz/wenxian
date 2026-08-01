@@ -14,6 +14,33 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AuthServiceTest {
     @Test
+    void whitelistModeAllowsOnlyConfiguredTestAccounts() {
+        EmbeddedDatabase database = new EmbeddedDatabaseBuilder()
+                .setType(EmbeddedDatabaseType.H2).addScript("schema-h2.sql").build();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            AuthService service = new AuthService(jdbc, "LEGACY-INVITE", 30);
+            AuthService.LoginOutcome allowed = service.register("allowed@example.com", "password123", "10.0.0.31");
+            AuthService.LoginOutcome blocked = service.register("blocked@example.com", "password123", "10.0.0.32");
+            java.sql.Timestamp now = java.sql.Timestamp.from(java.time.Instant.now());
+            jdbc.update("insert into game_access_whitelist(id,user_id,note,created_by,created_at,updated_at) values ('access-1',?,'测试','test',?,?)",
+                    allowed.user().userId(), now, now);
+            jdbc.update("merge into gameplay_config(config_key,config_value,updated_at) key(config_key) values ('game_access_mode','WHITELIST',?)", now);
+            jdbc.update("merge into gameplay_config(config_key,config_value,updated_at) key(config_key) values ('game_access_notice_title','更新中',?)", now);
+            jdbc.update("merge into gameplay_config(config_key,config_value,updated_at) key(config_key) values ('game_access_notice_content','请稍后再来',?)", now);
+
+            assertNotNull(service.login("allowed@example.com", "password123", "10.0.0.33"));
+            assertThrows(GameMaintenanceException.class,
+                    () -> service.login("blocked@example.com", "password123", "10.0.0.34"));
+            assertThrows(GameMaintenanceException.class,
+                    () -> service.register("new@example.com", "password123", "10.0.0.35"));
+            assertThrows(GameMaintenanceException.class, () -> service.requireUser(blocked.rawToken()));
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
     void registrationCreatesPasswordAccountAndLaterLoginWorksFromAnotherIp() {
         EmbeddedDatabase database = new EmbeddedDatabaseBuilder()
                 .setType(EmbeddedDatabaseType.H2)

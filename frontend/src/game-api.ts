@@ -5,6 +5,10 @@ export type Choice = {
   label: string;
   hint: string;
   tone?: "default" | "danger";
+  actionType?: "COMBAT" | "ESCAPE" | "INFILTRATE" | "NEGOTIATE" | "CULTIVATE" | "EXPLORE" | "INVESTIGATE" | "TRAVEL" | "USE_ITEM" | "USE_ABILITY" | "REST" | "OTHER";
+  targetCharacterId?: string | null;
+  targetRealm?: string | null;
+  riskLevel?: "LOW" | "MEDIUM" | "HIGH" | "LETHAL";
 };
 
 export type ChronicleEvent = {
@@ -19,6 +23,9 @@ export type CharacterRecord = {
   id: string;
   name: string;
   identity: string;
+  realm?: string;
+  condition?: "STABLE" | "WOUNDED" | "SEVERE" | "DYING";
+  combatProfile?: string;
   state: string;
   location: string;
   relation: string;
@@ -60,11 +67,15 @@ export type PlayerState = {
   age: number;
   lifespan: number;
   identity: string;
+  origin?: string;
+  trait?: string;
+  originPremise?: string;
   lifeGoal: string;
   goal: string;
   burden: string;
   realm: string;
   constitution: string;
+  condition?: "STABLE" | "WOUNDED" | "SEVERE" | "DYING";
   vitality: number;
   silver: number;
   insight: number;
@@ -80,6 +91,8 @@ export type WorldProfile = {
   dangerRule: string;
   regions: string[];
   factions: string[];
+  regionProfiles?: Array<{ id: string; name: string; description: string; dominantPower: string; travelRule: string }>;
+  factionProfiles?: Array<{ id: string; name: string; regionId: string; purpose: string }>;
   generatedBy: string;
 };
 
@@ -92,6 +105,7 @@ export type ProtagonistOption = {
   age: number;
   identity: string;
   origin: string;
+  originPremise?: string;
   trait: string;
   goal: string;
   burden: string;
@@ -111,14 +125,29 @@ export type GameState = {
   sceneId: string;
   sceneTitle: string;
   currentLocation: string;
+  currentLocationId?: string;
   worldYear: number;
   minute: number;
   day: number;
   turn: number;
+  economyVersion?: number;
+  wallet?: {
+    copperWen: number;
+    lowSpiritStones: number;
+    middleSpiritStones: number;
+    highSpiritStones: number;
+  } | null;
   narrative: string[];
   signals: string[];
   choices: Choice[];
   world: WorldProfile;
+  creationProfile?: {
+    race: string;
+    gender: string;
+    lifeGoal: string;
+    originPremise: string;
+    storyPreference: string;
+  } | null;
   protagonistOptions: ProtagonistOption[];
   talentOptions: AbilityRecord[];
   talentRerolled: boolean;
@@ -138,6 +167,13 @@ export type GameState = {
   } | null;
 };
 
+export type AccessStatus = {
+  restricted: boolean;
+  title: string;
+  message: string;
+  resumeAt: string;
+};
+
 export type ApiSnapshot = {
   state: GameState;
   revision: number;
@@ -152,9 +188,11 @@ export type ApiSnapshot = {
   };
   actionResolution?: {
     result: "REJECTED" | "CLARIFY";
+    code?: string;
     title: string;
     reason: string;
     suggestions: string[];
+    turnConsumed?: boolean;
   } | null;
 };
 
@@ -194,6 +232,7 @@ export type CharacterDraft = {
   gender: "" | "MALE" | "FEMALE" | "UNSPECIFIED";
   lifeGoal: "LONGEVITY" | "KINSHIP" | "POWER" | "TRUTH" | "FREEDOM";
   difficulty: "NORMAL" | "HARD";
+  originPremise: string;
   preference: string;
 };
 
@@ -218,14 +257,31 @@ export type AiSettings = {
   lastVerifiedAt: string | null;
 };
 
+export type SaveSummary = {
+  saveId: string;
+  slotNo: number;
+  phase: "setup" | "talent" | "playing";
+  playerName: string;
+  race: string;
+  realm: string;
+  currentLocation: string;
+  sceneTitle: string;
+  turn: number;
+  updatedAt: string;
+};
+
+export type SaveList = { maxActiveSaves: number; saves: SaveSummary[] };
+
 export class ApiError extends Error {
   status: number;
   code?: string;
+  details: Record<string, unknown>;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: string, details: Record<string, unknown> = {}) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -243,14 +299,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let message = `请求失败（${response.status}）`;
     let code: string | undefined;
+    let details: Record<string, unknown> = {};
     try {
-      const body = await response.json() as { message?: string; code?: string };
+      const body = await response.json() as { message?: string; code?: string; details?: Record<string, unknown> };
       message = body.message || message;
       code = body.code;
+      details = body.details ?? {};
     } catch {
       // Keep the HTTP fallback when the response is not JSON.
     }
-    throw new ApiError(message, response.status, code);
+    throw new ApiError(message, response.status, code, details);
   }
 
   if (response.status === 204 || response.headers.get("content-length") === "0") {
@@ -260,6 +318,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const gameApi = {
+  accessStatus: () => request<AccessStatus>("/api/v1/auth/access-status"),
   me: () => request<AuthResponse>("/api/v1/auth/me"),
   login: (email: string, password: string) => request<AuthResponse>("/api/v1/auth/login", {
     method: "POST",
@@ -288,6 +347,8 @@ export const gameApi = {
   pendingReleaseNote: () => request<ReleaseNote | null>("/api/v1/release-notes/pending"),
   markReleaseNoteRead: (releaseId: string) => request<void>(`/api/v1/release-notes/${encodeURIComponent(releaseId)}/read`, { method: "POST" }),
   currentSave: () => request<{ exists: boolean; game: ApiSnapshot | null }>("/api/v1/saves/current"),
+  saves: () => request<SaveList>("/api/v1/saves"),
+  getSave: (saveId: string) => request<ApiSnapshot>(`/api/v1/saves/${encodeURIComponent(saveId)}`),
   generateName: (race: Exclude<CharacterDraft["race"], "">, gender: Exclude<CharacterDraft["gender"], "">, exclude: string[]) =>
     request<{ name: string; alternatives: string[] }>("/api/v1/character-names/generate", {
       method: "POST",
@@ -301,6 +362,10 @@ export const gameApi = {
     method: "POST",
     body: JSON.stringify(draft),
   }),
+  restartSave: (saveId: string, draft: CharacterDraft) => request<ApiSnapshot>(
+    `/api/v1/saves/${encodeURIComponent(saveId)}/restart`,
+    { method: "POST", body: JSON.stringify(draft) },
+  ),
   chooseFate: (saveId: string, candidateId: string) => request<ApiSnapshot>(
     `/api/v1/saves/${encodeURIComponent(saveId)}/protagonist`,
     { method: "POST", body: JSON.stringify({ candidateId }) },
@@ -329,5 +394,8 @@ export const gameApi = {
   }),
   deleteSave: (saveId: string) => request<void>(`/api/v1/saves/${encodeURIComponent(saveId)}`, {
     method: "DELETE",
+  }),
+  abandonSave: (saveId: string, playerName: string) => request<void>(`/api/v1/saves/${encodeURIComponent(saveId)}/abandon`, {
+    method: "POST", body: JSON.stringify({ playerName }),
   }),
 };

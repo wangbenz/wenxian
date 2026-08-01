@@ -19,9 +19,12 @@ import com.wenxian.game.model.ApiModels.WorldResponse;
 import com.wenxian.game.model.ApiModels.ReleaseNoteView;
 import com.wenxian.game.model.ApiModels.AiSettingsView;
 import com.wenxian.game.model.ApiModels.SaveAiCredentialRequest;
+import com.wenxian.game.model.ApiModels.SaveListResponse;
+import com.wenxian.game.model.ApiModels.AbandonSaveRequest;
 import com.wenxian.game.model.GameState;
 import com.wenxian.game.service.CharacterNameService;
 import com.wenxian.game.service.GameService;
+import com.wenxian.game.service.GameVersionService;
 import com.wenxian.game.service.ReleaseNoteService;
 import com.wenxian.game.service.PlayerAiService;
 import jakarta.validation.Valid;
@@ -49,14 +52,17 @@ public class GameController {
     private final CharacterNameService nameService;
     private final ReleaseNoteService releaseNotes;
     private final PlayerAiService playerAiService;
+    private final GameVersionService gameVersionService;
 
     public GameController(GameService gameService, AuthService authService, CharacterNameService nameService,
-                          ReleaseNoteService releaseNotes, PlayerAiService playerAiService) {
+                          ReleaseNoteService releaseNotes, PlayerAiService playerAiService,
+                          GameVersionService gameVersionService) {
         this.gameService = gameService;
         this.authService = authService;
         this.nameService = nameService;
         this.releaseNotes = releaseNotes;
         this.playerAiService = playerAiService;
+        this.gameVersionService = gameVersionService;
     }
 
     @GetMapping("/health")
@@ -66,7 +72,7 @@ public class GameController {
 
     @GetMapping("/game/bootstrap")
     public BootstrapResponse bootstrap() {
-        return GameCatalog.bootstrap();
+        return GameCatalog.bootstrap(gameVersionService.current());
     }
 
     @GetMapping("/release-notes")
@@ -147,6 +153,12 @@ public class GameController {
         return gameService.current(user(token));
     }
 
+    @GetMapping("/saves")
+    public SaveListResponse saves(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token) {
+        return gameService.list(user(token));
+    }
+
     @GetMapping("/saves/{saveId}")
     public GameResponse getSave(
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
@@ -159,6 +171,22 @@ public class GameController {
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId) {
         gameService.delete(user(token), saveId);
+    }
+
+    @PostMapping("/saves/{saveId}/restart")
+    public GameResponse restartSave(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
+            @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
+            @Valid @RequestBody CreateSaveRequest request) {
+        return gameService.restart(user(token), saveId, request);
+    }
+
+    @PostMapping("/saves/{saveId}/abandon")
+    public void abandonSave(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
+            @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
+            @Valid @RequestBody AbandonSaveRequest request) {
+        gameService.abandon(user(token), saveId, request.playerName());
     }
 
     @PostMapping("/saves/{saveId}/protagonist")
