@@ -1,5 +1,6 @@
 package com.wenxian.game.service;
 
+import com.wenxian.game.api.GameApiException;
 import com.wenxian.game.config.RuntimeAiConfigService;
 import com.wenxian.game.config.SecretCipher;
 import org.junit.jupiter.api.Test;
@@ -81,8 +82,9 @@ class PlayerAiServiceTest {
             jdbc.update("update gameplay_config set config_value='false' where config_key='custom_api_enabled'");
 
             assertFalse(service.settings("user-1").customApiEnabled());
-            assertThrows(org.springframework.web.server.ResponseStatusException.class,
+            var error = assertThrows(GameApiException.class,
                     () -> service.saveCredential("user-1", "sk-user-secret-123456789"));
+            assertEquals("CUSTOM_KEY_DISABLED", error.code());
         } finally {
             database.shutdown();
         }

@@ -694,6 +694,19 @@
 .chapter-generating strong { display: block; margin: 3px 0; font-family: var(--display); font-size: 15px; }
 .chapter-generating p { margin: 0; color: var(--ink-faint); font-size: 9px; line-height: 1.45; }
 .turn-error { margin: 11px 0 0; padding: 9px 11px; color: var(--cinnabar); background: rgba(156, 63, 54, 0.07); border-left: 2px solid var(--cinnabar); font-size: 10px; line-height: 1.5; }
+.problem-notice { margin: 16px 0 6px; padding: 16px 17px; color: var(--ink); background: color-mix(in srgb, var(--paper-strong) 91%, var(--cinnabar) 9%); border: 1px solid color-mix(in srgb, var(--line) 68%, var(--cinnabar) 32%); border-left: 3px solid var(--cinnabar); }
+.problem-notice[data-category="SYSTEM"] { background: color-mix(in srgb, var(--paper-strong) 92%, var(--celadon) 8%); border-color: color-mix(in srgb, var(--line) 62%, var(--celadon) 38%); border-left-color: var(--celadon); }
+.problem-notice .eyebrow { margin: 0 0 5px; color: var(--cinnabar); }
+.problem-notice[data-category="SYSTEM"] .eyebrow { color: var(--celadon-dark); }
+.problem-notice h3 { margin: 0 0 7px; font-family: var(--display); font-size: 19px; }
+.problem-notice > p:not(.eyebrow) { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.7; white-space: pre-line; }
+.problem-notice .problem-state { margin-top: 10px !important; color: var(--cinnabar) !important; font-size: 10px !important; }
+.problem-notice ul { margin: 10px 0 0; padding-left: 18px; color: var(--ink-soft); font-size: 11px; line-height: 1.7; }
+.problem-notice > small { display: block; margin-top: 10px; color: var(--ink-faint); font-size: 9px; letter-spacing: .04em; }
+.problem-notice > small strong { color: var(--ink-soft); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em; }
+.problem-notice.compact { margin: 12px 0 0; padding: 12px 13px; text-align: left; }
+.problem-notice.compact h3 { font-size: 15px; }
+.problem-notice.compact ul { margin-top: 7px; }
 .action-resolution { margin: 18px 0 14px; padding: 17px 16px 15px; color: var(--ink); background: color-mix(in srgb, var(--paper-strong) 90%, var(--cinnabar) 10%); border: 1px solid color-mix(in srgb, var(--line) 65%, var(--cinnabar) 35%); border-left: 3px solid var(--cinnabar); }
 .action-resolution[data-result="CLARIFY"] { background: color-mix(in srgb, var(--paper-strong) 92%, var(--celadon) 8%); border-color: color-mix(in srgb, var(--line) 60%, var(--celadon) 40%); border-left-color: var(--celadon); }
 .action-resolution .eyebrow { margin: 0 0 6px; color: var(--cinnabar); }
@@ -1513,6 +1526,8 @@
 .game-shell[data-theme="night"] .ai-settings-card { background: rgba(20, 28, 25, .88); }
 .game-shell[data-theme="night"] .secondary-setting-button { color: var(--celadon); }
 .game-shell[data-theme="night"] .credential-field input { background: rgba(10, 17, 15, .82); }
+.game-shell[data-theme="night"] .problem-notice { background: rgba(54, 31, 29, .92); border-color: rgba(212, 134, 119, .44); }
+.game-shell[data-theme="night"] .problem-notice[data-category="SYSTEM"] { background: rgba(27, 44, 38, .94); border-color: rgba(133, 181, 157, .48); }
 .login-mode-switch { display: grid; grid-template-columns: 1fr 1fr; margin: 20px 0 8px; border: 1px solid var(--line); }
 .login-mode-switch button { min-height: 44px; border: 0; background: transparent; color: var(--ink-soft); font: inherit; }
 .login-mode-switch button[aria-selected="true"] { background: var(--celadon); color: #f7f3e8; }

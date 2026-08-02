@@ -1,5 +1,6 @@
 package com.wenxian.game.engine;
 
+import com.wenxian.game.api.GameApiException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -70,7 +71,9 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
                              RuntimeAiConfigService.RuntimeConfig config, String credentialSource,
                              ActionAdjudication adjudication) {
         if (config == null || config.apiKey().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "命卷推演尚未开放");
+            throw GameApiException.of(HttpStatus.SERVICE_UNAVAILABLE, "GENERATION_NOT_CONFIGURED", "SYSTEM",
+                    "命卷推演尚未开放", "当前没有可用的推演服务配置。",
+                    List.of("稍后重新尝试", "检查自己的推演密钥设置"));
         }
         long startedAt = System.nanoTime();
         String recordedModel = config.model() + "@" + credentialSource;
@@ -169,14 +172,38 @@ public class DeepSeekGameplayAgentService implements NarrativeAgent {
             LOGGER.warn("DeepSeek 行动裁决第 {} 次失败: {}", attempt, error.getMessage());
             audit(state, attempt, recordedModel, "FAILED", error.getClass().getSimpleName() + ": " + error.getMessage(), null,
                     (System.nanoTime() - startedAt) / 1_000_000L);
+            if (error instanceof CurrencyAuthority.CurrencyValidationException currency
+                    && "CURRENCY_INSUFFICIENT".equals(currency.code())) {
+                throw new GameApiException(HttpStatus.UNPROCESSABLE_ENTITY, currency.code(), "RESOURCE",
+                        "身上钱财不足", insufficientCurrencyMessage(state),
+                        List.of("选择不需要花钱的行动", "尝试以物品、消息或劳力交换"),
+                        false, false, false, Map.of("wallet", walletView(state)),
+                        currency.getMessage(), currency);
+            }
             if (error instanceof LocationAuthority.LocationValidationException
                     || error instanceof LocationRepairException) {
                 break;
             }
         }
         LOGGER.error("DeepSeek 行动裁决两次均失败", lastFailure);
-        throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                "本章推演暂时中断，命卷没有发生变化，请重新推演", lastFailure);
+        throw GameApiException.temporary("CHAPTER_GENERATION_FAILED", "本次推演未能完成",
+                "本次操作没有写入命卷，也没有消耗回合。请稍后重试；若重复出现，请将问题编号发给管理员。",
+                List.of("稍后重新尝试", "将问题编号发给管理员"),
+                lastFailure == null ? "unknown gameplay failure" : lastFailure.getClass().getSimpleName()
+                        + ": " + lastFailure.getMessage(), lastFailure);
+    }
+
+    private String insufficientCurrencyMessage(GameState state) {
+        GameState.Wallet wallet = state.wallet == null ? new GameState.Wallet(0, 0, 0, 0) : state.wallet;
+        return "当前持有铜钱" + wallet.copperWen + "文、下品灵石" + wallet.lowSpiritStones
+                + "枚、中品灵石" + wallet.middleSpiritStones + "枚、上品灵石" + wallet.highSpiritStones
+                + "枚，无法完成本次支出。本轮没有推进，存档没有变化。";
+    }
+
+    private Map<String, Object> walletView(GameState state) {
+        GameState.Wallet wallet = state.wallet == null ? new GameState.Wallet(0, 0, 0, 0) : state.wallet;
+        return Map.of("copperWen", wallet.copperWen, "lowSpiritStones", wallet.lowSpiritStones,
+                "middleSpiritStones", wallet.middleSpiritStones, "highSpiritStones", wallet.highSpiritStones);
     }
 
     private void audit(GameState state, int attempt, String model, String status, String detail, String responseId, long latencyMs) {

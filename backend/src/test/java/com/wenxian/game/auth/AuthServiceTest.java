@@ -1,5 +1,6 @@
 package com.wenxian.game.auth;
 
+import com.wenxian.game.api.GameApiException;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
@@ -69,8 +70,9 @@ class AuthServiceTest {
             AuthService service = new AuthService(new JdbcTemplate(database), "LEGACY-INVITE", 30);
             service.register("first@example.com", "password123", "10.0.0.8");
 
-            assertThrows(org.springframework.web.server.ResponseStatusException.class,
+            var error = assertThrows(GameApiException.class,
                     () -> service.register("second@example.com", "password123", "10.0.0.8"));
+            assertEquals("REGISTRATION_NETWORK_LIMIT", error.code());
         } finally {
             database.shutdown();
         }
@@ -89,10 +91,11 @@ class AuthServiceTest {
             jdbc.update("merge into gameplay_config(config_key,config_value,updated_at) key(config_key) values ('registration_limit_message','测试名额已满',?)", now);
             jdbc.update("merge into gameplay_config(config_key,config_value,updated_at) key(config_key) values ('registration_contact_text','请加入测试群',?)", now);
 
-            var error = assertThrows(org.springframework.web.server.ResponseStatusException.class,
+            var error = assertThrows(GameApiException.class,
                     () -> service.register("second@example.com", "password123", "10.0.0.22"));
-            assertTrue(error.getReason().contains("测试名额已满"));
-            assertTrue(error.getReason().contains("请加入测试群"));
+            assertEquals("REGISTRATION_CAPACITY_REACHED", error.code());
+            assertTrue(error.getMessage().contains("测试名额已满"));
+            assertTrue(error.getMessage().contains("请加入测试群"));
             assertNotNull(service.login("first@example.com", "password123", "10.0.0.23"));
         } finally {
             database.shutdown();

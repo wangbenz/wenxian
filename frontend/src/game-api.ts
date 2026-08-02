@@ -275,13 +275,35 @@ export type SaveList = { maxActiveSaves: number; saves: SaveSummary[] };
 export class ApiError extends Error {
   status: number;
   code?: string;
+  category?: string;
+  title?: string;
+  suggestions: string[];
+  retryable: boolean;
+  turnConsumed: boolean;
+  stateChanged: boolean;
+  referenceId?: string;
   details: Record<string, unknown>;
 
-  constructor(message: string, status: number, code?: string, details: Record<string, unknown> = {}) {
+  constructor(message: string, status: number, code?: string, details: Record<string, unknown> = {}, metadata: {
+    category?: string;
+    title?: string;
+    suggestions?: string[];
+    retryable?: boolean;
+    turnConsumed?: boolean;
+    stateChanged?: boolean;
+    referenceId?: string;
+  } = {}) {
     super(message);
     this.status = status;
     this.code = code;
     this.details = details;
+    this.category = metadata.category;
+    this.title = metadata.title;
+    this.suggestions = metadata.suggestions ?? [];
+    this.retryable = metadata.retryable ?? false;
+    this.turnConsumed = metadata.turnConsumed ?? false;
+    this.stateChanged = metadata.stateChanged ?? false;
+    this.referenceId = metadata.referenceId;
   }
 }
 
@@ -300,15 +322,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let message = `请求失败（${response.status}）`;
     let code: string | undefined;
     let details: Record<string, unknown> = {};
+    let metadata: ConstructorParameters<typeof ApiError>[4] = {};
     try {
-      const body = await response.json() as { message?: string; code?: string; details?: Record<string, unknown> };
+      const body = await response.json() as {
+        message?: string; code?: string; category?: string; title?: string; suggestions?: string[];
+        retryable?: boolean; turnConsumed?: boolean; stateChanged?: boolean; referenceId?: string;
+        details?: Record<string, unknown>;
+      };
       message = body.message || message;
       code = body.code;
       details = body.details ?? {};
+      metadata = {
+        category: body.category,
+        title: body.title,
+        suggestions: Array.isArray(body.suggestions) ? body.suggestions : [],
+        retryable: body.retryable,
+        turnConsumed: body.turnConsumed,
+        stateChanged: body.stateChanged,
+        referenceId: body.referenceId,
+      };
     } catch {
       // Keep the HTTP fallback when the response is not JSON.
     }
-    throw new ApiError(message, response.status, code, details);
+    throw new ApiError(message, response.status, code, details, metadata);
   }
 
   if (response.status === 204 || response.headers.get("content-length") === "0") {

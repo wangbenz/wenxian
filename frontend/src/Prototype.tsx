@@ -38,6 +38,17 @@ type ThemeMode = "system" | "paper" | "night";
 type FontSizeMode = "compact" | "standard" | "large";
 type TurnLimitNotice = { message: string; contactText: string; supportGroup: string };
 type MaintenanceNotice = Pick<AccessStatus, "title" | "message" | "resumeAt">;
+type UiProblem = {
+  code?: string;
+  category: string;
+  title: string;
+  message: string;
+  suggestions: string[];
+  retryable: boolean;
+  turnConsumed: boolean;
+  stateChanged: boolean;
+  referenceId?: string;
+};
 
 const CACHE_KEY = "wenxian-readonly-cache-v2";
 const THEME_KEY = "wenxian-theme";
@@ -54,13 +65,36 @@ const DEFAULT_DRAFT: CharacterDraft = {
 
 const RACE_NAMES: Record<string, string> = { HUMAN: "人族", DEMON: "妖族", SPIRIT: "灵族" };
 
-function errorMessage(error: unknown) {
-  if (!(error instanceof ApiError)) return "命卷暂时无法响应，请稍后重试";
-  if (error.code === "PUBLIC_TURN_LIMIT_REACHED") return error.message;
-  if ([502, 503, 504].includes(error.status) || /DeepSeek|Agent|Java|API|后端|模型/i.test(error.message)) {
-    return "天机暂时紊乱，本次变化没有写入命卷，请稍后重试";
-  }
-  return error.message;
+function problemFrom(error: unknown): UiProblem {
+  if (!(error instanceof ApiError)) return {
+    category: "SYSTEM", title: "命卷暂时无法响应",
+    message: "本次操作没有完成，请稍后重试。", suggestions: ["稍后重新尝试"],
+    retryable: true, turnConsumed: false, stateChanged: false,
+  };
+  const technical = /DeepSeek|Agent|Java|API|后端|模型/i.test(error.message);
+  const system = [500, 502, 503, 504].includes(error.status) || error.category === "SYSTEM";
+  return {
+    code: error.code,
+    category: error.category ?? (system ? "SYSTEM" : "INPUT"),
+    title: error.title ?? (system ? "本次推演未能完成" : "本次操作未能完成"),
+    message: technical ? "本次操作没有完成，命卷没有发生变化。" : error.message,
+    suggestions: error.suggestions.length ? error.suggestions : system ? ["稍后重新尝试"] : [],
+    retryable: error.retryable || [502, 503, 504].includes(error.status),
+    turnConsumed: error.turnConsumed,
+    stateChanged: error.stateChanged,
+    referenceId: error.referenceId,
+  };
+}
+
+function ProblemNotice({ problem, compact = false }: { problem: UiProblem; compact?: boolean }) {
+  return <section className={compact ? "problem-notice compact" : "problem-notice"} data-category={problem.category} role="alert">
+    <p className="eyebrow">{problem.category === "SYSTEM" ? "命卷推演中断" : "本次操作未完成"}</p>
+    <h3>{problem.title}</h3>
+    <p>{problem.message}</p>
+    {!compact && <p className="problem-state">{problem.turnConsumed ? "本轮已计入回合" : "未消耗回合"} · {problem.stateChanged ? "部分变化已经记录" : "存档没有变化"}</p>}
+    {problem.suggestions.length > 0 && <ul>{problem.suggestions.map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ul>}
+    {problem.referenceId && <small>问题编号：<strong>{problem.referenceId}</strong></small>}
+  </section>;
 }
 
 function cacheSnapshot(snapshot: ApiSnapshot) {
@@ -155,7 +189,7 @@ function LoginView({
   onAuthenticate,
 }: {
   isBusy: boolean;
-  error: string;
+  error: UiProblem | null;
   offline: boolean;
   announcement: ReleaseNote | null;
   accessStatus: AccessStatus | null;
@@ -233,7 +267,8 @@ function LoginView({
           {isBusy ? "正在验明身份…" : mode === "login" ? "进入问仙录" : "注册并领取命卷"}<ArrowRightIcon />
         </button>
       </form>
-      {(error || offline) && <p className="entry-error">{error || "命卷暂时无法开启，请稍后重试。"}</p>}
+      {error && <ProblemNotice compact problem={error} />}
+      {!error && offline && <p className="entry-error">命卷暂时无法开启，请稍后重试。</p>}
       <p className="entry-footnote">当前暂不发送验证码，请务必使用自己的真实邮箱。验证码功能上线后，无法接收邮件的账号可能无法找回。</p>
       {accessStatus?.restricted && accessNoticeOpen && <MaintenanceDialog closeLabel="测试账号登录" notice={accessStatus} onClose={() => setAccessNoticeOpen(false)} />}
     </section>
@@ -256,7 +291,7 @@ function CharacterCreationView({
   draft: CharacterDraft;
   alternatives: string[];
   isBusy: boolean;
-  error: string;
+  error: UiProblem | null;
   onDraft: (patch: Partial<CharacterDraft>) => void;
   onGenerateName: () => void;
   onCreate: () => void;
@@ -392,7 +427,7 @@ function CharacterCreationView({
           />
         </label>
 
-        {error && <p className="entry-error">{error}</p>}
+        {error && <ProblemNotice compact problem={error} />}
         <button className="primary-entry-button" disabled={isBusy} onClick={requestFates} type="button">
           {isBusy ? "天机正在推演三种命格…" : "生成三种命格"}<ArrowRightIcon />
         </button>
@@ -415,7 +450,7 @@ function FateSelectionView({
   game: GameState;
   selectedId: string;
   isBusy: boolean;
-  error: string;
+  error: UiProblem | null;
   onSelect: (id: string) => void;
   onStart: () => void;
   onRecreate: () => void;
@@ -442,7 +477,7 @@ function FateSelectionView({
           ))}
         </div>
       </section>
-      {error && <p className="entry-error">{error}</p>}
+      {error && <ProblemNotice compact problem={error} />}
       <button className="open-scroll-button" disabled={!selected || isBusy} onClick={onStart} type="button">
         {isBusy ? "正在开启命卷…" : selected ? `以「${selected.name}」开启命卷` : "先选择一种命格"}<ArrowRightIcon />
       </button>
@@ -452,7 +487,7 @@ function FateSelectionView({
 }
 
 function TalentSelectionView({ game, selectedId, isBusy, error, onSelect, onEnter, onReroll, onSkip }: {
-  game: GameState; selectedId: string; isBusy: boolean; error: string;
+  game: GameState; selectedId: string; isBusy: boolean; error: UiProblem | null;
   onSelect: (id: string) => void; onEnter: () => void; onReroll: () => void; onSkip: () => void;
 }) {
   const selected = game.talentOptions.find((talent) => talent.id === selectedId);
@@ -466,13 +501,13 @@ function TalentSelectionView({ game, selectedId, isBusy, error, onSelect, onEnte
         <span className="talent-sigil">{["观", "听", "悟"][index] ?? "灵"}</span><div><h3>{talent.name}</h3><p>{talent.description}</p><small>此中玄妙，尚待你亲自印证。</small></div>
       </button>)}</div>
     </section>
-    {error && <p className="entry-error">{error}</p>}
+    {error && <ProblemNotice compact problem={error} />}
     <button className="open-scroll-button" disabled={!selected || isBusy} onClick={onEnter} type="button">{isBusy ? "命卷正在落印…" : selected ? `携「${selected.name}」入世` : "先选择一种天赋"}<ArrowRightIcon /></button>
     <div className="talent-secondary-actions"><button disabled={isBusy || game.talentRerolled} onClick={onReroll} type="button"><ReloadIcon />{game.talentRerolled ? "本世已重新推演" : "免费重新推演一次"}</button><button disabled={isBusy} onClick={onSkip} type="button">不携天赋，直接入世</button></div>
   </div>;
 }
 
-function AdventureView({ game, choices, resolution, aiSettings, isBusy, offline, error, onChoice, onSuggestion, onResolutionDismiss }: { game: GameState; choices: Choice[]; resolution?: ApiSnapshot["actionResolution"]; aiSettings: AiSettings | null; isBusy: boolean; offline: boolean; error: string; onChoice: (id: string) => void; onSuggestion: (action: string) => void; onResolutionDismiss: () => void }) {
+function AdventureView({ game, choices, resolution, aiSettings, isBusy, offline, error, onChoice, onSuggestion, onResolutionDismiss }: { game: GameState; choices: Choice[]; resolution?: ApiSnapshot["actionResolution"]; aiSettings: AiSettings | null; isBusy: boolean; offline: boolean; error: UiProblem | null; onChoice: (id: string) => void; onSuggestion: (action: string) => void; onResolutionDismiss: () => void }) {
   return (
     <div className="adventure-view">
       <section className="scene-heading" aria-labelledby="scene-title"><span className="leaf-mark" aria-hidden="true">〆</span><div><p className="eyebrow">当前场景</p><h1 id="scene-title">{game.sceneTitle}</h1></div></section>
@@ -497,7 +532,7 @@ function AdventureView({ game, choices, resolution, aiSettings, isBusy, offline,
         ))}
       </section>}
       {offline && !isBusy && <div className="agent-thinking offline-note" role="status"><LightningBoltIcon /><span>命卷暂时无法续写，已有经历仍可查阅。</span></div>}
-      {error && !isBusy && <p className="turn-error" role="alert">{error}</p>}
+      {error && !isBusy && <ProblemNotice problem={error} />}
       {aiSettings && <p className="daily-chapter-usage">{aiSettings.usingCustomApi ? "正在使用自己的推演密钥 · 不消耗赠送回合" : `当前账号回合 ${aiSettings.usedTurns}/${aiSettings.turnLimit}`}</p>}
     </div>
   );
@@ -719,19 +754,19 @@ function WorldView({ game, saves, maxActiveSaves, version, releaseNotes, syncMod
   );
 }
 
-function AiCredentialDialog({ settings, error, isBusy, onCancel, onSave, onDelete }: { settings: AiSettings; error: string; isBusy: boolean; onCancel: () => void; onSave: (key: string) => void; onDelete: () => void }) {
+function AiCredentialDialog({ settings, error, isBusy, onCancel, onSave, onDelete }: { settings: AiSettings; error: UiProblem | null; isBusy: boolean; onCancel: () => void; onSave: (key: string) => void; onDelete: () => void }) {
   const [apiKey, setApiKey] = useState("");
   const insecureRemote = window.location.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(window.location.hostname);
   const keyTooShort = apiKey.trim().length > 0 && apiKey.trim().length < 20;
-  return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog credential-dialog" role="dialog"><div className="ink-dialog-seal">钥</div><p className="eyebrow">PRIVATE GENERATION KEY</p><h2>自己的推演密钥</h2><p>密钥会在服务器加密保存，只用于续写你的游戏故事；页面不会再次展示完整内容。</p>{insecureRemote && <p className="credential-warning">当前连接未启用 HTTPS，为避免密钥在传输中暴露，暂不允许保存。请改用安全地址。</p>}{error && <p className="credential-warning" role="alert">{error}</p>}<label className="credential-field">DeepSeek API Key<input autoComplete="off" disabled={isBusy || insecureRemote} placeholder={settings.credentialConfigured ? `当前尾号 ${settings.maskedSuffix ?? "****"}，输入新密钥可替换` : "sk-…"} type="password" value={apiKey} onChange={(event) => setApiKey(event.currentTarget.value)} />{keyTooShort && <small>密钥长度不足，请粘贴完整的 API Key。</small>}</label><div className="ink-dialog-actions credential-actions"><button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">返回</button>{settings.credentialConfigured && <button className="credential-delete" disabled={isBusy} onClick={onDelete} type="button">移除密钥</button>}<button className="ink-dialog-confirm" disabled={isBusy || insecureRemote || apiKey.trim().length < 20} onClick={() => onSave(apiKey.trim())} type="button">{isBusy ? "正在验证…" : "验证并保存"}</button></div></section></div>;
+  return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog credential-dialog" role="dialog"><div className="ink-dialog-seal">钥</div><p className="eyebrow">PRIVATE GENERATION KEY</p><h2>自己的推演密钥</h2><p>密钥会在服务器加密保存，只用于续写你的游戏故事；页面不会再次展示完整内容。</p>{insecureRemote && <p className="credential-warning">当前连接未启用 HTTPS，为避免密钥在传输中暴露，暂不允许保存。请改用安全地址。</p>}{error && <ProblemNotice compact problem={error} />}<label className="credential-field">DeepSeek API Key<input autoComplete="off" disabled={isBusy || insecureRemote} placeholder={settings.credentialConfigured ? `当前尾号 ${settings.maskedSuffix ?? "****"}，输入新密钥可替换` : "sk-…"} type="password" value={apiKey} onChange={(event) => setApiKey(event.currentTarget.value)} />{keyTooShort && <small>密钥长度不足，请粘贴完整的 API Key。</small>}</label><div className="ink-dialog-actions credential-actions"><button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">返回</button>{settings.credentialConfigured && <button className="credential-delete" disabled={isBusy} onClick={onDelete} type="button">移除密钥</button>}<button className="ink-dialog-confirm" disabled={isBusy || insecureRemote || apiKey.trim().length < 20} onClick={() => onSave(apiKey.trim())} type="button">{isBusy ? "正在验证…" : "验证并保存"}</button></div></section></div>;
 }
 
-function PasswordDialog({ configured, mandatory = false, error, isBusy, onCancel, onSave }: { configured: boolean; mandatory?: boolean; error: string; isBusy: boolean; onCancel: () => void; onSave: (currentPassword: string, newPassword: string) => void }) {
+function PasswordDialog({ configured, mandatory = false, error, isBusy, onCancel, onSave }: { configured: boolean; mandatory?: boolean; error: UiProblem | null; isBusy: boolean; onCancel: () => void; onSave: (currentPassword: string, newPassword: string) => void }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const ready = newPassword.length >= 8 && newPassword === confirmation && (!configured || currentPassword.length >= 8);
-  return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog credential-dialog" role="dialog"><div className="ink-dialog-seal">密</div><p className="eyebrow">ACCOUNT SECURITY</p><h2>{mandatory ? "首次登录，请设置新密码" : configured ? "修改登录密码" : "设置登录密码"}</h2><p>{mandatory ? "初始化密码仅用于本次身份确认。请立即设置自己的密码，完成后才能继续命卷。" : "密码需为 8-72 个字符。服务器只保存不可逆摘要，不会保存或展示明文。"}</p>{error && <p className="credential-warning" role="alert">{error}</p>}<div className="credential-field">{configured && <label>当前密码<input autoComplete="current-password" disabled={isBusy} maxLength={72} onChange={(event) => setCurrentPassword(event.currentTarget.value)} type="password" value={currentPassword} /></label>}<label>新密码<input autoComplete="new-password" disabled={isBusy} maxLength={72} minLength={8} onChange={(event) => setNewPassword(event.currentTarget.value)} type="password" value={newPassword} /></label><label>确认新密码<input autoComplete="new-password" disabled={isBusy} maxLength={72} minLength={8} onChange={(event) => setConfirmation(event.currentTarget.value)} type="password" value={confirmation} /></label>{confirmation && confirmation !== newPassword && <small className="field-error">两次输入的密码不一致</small>}</div><div className={`ink-dialog-actions${mandatory ? " single" : ""}`}>{!mandatory && <button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">返回</button>}<button className="ink-dialog-confirm" disabled={isBusy || !ready} onClick={() => onSave(currentPassword, newPassword)} type="button">{isBusy ? "正在保存…" : "保存新密码并继续"}</button></div></section></div>;
+  return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog credential-dialog" role="dialog"><div className="ink-dialog-seal">密</div><p className="eyebrow">ACCOUNT SECURITY</p><h2>{mandatory ? "首次登录，请设置新密码" : configured ? "修改登录密码" : "设置登录密码"}</h2><p>{mandatory ? "初始化密码仅用于本次身份确认。请立即设置自己的密码，完成后才能继续命卷。" : "密码需为 8-72 个字符。服务器只保存不可逆摘要，不会保存或展示明文。"}</p>{error && <ProblemNotice compact problem={error} />}<div className="credential-field">{configured && <label>当前密码<input autoComplete="current-password" disabled={isBusy} maxLength={72} onChange={(event) => setCurrentPassword(event.currentTarget.value)} type="password" value={currentPassword} /></label>}<label>新密码<input autoComplete="new-password" disabled={isBusy} maxLength={72} minLength={8} onChange={(event) => setNewPassword(event.currentTarget.value)} type="password" value={newPassword} /></label><label>确认新密码<input autoComplete="new-password" disabled={isBusy} maxLength={72} minLength={8} onChange={(event) => setConfirmation(event.currentTarget.value)} type="password" value={confirmation} /></label>{confirmation && confirmation !== newPassword && <small className="field-error">两次输入的密码不一致</small>}</div><div className={`ink-dialog-actions${mandatory ? " single" : ""}`}>{!mandatory && <button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">返回</button>}<button className="ink-dialog-confirm" disabled={isBusy || !ready} onClick={() => onSave(currentPassword, newPassword)} type="button">{isBusy ? "正在保存…" : "保存新密码并继续"}</button></div></section></div>;
 }
 
 function DeleteAccountDialog({ isBusy, onCancel, onConfirm }: { isBusy: boolean; onCancel: () => void; onConfirm: () => void }) {
@@ -792,7 +827,7 @@ export default function Prototype() {
   const busyRef = useRef(false);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const [syncMode, setSyncMode] = useState<SyncMode>("connecting");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<UiProblem | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [resetIntent, setResetIntent] = useState<"RESET" | "FATES" | null>(null);
   const [restartTargetId, setRestartTargetId] = useState<string | null>(null);
@@ -999,15 +1034,18 @@ export default function Prototype() {
     if (busyRef.current) return;
     busyRef.current = true;
     setIsBusy(true);
-    setError("");
+    setError(null);
     try {
       await task();
     } catch (caught) {
-      if (caught instanceof ApiError && caught.status === 401) {
+      if (caught instanceof ApiError && caught.status === 401
+          && caught.code !== "LOGIN_CREDENTIALS_INVALID") {
         setAuth(null);
         setStage("login");
         setSyncMode("server");
-        setError("登录状态已失效，请重新进入命卷。刚才填写的内容不会产生任何消耗。");
+        setError({ category: "ACCOUNT", title: "登录状态已经失效",
+          message: "请重新进入命卷。刚才填写的内容不会产生任何消耗。",
+          suggestions: ["重新登录"], retryable: false, turnConsumed: false, stateChanged: false });
         return;
       }
       if (caught instanceof ApiError && caught.code === "PUBLIC_TURN_LIMIT_REACHED") {
@@ -1028,7 +1066,15 @@ export default function Prototype() {
         setSyncMode("server");
         return;
       }
-      setError(errorMessage(caught));
+      if (caught instanceof ApiError && caught.code === "STATE_CONFLICT" && snapshot?.state.saveId) {
+        try {
+          const refreshed = await gameApi.getSave(snapshot.state.saveId);
+          storeSnapshot(refreshed);
+        } catch {
+          // 保留原始冲突提示；刷新失败时不覆盖真正的原因。
+        }
+      }
+      setError(problemFrom(caught));
     } finally {
       busyRef.current = false;
       setIsBusy(false);
@@ -1275,7 +1321,7 @@ export default function Prototype() {
 
   const openTurnLimitSettings = () => {
     setTurnLimitNotice(null);
-    setError("");
+    setError(null);
     if (aiSettings?.customApiEnabled) setShowAiSettings(true);
   };
 
@@ -1305,7 +1351,7 @@ export default function Prototype() {
         {stage === "game" && game?.phase === "dead" && tab === "chronicle" && <div className="death-chronicle"><ChronicleView game={game} /><button className="reset-button" onClick={() => setTab("adventure")} type="button">返回终局结算</button></div>}
       </main></div>
       {stage === "game" && game?.phase === "playing" && tab === "adventure" && <form className="action-composer" onSubmit={(event) => { event.preventDefault(); if (draft.trim()) void takeTurn("TEXT", { content: draft.trim() }); }}><textarea aria-label="自由行动" maxLength={300} onBlur={() => window.setTimeout(() => setIsComposerFocused(false), 120)} onChange={(event) => setDraft(event.currentTarget.value)} onFocus={(event) => { const target = event.currentTarget; setIsComposerFocused(true); revealFormControl(target, 160); }} placeholder="输入行动、物品或天赋…" rows={1} value={draft} />{draft && <button aria-label="清空输入" className="clear-draft" onClick={() => setDraft("")} type="button"><Cross2Icon /></button>}<button className="act-button" disabled={!draft.trim() || isBusy || syncMode !== "server"} type="submit"><span>行动</span><EnterIcon /></button></form>}
-      {stage === "game" && game?.phase === "playing" && !isComposerFocused && <nav className="bottom-nav" aria-label="主要导航">{([["adventure", "历练"], ["character", "角色"], ["chronicle", "纪事"], ["world", "世界"]] as Array<[TabId, string]>).map(([id, label]) => <button aria-current={tab === id ? "page" : undefined} key={id} onClick={() => { setError(""); setTab(id); }} type="button"><TabIcon id={id} /><span>{label}</span></button>)}</nav>}
+      {stage === "game" && game?.phase === "playing" && !isComposerFocused && <nav className="bottom-nav" aria-label="主要导航">{([["adventure", "历练"], ["character", "角色"], ["chronicle", "纪事"], ["world", "世界"]] as Array<[TabId, string]>).map(([id, label]) => <button aria-current={tab === id ? "page" : undefined} key={id} onClick={() => { setError(null); setTab(id); }} type="button"><TabIcon id={id} /><span>{label}</span></button>)}</nav>}
       {resetIntent && game && <ResetConfirmDialog game={game} intent={resetIntent} isBusy={isBusy} onCancel={() => setResetIntent(null)} onConfirm={() => { setResetIntent(null); prepareRestart(); }} />}
       {abandonTarget && <AbandonSaveDialog isBusy={isBusy} onCancel={() => setAbandonTarget(null)} onConfirm={() => void abandonSave()} save={abandonTarget} />}
       {pendingRelease && <ReleaseAnnouncementDialog note={pendingRelease} onClose={() => { const id = pendingRelease.id; setPendingRelease(null); setReleaseNotes((notes) => notes.map((note) => note.id === id ? { ...note, unread: false } : note)); void gameApi.markReleaseNoteRead(id); }} />}

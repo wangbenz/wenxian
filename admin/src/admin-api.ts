@@ -95,6 +95,10 @@ export type AdminAccount = {
   id: string; username: string; status: "ACTIVE" | "DISABLED"; createdAt: string;
   lastLoginAt: string | null; activeSessions: number; current: boolean;
 };
+export type OperationError = {
+  referenceId: string; saveId: string | null; operation: string; category: string; code: string;
+  httpStatus: number; message: string; diagnostic: string; email: string; playerName: string; at: string;
+};
 
 const TOKEN_KEY = "wenxian_admin_token";
 const BASE = "/api/admin";
@@ -151,4 +155,5 @@ export const adminApi = {
   addAccessWhitelist: (email: string, note: string) => request<AccessControl>("/access-control/whitelist", { method: "POST", body: JSON.stringify({ email, note }) }),
   removeAccessWhitelist: (userId: string) => request<AccessControl>(`/access-control/whitelist/${encodeURIComponent(userId)}`, { method: "DELETE" }),
   operationLogs: () => request<Array<{ operation: string; detail: string; at: string }>>("/operation-logs"),
+  operationErrors: (search = "", category = "", limit = 100) => request<OperationError[]>(`/operation-errors?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}&limit=${limit}`),
 };

@@ -233,6 +233,14 @@ public class AdminController {
         return adminService.operationLogs(limit);
     }
 
+    @GetMapping("/operation-errors")
+    public List<Map<String, Object>> operationErrors(
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "") String category,
+            @RequestParam(defaultValue = "100") int limit) {
+        return adminService.operationErrors(search, category, limit);
+    }
+
     @GetMapping("/access-control")
     public Map<String, Object> accessControl() {
         return adminService.accessControl();

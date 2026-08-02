@@ -1,5 +1,6 @@
 package com.wenxian.game.service;
 
+import com.wenxian.game.api.GameApiException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.wenxian.game.config.RuntimeAiConfigService;
 import com.wenxian.game.config.SecretCipher;
@@ -14,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -132,11 +132,15 @@ public class PlayerAiService {
     @Transactional
     public Settings saveCredential(String userId, String rawApiKey) {
         if (!customApiEnabled()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "自己的推演密钥入口暂未开放");
+            throw GameApiException.of(HttpStatus.SERVICE_UNAVAILABLE, "CUSTOM_KEY_DISABLED", "CREDENTIAL",
+                    "自己的推演密钥暂未开放", "当前暂时不能保存或更换推演密钥。",
+                    List.of("稍后再试"));
         }
         String apiKey = rawApiKey == null ? "" : rawApiKey.strip();
         if (apiKey.length() < 20 || apiKey.length() > 512 || apiKey.chars().anyMatch(Character::isWhitespace)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请输入有效的 DeepSeek API Key");
+            throw GameApiException.of(HttpStatus.BAD_REQUEST, "CUSTOM_KEY_FORMAT_INVALID", "CREDENTIAL",
+                    "推演密钥格式不正确", "请粘贴完整密钥，内容中不能包含空格。",
+                    List.of("重新复制完整密钥后验证"));
         }
         RuntimeAiConfigService.RuntimeConfig shared = runtimeConfig.current();
         verify(apiKey, shared.model());
@@ -207,18 +211,29 @@ public class PlayerAiService {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                     .body(request).retrieve().body(JsonNode.class);
             if (response == null || response.path("choices").isMissingNode()) {
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "DeepSeek 暂未返回验证结果，请稍后再试");
+                throw GameApiException.temporary("CUSTOM_KEY_VERIFY_UNAVAILABLE", "密钥暂时无法验证",
+                        "推演服务没有返回验证结果，密钥尚未保存。", List.of("稍后重新验证"),
+                        "credential verification returned no choices", null);
             }
         } catch (RestClientResponseException error) {
-            String message = switch (error.getStatusCode().value()) {
-                case 401 -> "API Key 无效，请检查后重新输入";
-                case 402 -> "API Key 所属账户余额不足";
-                case 429 -> "DeepSeek 请求过于频繁，请稍后再试";
-                default -> "DeepSeek 暂时无法验证该密钥，请稍后再试";
+            throw switch (error.getStatusCode().value()) {
+                case 401 -> GameApiException.of(HttpStatus.BAD_REQUEST, "CUSTOM_KEY_INVALID", "CREDENTIAL",
+                        "推演密钥无效", "密钥验证未通过，请检查是否复制完整或已经失效。",
+                        List.of("重新复制完整密钥后验证"));
+                case 402 -> GameApiException.of(HttpStatus.BAD_REQUEST, "CUSTOM_KEY_BALANCE_EMPTY", "CREDENTIAL",
+                        "密钥账户余额不足", "该密钥所属账户当前无法继续生成内容。",
+                        List.of("为对应账户补充余额", "更换其他可用密钥"));
+                case 429 -> GameApiException.of(HttpStatus.TOO_MANY_REQUESTS, "CUSTOM_KEY_RATE_LIMITED", "CREDENTIAL",
+                        "密钥请求过于频繁", "推演服务暂时限制了该密钥的请求频率。",
+                        List.of("稍后重新验证"));
+                default -> GameApiException.temporary("CUSTOM_KEY_VERIFY_UNAVAILABLE", "密钥暂时无法验证",
+                        "推演服务暂时没有完成验证，密钥尚未保存。", List.of("稍后重新验证"),
+                        "credential verify status=" + error.getStatusCode().value(), error);
             };
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         } catch (RestClientException error) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "DeepSeek 暂时无法验证该密钥，请稍后再试");
+            throw GameApiException.temporary("CUSTOM_KEY_VERIFY_UNAVAILABLE", "密钥暂时无法验证",
+                    "当前无法连接推演服务，密钥尚未保存。", List.of("检查网络后重新验证", "稍后再试"),
+                    error.getMessage(), error);
         }
     }
 

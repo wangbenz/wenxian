@@ -149,6 +149,18 @@ create table agent_execution (
     created_at timestamp(6) not null
 );
 
+create table operation_error (
+    reference_id varchar(40) primary key,
+    save_id varchar(80),
+    operation varchar(120) not null,
+    category varchar(32) not null,
+    error_code varchar(64) not null,
+    http_status integer not null,
+    public_message varchar(600) not null,
+    diagnostic clob not null,
+    created_at timestamp not null
+);
+
 create table game_life_archive (
     id varchar(80) primary key,
     user_id varchar(64) not null,

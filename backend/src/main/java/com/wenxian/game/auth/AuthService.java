@@ -1,6 +1,7 @@
 package com.wenxian.game.auth;
 
 import jakarta.annotation.PostConstruct;
+import com.wenxian.game.api.GameApiException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
@@ -10,7 +11,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
 import java.sql.Timestamp;
@@ -88,7 +88,9 @@ public class AuthService {
         String email = normalizeEmail(rawEmail);
         String password = validatePassword(rawPassword);
         if (findUserByEmail(email) != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "该邮箱已经注册，请直接登录");
+            throw GameApiException.of(HttpStatus.CONFLICT, "EMAIL_ALREADY_REGISTERED", "ACCOUNT",
+                    "该邮箱已经登记", "该邮箱已经注册，请切换到登录继续原有命卷。",
+                    java.util.List.of("切换到登录", "使用原邮箱和密码进入"));
         }
         ensureRegistrationConfig();
         String maxUsersValue = jdbcTemplate.queryForObject(
@@ -99,8 +101,9 @@ public class AuthService {
         if (registeredUsers != null && registeredUsers >= maxUsers) {
             String message = configValue("registration_limit_message", DEFAULT_REGISTRATION_LIMIT_MESSAGE);
             String contact = configValue("registration_contact_text", DEFAULT_REGISTRATION_CONTACT);
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
-                    message + (contact.isBlank() ? "" : "\n" + contact));
+            throw GameApiException.of(HttpStatus.TOO_MANY_REQUESTS, "REGISTRATION_CAPACITY_REACHED", "ACCOUNT",
+                    "当前暂停新账号登记", message + (contact.isBlank() ? "" : "\n" + contact),
+                    java.util.List.of("已有玩家可直接登录", "按提示联系测试群"));
         }
         Instant now = Instant.now();
         String ipHash = ipHash(clientIp);
@@ -108,8 +111,9 @@ public class AuthService {
                 "select count(*) from auth_registration where ip_hash=? and created_at>=?",
                 Integer.class, ipHash, Timestamp.from(now.minus(REGISTRATION_WINDOW)));
         if (recent != null && recent >= registrationsPerIpPerDay) {
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
-                    "当前网络今日已经注册过账号，请使用已有账号登录或稍后再试");
+            throw GameApiException.of(HttpStatus.TOO_MANY_REQUESTS, "REGISTRATION_NETWORK_LIMIT", "ACCOUNT",
+                    "当前网络已登记过账号", "同一网络在24小时内只能登记一个账号，请使用已有账号登录。",
+                    java.util.List.of("切换到登录", "24小时后再登记新账号"));
         }
 
         String userId = "user-" + UUID.randomUUID();
@@ -135,8 +139,9 @@ public class AuthService {
                 where email_hash=? and ip_hash=? and created_at>=?
                 """, Integer.class, emailHash, ipHash, Timestamp.from(now.minus(LOGIN_FAILURE_WINDOW)));
         if (recentFailures != null && recentFailures >= loginFailuresPerWindow) {
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
-                    "登录尝试过于频繁，请十分钟后再试");
+            throw GameApiException.of(HttpStatus.TOO_MANY_REQUESTS, "LOGIN_RATE_LIMITED", "ACCOUNT",
+                    "登录尝试过于频繁", "为了保护账号，本邮箱与当前网络需要等待十分钟后再试。",
+                    java.util.List.of("十分钟后重新登录", "确认邮箱和密码后再试"));
         }
 
         UserIdentity user = findUserByEmail(email);
@@ -146,7 +151,9 @@ public class AuthService {
                 && (passwordHash == null || !passwordEncoder.matches(password, passwordHash)))) {
             jdbcTemplate.update("insert into auth_login_failure(id,email_hash,ip_hash,created_at) values (?,?,?,?)",
                     "failure-" + UUID.randomUUID(), emailHash, ipHash, Timestamp.from(now));
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "邮箱或密码错误");
+            throw GameApiException.of(HttpStatus.UNAUTHORIZED, "LOGIN_CREDENTIALS_INVALID", "ACCOUNT",
+                    "邮箱或密码不正确", "请检查邮箱和密码。老用户首次登录时，初始密码为完整邮箱地址。",
+                    java.util.List.of("重新输入邮箱和密码", "老用户可尝试使用完整邮箱作为初始密码"));
         }
 
         accessPolicy.assertAllowed(user.userId());
@@ -164,7 +171,9 @@ public class AuthService {
         String next = validatePassword(newPassword);
         String existingHash = passwordHash(user.email());
         if (existingHash != null && !passwordEncoder.matches(currentPassword == null ? "" : currentPassword, existingHash)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前密码不正确");
+            throw GameApiException.of(HttpStatus.BAD_REQUEST, "CURRENT_PASSWORD_INVALID", "ACCOUNT",
+                    "当前密码不正确", "身份确认失败，新密码尚未保存。",
+                    java.util.List.of("重新输入当前密码"));
         }
         Instant now = Instant.now();
         jdbcTemplate.update("update app_user set password_hash=?, password_set_at=? where id=?",
@@ -200,7 +209,9 @@ public class AuthService {
 
     public UserIdentity requireUser(String rawToken) {
         UserIdentity user = currentUser(rawToken);
-        if (user == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "请先登录");
+        if (user == null) throw GameApiException.of(HttpStatus.UNAUTHORIZED, "SESSION_EXPIRED", "ACCOUNT",
+                "登录状态已经失效", "请重新登录。刚才的操作没有修改账号或命卷。",
+                java.util.List.of("重新登录"));
         return user;
     }
 
@@ -296,7 +307,9 @@ public class AuthService {
     private String normalizeEmail(String rawEmail) {
         String email = rawEmail == null ? "" : rawEmail.strip().toLowerCase(Locale.ROOT);
         if (email.length() > 255 || !EMAIL_PATTERN.matcher(email).matches()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请输入有效邮箱");
+            throw GameApiException.of(HttpStatus.BAD_REQUEST, "EMAIL_INVALID", "INPUT",
+                    "邮箱格式不正确", "请输入可以长期接收邮件的完整邮箱地址。",
+                    java.util.List.of("检查邮箱中是否包含 @ 和正确后缀"));
         }
         return email;
     }
@@ -304,7 +317,9 @@ public class AuthService {
     private String validatePassword(String rawPassword) {
         String password = rawPassword == null ? "" : rawPassword;
         if (password.length() < 8 || password.length() > 72 || password.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "密码需为 8-72 个字符");
+            throw GameApiException.of(HttpStatus.BAD_REQUEST, "PASSWORD_INVALID", "INPUT",
+                    "密码长度不符合要求", "密码需要包含8至72个字符。",
+                    java.util.List.of("重新设置8至72个字符的密码"));
         }
         return password;
     }

@@ -1367,6 +1367,46 @@ public class AdminService {
                 Math.max(1, Math.min(limit, 200)));
     }
 
+    public List<Map<String, Object>> operationErrors(String search, String category, int requestedLimit) {
+        String keyword = search == null ? "" : search.strip();
+        String normalizedCategory = category == null ? "" : category.strip().toUpperCase();
+        int limit = Math.max(1, Math.min(requestedLimit, 300));
+        List<Map<String, Object>> candidates = jdbc.query("""
+                select e.reference_id, e.save_id, e.operation, e.category, e.error_code,
+                       e.http_status, e.public_message, e.diagnostic, e.created_at,
+                       coalesce(u.email, '') email, s.state_json
+                from operation_error e
+                left join game_save s on s.id = e.save_id
+                left join app_user u on u.id = s.user_id
+                where (? = '' or e.category = ?)
+                order by e.created_at desc
+                limit ?
+                """, (row, idx) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("referenceId", row.getString("reference_id"));
+            item.put("saveId", row.getString("save_id"));
+            item.put("operation", row.getString("operation"));
+            item.put("category", row.getString("category"));
+            item.put("code", row.getString("error_code"));
+            item.put("httpStatus", row.getInt("http_status"));
+            item.put("message", row.getString("public_message"));
+            item.put("diagnostic", row.getString("diagnostic"));
+            item.put("email", row.getString("email"));
+            String playerName = "";
+            try {
+                playerName = mapper.readTree(row.getString("state_json")).path("player").path("name").asText("");
+            } catch (Exception ignored) { }
+            item.put("playerName", playerName);
+            item.put("at", displayTime(row.getTimestamp("created_at")));
+            return item;
+        }, normalizedCategory, normalizedCategory, 300);
+        if (keyword.isBlank()) return candidates.subList(0, Math.min(limit, candidates.size()));
+        String lower = keyword.toLowerCase();
+        return candidates.stream().filter(item -> item.values().stream()
+                        .anyMatch(value -> value != null && String.valueOf(value).toLowerCase().contains(lower)))
+                .limit(limit).toList();
+    }
+
     public Map<String, Object> accessControl() {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("mode", configValue("game_access_mode", "OPEN"));
