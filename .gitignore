@@ -8,6 +8,7 @@ target/
 .env.*
 !.env.example
 backend/src/main/resources/application-secret.yml
+v2/backend/application-v2-secret.yml
 backups/
 .DS_Store
 .idea/

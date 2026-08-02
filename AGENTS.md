@@ -12,8 +12,19 @@
 - Keep product documentation compact: one game-design document and one Agent/data architecture document.
 - Keep release history in `docs/version-history.md`. Every release-oriented commit must update the matching version entry for H5, admin, and backend/data changes; do not hardcode the displayed version in either frontend.
 
+## Version Branch Contract
+
+- `master` is the only stable release branch. Do not commit unfinished feature work directly to it.
+- `V0.13` permanently preserves the legacy V0.13 code line. After it is frozen, only explicitly authorized blocking security or data-recovery fixes may be applied there.
+- `V0.2` is the development and gray-release branch for the new V0.2 H5, backend, admin, content packages, and migrations.
+- The current `main` branch must not be deleted or repointed until `V0.13`, `master`, and `V0.2` have been created, verified, and pushed successfully.
+- When V0.2 passes local, gray, migration, and production verification, merge or fast-forward the tested `V0.2` commit into `master` and tag the release. Do not simulate a release by renaming branches back and forth.
+- V0.13 tables and source remain available for archive access after V0.2 becomes stable; a branch promotion never authorizes rewriting legacy player data.
+
 ## Editing Boundary
 
+- On branch `V0.2`, all new gameplay code belongs under `v2/`. The legacy `frontend/`, `backend/`, and `admin/` directories are V0.13 reference implementations and may only receive explicitly requested blocking fixes.
+- The V0.2 H5 lives in `v2/frontend`, the game service in `v2/backend`, the management applications in `v2/admin`, and versioned world content in `v2/content`.
 - Build game UI in `frontend/src/Prototype.tsx` and `frontend/src/prototype.css`.
 - `frontend/src/App.tsx` is the deliberately minimal H5 entry and should render `Prototype` directly.
 - Treat `frontend/src/main.tsx`, `frontend/src/styles.css`, `frontend/vite.config.ts`, `frontend/worker/index.js`, and `frontend/scripts/prepare-sites-build.mjs` as runtime files. Edit them only when the requested runtime or deployment behavior requires it.
@@ -51,6 +62,6 @@
 
 ## Verification
 
-- Run `mvn test` in `backend`, then `npm run check:runtime`, `npm run build`, and `npm run test:sites` in `frontend` before handoff.
+- For V0.2 backend work, run `mvn test` in `v2/backend`. For V0.13 blocking fixes, run `mvn test` in `backend` and the applicable frontend checks.
 - In Codex Desktop, keep the local preview running and verify the actual H5 in the in-app browser at mobile and wide viewport sizes.
 - Do not deploy unless the user explicitly asks to publish or share.

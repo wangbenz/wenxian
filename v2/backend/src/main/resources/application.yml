@@ -1,0 +1,37 @@
+server:
+  port: ${V2_PORT:18180}
+
+spring:
+  application:
+    name: wenxian-v2-backend
+  config:
+    import: optional:file:${V2_SECRET_CONFIG:./application-v2-secret.yml}
+  datasource:
+    url: ${GAME_DATABASE_URL:jdbc:mysql://127.0.0.1:3306/wenxian?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${GAME_DATABASE_USERNAME:wenxian_app}
+    password: ${GAME_DATABASE_PASSWORD:}
+    driver-class-name: ${GAME_DATABASE_DRIVER:com.mysql.cj.jdbc.Driver}
+    hikari:
+      connection-timeout: 10000
+      validation-timeout: 5000
+      maximum-pool-size: ${V2_DATABASE_MAX_POOL_SIZE:30}
+      minimum-idle: 1
+      idle-timeout: 180000
+      max-lifetime: 240000
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+  sql:
+    init:
+      mode: never
+  jackson:
+    default-property-inclusion: non_null
+
+wenxian:
+  v2:
+    engine-version: 0.2.0
+    content-version: qingqi-0.2.0
+    max-active-saves: ${V2_MAX_ACTIVE_SAVES:2}
+    session-idle-hours: ${WENXIAN_SESSION_IDLE_HOURS:12}
