@@ -10,7 +10,7 @@ import java.util.concurrent.Executors;
 
 @Configuration
 @EnableAsync
-@EnableConfigurationProperties(V2Properties.class)
+@EnableConfigurationProperties({V2Properties.class, AiProperties.class})
 public class V2Configuration {
     @Bean(name = "v2TurnExecutor", destroyMethod = "close")
     ExecutorService v2TurnExecutor() {

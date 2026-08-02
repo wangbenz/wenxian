@@ -35,7 +35,7 @@ cd v2/backend
 mvn test
 ```
 
-启动时通过 `GAME_DATABASE_URL`、`GAME_DATABASE_USERNAME`、`GAME_DATABASE_PASSWORD` 连接测试库，默认监听 `18180`。本地私密配置写入被 Git 忽略的 `v2/backend/application-v2-secret.yml`，不得提交密钥。
+启动时通过 `GAME_DATABASE_URL`、`GAME_DATABASE_USERNAME`、`GAME_DATABASE_PASSWORD` 连接测试库，默认监听 `18180`。本地私密配置写入被 Git 忽略的 `v2/backend/application-v2-secret.yml`，不得提交密钥。V0.2 的 LangChain4j 模型适配默认关闭；本地验证模型时单独设置 `V2_AI_ENABLED=true` 与 `V2_AI_PLATFORM_API_KEY`，不要写入仓库。
 
 以下为 V0.13 的本地运行方式：
 

@@ -35,3 +35,8 @@ wenxian:
     content-version: qingqi-0.2.0
     max-active-saves: ${V2_MAX_ACTIVE_SAVES:2}
     session-idle-hours: ${WENXIAN_SESSION_IDLE_HOURS:12}
+    ai:
+      enabled: ${V2_AI_ENABLED:false}
+      platform-api-key: ${V2_AI_PLATFORM_API_KEY:}
+      timeout-seconds: ${V2_AI_TIMEOUT_SECONDS:90}
+      max-retries: ${V2_AI_MAX_RETRIES:1}
