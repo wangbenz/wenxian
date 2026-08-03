@@ -26,7 +26,8 @@ class ActionAdjudicatorTest {
         locations = mock(LocationRepository.class);
         adjudicator = new ActionAdjudicator(locations);
         context = new IntentContext("user", "save", "operation", 0, "行动",
-                new ProtagonistFacts("self", "石生", "SPIRIT", "SPROUTING_SPIRIT", "萌灵", "安稳", "见天地"),
+                new ProtagonistFacts("self", "石生", "SPIRIT", "SPROUTING_SPIRIT", "萌灵",
+                        "GATHERED_MIND", "聚识", "安稳", "见天地"),
                 "loc-zhaogu-mine", "照骨矿", 1,
                 List.of(new EntityCandidate("self", "石生", "CHARACTER", "ALIVE")),
                 List.of(new EntityCandidate("loc-zhaogu-mine", "照骨矿", "LOCATION", "ACCESSIBLE"),
@@ -59,16 +60,27 @@ class ActionAdjudicatorTest {
     }
 
     @Test
-    void declaredOutcomeAndAmbiguityNeverReachWorldMutation() {
+    void declaredOutcomeAndUnresolvedOtherActionNeverReachWorldMutation() {
         var declared = adjudicator.adjudicate(context, intent("COMBAT", "DECLARE_OUTCOME", null,
                 List.of(), List.of(), null, true, List.of()));
-        var ambiguous = adjudicator.adjudicate(context, intent("INTERACT", "ATTEMPT", null,
-                List.of(), List.of(), null, false, List.of("无法确认所说的老人是谁")));
+        var ambiguous = adjudicator.adjudicate(context, intent("OTHER", "ATTEMPT", null,
+                List.of(), List.of(), null, false, List.of("无法确认玩家准备做什么")));
 
         assertThat(declared.code()).isEqualTo("OUTCOME_CANNOT_BE_DECLARED");
         assertThat(ambiguous.decision()).isEqualTo(Decision.CLARIFY);
         assertThat(declared.consumesTurn()).isFalse();
         assertThat(ambiguous.consumesTurn()).isFalse();
+    }
+
+    @Test
+    void letsInvestigationAndConversationDiscoverIncidentalPeople() {
+        var interact = adjudicator.adjudicate(context, intent("INTERACT", "ATTEMPT", null,
+                List.of(), List.of(), null, false, List.of("送药脚夫尚未建立人物档案")));
+        var investigate = adjudicator.adjudicate(context, intent("INVESTIGATE", "ATTEMPT", null,
+                List.of(), List.of(), null, false, List.of("摊主尚无姓名")));
+
+        assertThat(interact.decision()).isEqualTo(Decision.ACCEPT);
+        assertThat(investigate.decision()).isEqualTo(Decision.ACCEPT);
     }
 
     private ActionIntent intent(String type, String mode, String targetLocation, List<String> items,

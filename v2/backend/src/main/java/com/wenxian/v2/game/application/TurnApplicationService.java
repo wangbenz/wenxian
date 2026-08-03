@@ -3,8 +3,9 @@ package com.wenxian.v2.game.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wenxian.v2.api.V2ApiException;
-import com.wenxian.v2.game.domain.DeterministicAction;
+import com.wenxian.v2.ai.application.SponsoredTurnQuotaService;
 import com.wenxian.v2.game.domain.GameRecords.Save;
+import com.wenxian.v2.game.domain.PlayerActionType;
 import com.wenxian.v2.game.persistence.GameSaveRepository;
 import com.wenxian.v2.game.persistence.TurnRepository;
 import com.wenxian.v2.game.persistence.TurnRepository.Operation;
@@ -22,13 +23,16 @@ public class TurnApplicationService {
     private final TurnRepository turns;
     private final TurnWorker worker;
     private final ObjectMapper objectMapper;
+    private final SponsoredTurnQuotaService quotas;
 
     public TurnApplicationService(GameSaveRepository saves, TurnRepository turns,
-                                  TurnWorker worker, ObjectMapper objectMapper) {
+                                  TurnWorker worker, ObjectMapper objectMapper,
+                                  SponsoredTurnQuotaService quotas) {
         this.saves = saves;
         this.turns = turns;
         this.worker = worker;
         this.objectMapper = objectMapper;
+        this.quotas = quotas;
     }
 
     @Transactional
@@ -51,13 +55,15 @@ public class TurnApplicationService {
             throw V2ApiException.conflict("TURN_ALREADY_RUNNING",
                     "当前账号已有一轮命卷正在推演。", "等待当前推演完成");
         }
+        quotas.assertAvailable(userId);
 
-        DeterministicAction action = DeterministicAction.parse(command.actionType());
+        PlayerActionType action = parseAction(command.actionType());
         String operationId = "v2-operation-" + UUID.randomUUID();
         Instant now = Instant.now();
         Operation operation = new Operation(operationId, command.requestId(), saveId, userId,
                 command.expectedStateVersion(), "QUEUED", "QUEUED", action.name(),
-                command.actionText().strip(), payload(command), null, null, null, null, now, null, null);
+                command.actionText().strip(), payload(command), null, null, null, java.util.List.of(),
+                null, now, null, null);
         turns.insert(operation);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -74,6 +80,10 @@ public class TurnApplicationService {
         return operation;
     }
 
+    public Operation activeOperation(String userId) {
+        return turns.findActiveOwned(userId);
+    }
+
     private void validate(SubmitActionCommand command) {
         if (command == null) throw V2ApiException.badRequest("ACTION_REQUIRED", "缺少行动信息。");
         if (command.requestId() == null || command.requestId().isBlank() || command.requestId().length() > 80) {
@@ -82,14 +92,22 @@ public class TurnApplicationService {
         if (command.actionText() == null || command.actionText().isBlank() || command.actionText().length() > 1000) {
             throw V2ApiException.badRequest("ACTION_TEXT_INVALID", "行动内容需要1至1000个字符。");
         }
-        DeterministicAction action = DeterministicAction.parse(command.actionType());
-        if (action == DeterministicAction.WAIT
+        PlayerActionType action = parseAction(command.actionType());
+        if (action == PlayerActionType.WAIT
                 && (command.durationMinutes() == null || command.durationMinutes() <= 0)) {
             throw V2ApiException.badRequest("WAIT_DURATION_REQUIRED", "等待行动需要明确经过时间。");
         }
-        if (action == DeterministicAction.TRAVEL
+        if (action == PlayerActionType.TRAVEL
                 && (command.targetLocationId() == null || command.targetLocationId().isBlank())) {
             throw V2ApiException.badRequest("TRAVEL_TARGET_REQUIRED", "移动行动需要明确目的地。");
+        }
+    }
+
+    private PlayerActionType parseAction(String raw) {
+        try {
+            return PlayerActionType.parse(raw);
+        } catch (IllegalArgumentException unsupported) {
+            throw V2ApiException.badRequest("ACTION_TYPE_UNSUPPORTED", unsupported.getMessage());
         }
     }
 

@@ -15,3 +15,5 @@ wenxian:
     content-version: qingqi-0.2.0
     max-active-saves: 2
     session-idle-hours: 12
+    ai:
+      credential-master-key: v2-test-credential-master-key

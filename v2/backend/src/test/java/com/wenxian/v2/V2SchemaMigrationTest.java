@@ -24,7 +24,7 @@ class V2SchemaMigrationTest {
         Integer usageRows = jdbc.queryForObject("select count(*) from v2_ai_usage_log", Integer.class);
 
         assertThat(tables).isGreaterThanOrEqualTo(30);
-        assertThat(locations).isEqualTo(9);
+        assertThat(locations).isEqualTo(14);
         assertThat(models).isEqualTo(2);
         assertThat(generatedEntities).isZero();
         assertThat(usageRows).isZero();

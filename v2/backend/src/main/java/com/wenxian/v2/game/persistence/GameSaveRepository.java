@@ -3,11 +3,17 @@ package com.wenxian.v2.game.persistence;
 import com.wenxian.v2.game.domain.Difficulty;
 import com.wenxian.v2.game.domain.GameRecords.Ability;
 import com.wenxian.v2.game.domain.GameRecords.Character;
+import com.wenxian.v2.game.domain.GameRecords.CharacterOrigin;
 import com.wenxian.v2.game.domain.GameRecords.CharacterState;
+import com.wenxian.v2.game.domain.GameRecords.CultivationProgress;
 import com.wenxian.v2.game.domain.GameRecords.InventoryItem;
+import com.wenxian.v2.game.domain.GameRecords.KnownCharacter;
+import com.wenxian.v2.game.domain.GameRecords.LifeEnding;
+import com.wenxian.v2.game.domain.GameRecords.Relationship;
 import com.wenxian.v2.game.domain.GameRecords.Save;
 import com.wenxian.v2.game.domain.GameRecords.SaveAggregate;
 import com.wenxian.v2.game.domain.GameRecords.WalletBalance;
+import com.wenxian.v2.game.domain.GameRecords.WorldEvent;
 import com.wenxian.v2.game.domain.Race;
 import com.wenxian.v2.game.domain.WorldCalendar;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -81,6 +87,17 @@ public class GameSaveRepository {
                 state.currentGoal(), state.stateVersion(), Timestamp.from(now));
     }
 
+    public void insertCharacterOrigin(String characterId, String saveId, String fateTitle,
+                                      String publicIdentity, String openingSituation,
+                                      String unpaidDebt, Instant now) {
+        jdbc.update("""
+                insert into v2_character_origin(character_id,save_id,fate_title,public_identity,
+                                                opening_situation,unpaid_debt,created_at)
+                values (?,?,?,?,?,?,?)
+                """, characterId, saveId, fateTitle, publicIdentity, openingSituation, unpaidDebt,
+                Timestamp.from(now));
+    }
+
     public void insertInventory(String inventoryId, String saveId, String characterId, Instant now) {
         jdbc.update("""
                 insert into v2_inventory(id,save_id,owner_character_id,inventory_type,created_at)
@@ -145,10 +162,43 @@ public class GameSaveRepository {
                         '事件会自行发展，不要求玩家参与。',0,?)
                 """, "v2-event-" + java.util.UUID.randomUUID(), saveId, worldMinute,
                 worldMinute + 30L * WorldCalendar.MINUTES_PER_DAY, Timestamp.from(now));
+        insertWorldEvent(saveId, "QINGQI_MEDICINE_SHORTAGE", "青木药荒", "LOCAL",
+                "loc-huichun-hall", "百草岭的常用药草收成略少，回春堂尚未公开调整药价。",
+                "药材供给会随时间影响采药人与病患。", worldMinute,
+                worldMinute + 45L * WorldCalendar.MINUTES_PER_DAY, now);
+        insertWorldEvent(saveId, "QINGQI_CARAVAN_DELAY", "北路商队迟滞", "REGIONAL",
+                "loc-northern-road", "两支应在近日抵达青木镇的北路商队仍无消息。",
+                "迟滞原因不会因为玩家未介入而停止发展。", worldMinute,
+                worldMinute + 60L * WorldCalendar.MINUTES_PER_DAY, now);
+        insertWorldEvent(saveId, "BRONZE_GATE_RECRUITMENT", "青铜门外院招募", "LOCAL",
+                "loc-bronze-outer-court", "青铜门外院正在整理下一次招募名册，具体条件尚未张榜。",
+                "招募是长期地域机会之一，并非主线强制事件。", worldMinute,
+                worldMinute + 90L * WorldCalendar.MINUTES_PER_DAY, now);
+    }
+
+    private void insertWorldEvent(String saveId, String templateCode, String title, String scale,
+                                  String locationId, String publicSummary, String hiddenSummary,
+                                  long worldMinute, long nextMinute, Instant now) {
+        jdbc.update("""
+                insert into v2_world_event(id,save_id,template_code,title,event_scale,stage,location_id,
+                                           started_world_minute,next_transition_world_minute,public_summary,
+                                           hidden_summary,state_version,updated_at)
+                values (?,?,?,?,?,'SEED',?,?,?,?,?,0,?)
+                """, "v2-event-" + java.util.UUID.randomUUID(), saveId, templateCode, title, scale,
+                locationId, worldMinute, nextMinute, publicSummary, hiddenSummary, Timestamp.from(now));
     }
 
     public void revealStartingLocations(String saveId, String currentLocationId, long worldMinute, Instant now) {
-        for (String locationId : List.of("loc-qingqi", "loc-qingmu-town", currentLocationId)) {
+        java.util.Set<String> visible = new java.util.LinkedHashSet<>(
+                List.of("loc-qingqi", "loc-qingmu-town", currentLocationId));
+        visible.addAll(jdbc.query("""
+                select distinct case when from_location_id in ('loc-qingmu-town',?)
+                    then to_location_id else from_location_id end
+                from v2_location_edge
+                where active=true and bidirectional=true
+                  and (from_location_id in ('loc-qingmu-town',?) or to_location_id in ('loc-qingmu-town',?))
+                """, (row, index) -> row.getString(1), currentLocationId, currentLocationId, currentLocationId));
+        for (String locationId : visible) {
             Integer count = jdbc.queryForObject("""
                     select count(*) from v2_save_location_state where save_id=? and location_id=?
                     """, Integer.class, saveId, locationId);
@@ -164,7 +214,7 @@ public class GameSaveRepository {
     public List<Save> list(String userId) {
         return jdbc.query("""
                         select id,user_id,slot_no,status,difficulty,protagonist_id,engine_version,
-                               content_version,state_version,turn_number,created_at,updated_at
+                               content_version,state_version,turn_number,end_reason,created_at,updated_at,ended_at
                         from v2_game_save where user_id=? order by slot_no
                         """, (row, index) -> save(row), userId);
     }
@@ -172,7 +222,7 @@ public class GameSaveRepository {
     public Optional<Save> findOwned(String saveId, String userId) {
         return jdbc.query("""
                         select id,user_id,slot_no,status,difficulty,protagonist_id,engine_version,
-                               content_version,state_version,turn_number,created_at,updated_at
+                               content_version,state_version,turn_number,end_reason,created_at,updated_at,ended_at
                         from v2_game_save where id=? and user_id=?
                         """, (row, index) -> save(row), saveId, userId).stream().findFirst();
     }
@@ -180,9 +230,43 @@ public class GameSaveRepository {
     public Save lockOwned(String saveId, String userId) {
         return jdbc.query("""
                         select id,user_id,slot_no,status,difficulty,protagonist_id,engine_version,
-                               content_version,state_version,turn_number,created_at,updated_at
+                               content_version,state_version,turn_number,end_reason,created_at,updated_at,ended_at
                         from v2_game_save where id=? and user_id=? for update
-                        """, (row, index) -> save(row), saveId, userId).stream().findFirst().orElse(null);
+                """, (row, index) -> save(row), saveId, userId).stream().findFirst().orElse(null);
+    }
+
+    public void archive(String saveId, String protagonistId, Instant now) {
+        jdbc.update("""
+                update v2_game_save set status='ARCHIVED',end_reason='PLAYER_ARCHIVED',ended_at=?,updated_at=?
+                where id=? and status='ACTIVE'
+                """, Timestamp.from(now), Timestamp.from(now), saveId);
+        jdbc.update("update v2_character set status='ARCHIVED',updated_at=? where id=?",
+                Timestamp.from(now), protagonistId);
+    }
+
+    public void endLife(String saveId, String protagonistId, String endingType, String title,
+                        String summary, CharacterState state, int turnNumber,
+                        long worldMinute, Instant now) {
+        int saveUpdated = jdbc.update("""
+                update v2_game_save set status='ENDED',end_reason=?,ended_at=?,updated_at=?
+                where id=? and status='ACTIVE'
+                """, endingType, Timestamp.from(now), Timestamp.from(now), saveId);
+        if (saveUpdated != 1) throw new IllegalStateException("Save state changed before ending");
+        jdbc.update("update v2_character set status='RETIRED',updated_at=? where id=? and save_id=?",
+                Timestamp.from(now), protagonistId, saveId);
+        jdbc.update("""
+                update v2_character_state set life_stage_code='RETIRED',body_condition=?,
+                    current_goal='此生已作收束',state_version=state_version+1,updated_at=?
+                where character_id=?
+                """, "LEGACY".equals(endingType) ? "已留下传承，退出纷争" : "已归隐，不再涉足旧事",
+                Timestamp.from(now), protagonistId);
+        jdbc.update("""
+                insert into v2_life_ending(save_id,protagonist_id,ending_type,title,summary,
+                    final_realm_code,final_realm_display_name,final_location_id,final_turn_number,
+                    ended_world_minute,created_at)
+                values (?,?,?,?,?,?,?,?,?,?,?)
+                """, saveId, protagonistId, endingType, title, summary, state.realmCode(),
+                state.realmDisplayName(), state.locationId(), turnNumber, worldMinute, Timestamp.from(now));
     }
 
     public SaveAggregate aggregate(String saveId, String userId) {
@@ -206,6 +290,14 @@ public class GameSaveRepository {
                         row.getString("realm_code"), row.getString("realm_display_name"), row.getString("realm_phase"),
                         row.getString("public_identity"), row.getString("body_condition"), row.getString("current_goal"),
                         row.getLong("state_version")), character.id()).stream().findFirst().orElseThrow();
+        CharacterOrigin origin = jdbc.query("""
+                        select fate_title,public_identity,opening_situation,unpaid_debt
+                        from v2_character_origin where character_id=? and save_id=?
+                        """, (row, index) -> new CharacterOrigin(row.getString("fate_title"),
+                        row.getString("public_identity"), row.getString("opening_situation"),
+                        row.getString("unpaid_debt")), character.id(), saveId)
+                .stream().findFirst().orElse(new CharacterOrigin("未定之命", state.publicIdentity(),
+                        "此身刚刚进入青岐州，前路尚未留下定论。", "尚无已经确认的旧债"));
         Long worldMinute = jdbc.queryForObject(
                 "select current_world_minute from v2_world_clock where save_id=?", Long.class, saveId);
         List<WalletBalance> wallet = jdbc.query("""
@@ -215,25 +307,84 @@ public class GameSaveRepository {
                         """, (row, index) -> new WalletBalance(row.getString(1), row.getString(2), row.getBigDecimal(3)),
                 saveId, character.id());
         List<InventoryItem> inventory = jdbc.query("""
-                        select i.id,d.item_code,coalesce(i.custom_name,d.name),i.quantity,i.item_status,
+                        select i.id,d.id,d.item_code,coalesce(i.custom_name,d.name),i.quantity,i.item_status,
                                i.condition_summary,i.provenance_summary
                         from v2_item_instance i join v2_item_definition d on d.id=i.item_definition_id
                         join v2_inventory inv on inv.id=i.inventory_id
                         where i.save_id=? and inv.owner_character_id=? and i.item_status<>'REMOVED'
                         order by i.acquired_world_minute,i.id
                         """, (row, index) -> new InventoryItem(row.getString(1), row.getString(2), row.getString(3),
-                        row.getBigDecimal(4), row.getString(5), row.getString(6), row.getString(7)),
+                        row.getString(4), row.getBigDecimal(5), row.getString(6), row.getString(7), row.getString(8)),
                 saveId, character.id());
         List<Ability> abilities = jdbc.query("""
-                        select ca.id,d.ability_code,d.name,d.ability_type,ca.mastery_stage,ca.stability,ca.ability_status
+                        select ca.id,d.ability_code,d.name,d.ability_type,ca.source_type,ca.source_reference_id,
+                               ca.mastery_stage,ca.stability,ca.ability_status,ca.learned_world_minute
                         from v2_character_ability ca join v2_ability_definition d on d.id=ca.ability_definition_id
                         where ca.save_id=? and ca.character_id=? order by ca.learned_world_minute,ca.id
                         """, (row, index) -> new Ability(row.getString(1), row.getString(2), row.getString(3),
-                        row.getString(4), row.getString(5), row.getString(6), row.getString(7)),
+                        row.getString(4), row.getString(5), row.getString(6), row.getString(7),
+                        row.getString(8), row.getString(9), row.getLong(10)),
                 saveId, character.id());
+        CultivationProgress cultivation = jdbc.query("""
+                        select path_code,path_name,current_realm_code,current_realm_phase,target_realm_code,
+                               project_stage,insight_summary,state_version
+                        from v2_cultivation where save_id=? and character_id=?
+                        """, (row, index) -> new CultivationProgress(row.getString("path_code"),
+                        row.getString("path_name"), row.getString("current_realm_code"),
+                        row.getString("current_realm_phase"), row.getString("target_realm_code"),
+                        row.getString("project_stage"), row.getString("insight_summary"),
+                        row.getLong("state_version")), saveId, character.id())
+                .stream().findFirst().orElseThrow();
+        List<WorldEvent> worldEvents = jdbc.query("""
+                        select e.id,e.title,e.event_scale,e.stage,e.location_id,l.name as location_name,
+                               e.public_summary
+                        from v2_world_event e left join v2_location_definition l on l.id=e.location_id
+                        where e.save_id=? order by e.started_world_minute,e.id
+                        """, (row, index) -> new WorldEvent(row.getString("id"), row.getString("title"),
+                        row.getString("event_scale"), row.getString("stage"), row.getString("location_id"),
+                        row.getString("location_name"), row.getString("public_summary")), saveId);
+        List<KnownCharacter> knownCharacters = jdbc.query("""
+                        select c.id,c.name,c.race,c.status,s.public_identity,s.location_id,
+                               l.name as location_name,s.realm_code,s.realm_display_name,s.current_goal
+                        from v2_character c
+                        join v2_character_state s on s.character_id=c.id
+                        join v2_location_definition l on l.id=s.location_id
+                        where c.save_id=? and c.character_kind='NPC'
+                        order by c.created_world_minute,c.id
+                        """, (row, index) -> new KnownCharacter(row.getString("id"), row.getString("name"),
+                        Race.valueOf(row.getString("race")), row.getString("status"),
+                        row.getString("public_identity"), row.getString("location_id"),
+                        row.getString("location_name"), row.getString("realm_code"),
+                        row.getString("realm_display_name"), row.getString("current_goal")), saveId);
+        List<Relationship> relationships = jdbc.query("""
+                        select r.id,r.target_character_id,c.name as target_name,r.relationship_type,
+                               r.trust_level,r.closeness_level,r.fear_level,r.interest_level,
+                               r.debt_summary,r.conflict_summary,r.shared_secret_summary,
+                               r.last_changed_world_minute
+                        from v2_relationship r
+                        join v2_character c on c.id=r.target_character_id
+                        where r.save_id=? and r.source_character_id=?
+                        order by r.last_changed_world_minute desc,r.id
+                        """, (row, index) -> new Relationship(row.getString("id"),
+                        row.getString("target_character_id"), row.getString("target_name"),
+                        row.getString("relationship_type"), row.getInt("trust_level"),
+                        row.getInt("closeness_level"), row.getInt("fear_level"),
+                        row.getInt("interest_level"), row.getString("debt_summary"),
+                        row.getString("conflict_summary"), row.getString("shared_secret_summary"),
+                        row.getLong("last_changed_world_minute")), saveId, character.id());
+        LifeEnding ending = jdbc.query("""
+                        select ending_type,title,summary,final_realm_code,final_realm_display_name,
+                               final_location_id,final_turn_number,ended_world_minute,created_at
+                        from v2_life_ending where save_id=?
+                        """, (row, index) -> new LifeEnding(row.getString("ending_type"),
+                        row.getString("title"), row.getString("summary"), row.getString("final_realm_code"),
+                        row.getString("final_realm_display_name"), row.getString("final_location_id"),
+                        row.getInt("final_turn_number"), row.getLong("ended_world_minute"),
+                        row.getTimestamp("created_at").toInstant()), saveId)
+                .stream().findFirst().orElse(null);
         long minute = worldMinute == null ? 0 : worldMinute;
-        return new SaveAggregate(save, character, state, minute, WorldCalendar.fromWorldMinute(minute),
-                wallet, inventory, abilities);
+        return new SaveAggregate(save, character, state, origin, minute, WorldCalendar.fromWorldMinute(minute),
+                wallet, inventory, abilities, cultivation, worldEvents, knownCharacters, relationships, ending);
     }
 
     public long worldMinute(String saveId) {
@@ -264,6 +415,8 @@ public class GameSaveRepository {
                 row.getString("status"), Difficulty.valueOf(row.getString("difficulty")),
                 row.getString("protagonist_id"), row.getString("engine_version"),
                 row.getString("content_version"), row.getLong("state_version"), row.getInt("turn_number"),
-                row.getTimestamp("created_at").toInstant(), row.getTimestamp("updated_at").toInstant());
+                row.getString("end_reason"), row.getTimestamp("created_at").toInstant(),
+                row.getTimestamp("updated_at").toInstant(),
+                row.getTimestamp("ended_at") == null ? null : row.getTimestamp("ended_at").toInstant());
     }
 }

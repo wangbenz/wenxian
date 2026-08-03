@@ -35,8 +35,11 @@ wenxian:
     content-version: qingqi-0.2.0
     max-active-saves: ${V2_MAX_ACTIVE_SAVES:2}
     session-idle-hours: ${WENXIAN_SESSION_IDLE_HOURS:12}
+    auth:
+      secure-cookie: ${V2_AUTH_SECURE_COOKIE:false}
     ai:
       enabled: ${V2_AI_ENABLED:false}
       platform-api-key: ${V2_AI_PLATFORM_API_KEY:}
+      credential-master-key: ${V2_AI_CREDENTIAL_MASTER_KEY:${GAME_AI_CONFIG_MASTER_KEY:}}
       timeout-seconds: ${V2_AI_TIMEOUT_SECONDS:90}
       max-retries: ${V2_AI_MAX_RETRIES:1}

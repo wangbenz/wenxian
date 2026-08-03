@@ -23,7 +23,8 @@ class IntentInterpreterTest {
                 """, "DEEPSEEK", "deepseek-v4-flash", "response", 100, 30, 20);
         IntentInterpreter interpreter = new LangChain4jIntentInterpreter(gateway, new ObjectMapper());
         IntentContext context = new IntentContext("user", "save", "operation", 0, "施展石脉感知",
-                new ProtagonistFacts("self", "石生", "SPIRIT", "SPROUTING_SPIRIT", "萌灵", "安稳", "见天地"),
+                new ProtagonistFacts("self", "石生", "SPIRIT", "SPROUTING_SPIRIT", "萌灵",
+                        "GATHERED_MIND", "聚识", "安稳", "见天地"),
                 "loc-zhaogu-mine", "照骨矿", 1,
                 List.of(new EntityCandidate("self", "石生", "CHARACTER", "ALIVE")), List.of(), List.of(),
                 List.of(new EntityCandidate("ability-stone-sense", "石脉感知", "TALENT", "ACTIVE")));

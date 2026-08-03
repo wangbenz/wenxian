@@ -14,7 +14,9 @@ public record ActionIntent(
         String targetRealmCode,
         boolean declaresGuaranteedOutcome,
         List<String> ambiguities,
-        String summary
+        String summary,
+        Long durationAmount,
+        String durationUnit
 ) {
     public ActionIntent {
         actionType = normalize(actionType, "OTHER");
@@ -23,6 +25,18 @@ public record ActionIntent(
         referencedAbilityIds = immutable(referencedAbilityIds);
         ambiguities = immutable(ambiguities);
         summary = summary == null ? "" : summary.strip();
+        durationUnit = durationUnit == null || durationUnit.isBlank()
+                ? null : durationUnit.strip().toUpperCase(Locale.ROOT);
+    }
+
+    public ActionIntent(String actionType, String intentMode, Long durationMinutes,
+                        String targetLocationId, String targetCharacterId,
+                        List<String> referencedItemIds, List<String> referencedAbilityIds,
+                        String targetRealmCode, boolean declaresGuaranteedOutcome,
+                        List<String> ambiguities, String summary) {
+        this(actionType, intentMode, durationMinutes, targetLocationId, targetCharacterId,
+                referencedItemIds, referencedAbilityIds, targetRealmCode, declaresGuaranteedOutcome,
+                ambiguities, summary, null, null);
     }
 
     private static String normalize(String value, String fallback) {

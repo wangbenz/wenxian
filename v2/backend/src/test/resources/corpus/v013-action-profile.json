@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "profileCode": "V013_PLAYER_ACTIONS_20260803",
+  "source": {
+    "version": "V0.13",
+    "snapshotUtc": "2026-08-03T00:45:52Z",
+    "totalTurns": 42547,
+    "distinctSaves": 1229,
+    "turnsPerSaveMedian": 17,
+    "turnsPerSaveP90": 86,
+    "savesWithAtLeast100Turns": 106,
+    "savesWithAtLeast500Turns": 5
+  },
+  "method": {
+    "rawPlayerTextRetained": false,
+    "clickedChoiceDetection": "A turn is an exact choice click only when its text equals the preceding choice label plus hint.",
+    "semanticSample": "1000 non-clicked actions and 1000 older untyped choice clicks were classified by DeepSeek V4 Flash; only aggregate counts were retained.",
+    "projection": "Exact typed choice counts were mapped to V0.2 action types, then sampled distributions were projected over untyped and non-clicked actions.",
+    "caveat": "Projected categories and behavior flags are test weights, not exact labels for every historical turn. Turn-weighted results are not player popularity rankings."
+  },
+  "interactionMode": {
+    "exactChoiceClicks": 34014,
+    "exactChoiceClickSaves": 1091,
+    "nonClickedActions": 8533,
+    "nonClickedActionSaves": 1229,
+    "olderUntypedChoiceClicks": 24117
+  },
+  "exactTypedChoices": [
+    {"legacyType": "INVESTIGATE", "turns": 2224, "distinctSaves": 262},
+    {"legacyType": "EXPLORE", "turns": 1932, "distinctSaves": 244},
+    {"legacyType": "CULTIVATE", "turns": 1838, "distinctSaves": 187},
+    {"legacyType": "NEGOTIATE", "turns": 934, "distinctSaves": 202},
+    {"legacyType": "TRAVEL", "turns": 744, "distinctSaves": 185},
+    {"legacyType": "REST", "turns": 607, "distinctSaves": 180},
+    {"legacyType": "INFILTRATE", "turns": 344, "distinctSaves": 123},
+    {"legacyType": "COMBAT", "turns": 318, "distinctSaves": 91},
+    {"legacyType": "OTHER", "turns": 314, "distinctSaves": 113},
+    {"legacyType": "USE_ITEM", "turns": 277, "distinctSaves": 84},
+    {"legacyType": "USE_ABILITY", "turns": 247, "distinctSaves": 89},
+    {"legacyType": "ESCAPE", "turns": 118, "distinctSaves": 64}
+  ],
+  "projectedPrimaryActions": [
+    {"actionType": "INVESTIGATE", "turns": 11578, "percent": 27.21},
+    {"actionType": "INTERACT", "turns": 8030, "percent": 18.87},
+    {"actionType": "TRAVEL", "turns": 6427, "percent": 15.11},
+    {"actionType": "CULTIVATE", "turns": 5688, "percent": 13.37},
+    {"actionType": "WAIT", "turns": 2700, "percent": 6.35},
+    {"actionType": "USE_ABILITY", "turns": 2059, "percent": 4.84},
+    {"actionType": "COMBAT", "turns": 1972, "percent": 4.63},
+    {"actionType": "USE_ITEM", "turns": 1835, "percent": 4.31},
+    {"actionType": "OTHER", "turns": 1640, "percent": 3.85},
+    {"actionType": "TRADE", "turns": 618, "percent": 1.45}
+  ],
+  "sampledBehaviorFlags": [
+    {"flag": "COMPOSITE", "estimatedTurns": 3466, "estimatedPercent": 8.1},
+    {"flag": "RELATIONSHIP", "estimatedTurns": 2717, "estimatedPercent": 6.4},
+    {"flag": "LONG_DURATION", "estimatedTurns": 2610, "estimatedPercent": 6.1},
+    {"flag": "LEARN_ABILITY", "estimatedTurns": 1602, "estimatedPercent": 3.8},
+    {"flag": "BREAKTHROUGH", "estimatedTurns": 1100, "estimatedPercent": 2.6},
+    {"flag": "INVENTORY", "estimatedTurns": 1082, "estimatedPercent": 2.5},
+    {"flag": "DECLARED_OUTCOME", "estimatedTurns": 1030, "estimatedPercent": 2.4},
+    {"flag": "SYSTEM_QUERY", "estimatedTurns": 471, "estimatedPercent": 1.1},
+    {"flag": "WORLD_CHANGE", "estimatedTurns": 424, "estimatedPercent": 1.0},
+    {"flag": "OUT_OF_SCOPE", "estimatedTurns": 384, "estimatedPercent": 0.9},
+    {"flag": "CREATE_ABILITY", "estimatedTurns": 125, "estimatedPercent": 0.3}
+  ],
+  "testTargetPer1000": {
+    "INVESTIGATE": 272,
+    "INTERACT": 189,
+    "TRAVEL": 151,
+    "CULTIVATE": 134,
+    "WAIT": 63,
+    "USE_ABILITY": 48,
+    "COMBAT": 46,
+    "USE_ITEM": 43,
+    "OTHER": 39,
+    "TRADE": 15
+  },
+  "requiredCrossCuttingScenarios": [
+    "three race-specific realm ladders",
+    "long-duration time advancement",
+    "adjacent breakthrough only",
+    "stable named NPC and relationship history",
+    "learned and used abilities",
+    "inventory acquisition and consumption",
+    "priced wallet trade and ledger consistency",
+    "direct-edge travel inside Qingqi",
+    "combat against a same-location persisted NPC",
+    "declared outcome and unknown reference rejection without state mutation"
+  ]
+}

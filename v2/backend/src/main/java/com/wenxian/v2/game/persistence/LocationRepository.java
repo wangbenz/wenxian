@@ -33,16 +33,22 @@ public class LocationRepository {
                 .stream().findFirst().orElse(null);
     }
 
-    public List<KnownLocation> knownLocations(String saveId) {
+    public List<KnownLocation> knownLocations(String saveId, String currentLocationId) {
         return jdbc.query("""
                         select d.id,d.location_code,d.name,d.location_type,d.parent_location_id,
-                               s.known,s.accessible,s.local_state
+                               s.known,s.accessible,s.local_state,
+                               (select min(e.travel_minutes) from v2_location_edge e
+                                where e.active=true and (
+                                  (e.from_location_id=? and e.to_location_id=d.id) or
+                                  (e.bidirectional=true and e.to_location_id=? and e.from_location_id=d.id)
+                                )) direct_travel_minutes
                         from v2_save_location_state s
                         join v2_location_definition d on d.id=s.location_id
                         where s.save_id=? and s.known=true order by d.location_type,d.name
                         """, (row, index) -> new KnownLocation(row.getString("id"), row.getString("location_code"),
                         row.getString("name"), row.getString("location_type"), row.getString("parent_location_id"),
-                        row.getBoolean("known"), row.getBoolean("accessible"), row.getString("local_state")), saveId);
+                        row.getBoolean("known"), row.getBoolean("accessible"), row.getString("local_state"),
+                        row.getObject("direct_travel_minutes", Long.class)), currentLocationId, currentLocationId, saveId);
     }
 
     public record TravelEdge(String id, String fromLocationId, String toLocationId,
@@ -50,6 +56,6 @@ public class LocationRepository {
     }
 
     public record KnownLocation(String id, String code, String name, String type, String parentId,
-                                boolean known, boolean accessible, String localState) {
+                                boolean known, boolean accessible, String localState, Long directTravelMinutes) {
     }
 }

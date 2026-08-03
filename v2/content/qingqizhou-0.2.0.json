@@ -1,0 +1,69 @@
+{
+  "contentVersion": "qingqi-0.2.0",
+  "world": "玄墟界",
+  "region": "青岐州",
+  "races": ["HUMAN", "DEMON", "SPIRIT"],
+  "locationCodes": [
+    "XUANYU",
+    "EASTERN_LANDS",
+    "QINGQI",
+    "QINGMU_TOWN",
+    "QINGMU_EAST_GATE",
+    "ZHAOGU_MINE",
+    "HUICHUN_HALL",
+    "BRONZE_GATE",
+    "NORTHERN_POST_ROAD",
+    "QINGMU_MARKET",
+    "HERB_RIDGE",
+    "REED_FERRY",
+    "ABANDONED_KILN",
+    "BRONZE_OUTER_COURT"
+  ],
+  "currencyCodes": [
+    "WEN",
+    "SILVER_LIANG",
+    "GOLD_LIANG",
+    "SPIRIT_STONE_LOW",
+    "SPIRIT_STONE_MID",
+    "SPIRIT_STONE_HIGH"
+  ],
+  "itemCodes": [
+    "COARSE_RATION",
+    "COMMON_HEALING_HERB",
+    "IDENTITY_TOKEN",
+    "LAMP_OIL",
+    "HEMP_ROPE",
+    "HERB_DECOCTION",
+    "IRON_CHISEL",
+    "LOW_SPIRIT_SAND",
+    "WARD_PAPER",
+    "BEAST_HIDE"
+  ],
+  "abilityCodes": [
+    "BREATH_GUIDANCE",
+    "TRACE_READING",
+    "WIND_SCENT",
+    "STONE_ECHO",
+    "CLEAR_HEART",
+    "ENDURING_BREATH",
+    "NIGHT_INSTINCT",
+    "OBJECT_MEMORY",
+    "HERB_IDENTIFICATION",
+    "MINING_CRAFT",
+    "MARKET_HAGGLING",
+    "LIGHT_STEP",
+    "CONCEAL_AURA",
+    "FIELD_MENDING"
+  ],
+  "eventTemplateCodes": [
+    "QINGQI_MINE_DISTURBANCE",
+    "QINGQI_MEDICINE_SHORTAGE",
+    "QINGQI_CARAVAN_DELAY",
+    "BRONZE_GATE_RECRUITMENT"
+  ],
+  "releaseRules": {
+    "databaseMigration": "V2_0_0_002 through V2_0_0_009",
+    "playerDataIsolation": "Every runtime entity is scoped by save_id",
+    "supportedModels": ["deepseek-v4-flash", "deepseek-v4-pro"]
+  }
+}

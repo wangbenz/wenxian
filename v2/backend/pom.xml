@@ -20,6 +20,8 @@
   <properties>
     <java.version>21</java.version>
     <langchain4j.version>1.15.1</langchain4j.version>
+    <test.excluded-groups>real-model,long-run</test.excluded-groups>
+    <v2.real-model.required>false</v2.real-model.required>
   </properties>
 
   <dependencyManagement>
@@ -46,6 +48,10 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-crypto</artifactId>
     </dependency>
     <dependency>
       <groupId>org.flywaydb</groupId>
@@ -82,11 +88,53 @@
   </dependencies>
 
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <resource>
+        <directory>../content</directory>
+        <targetPath>content</targetPath>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <excludedGroups>${test.excluded-groups}</excludedGroups>
+          <systemPropertyVariables>
+            <v2.real-model.required>${v2.real-model.required}</v2.real-model.required>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>real-model</id>
+      <properties>
+        <test.excluded-groups>long-run</test.excluded-groups>
+        <v2.real-model.required>true</v2.real-model.required>
+      </properties>
+    </profile>
+    <profile>
+      <id>long-run</id>
+      <properties>
+        <test.excluded-groups>real-model</test.excluded-groups>
+      </properties>
+    </profile>
+    <profile>
+      <id>release-verification</id>
+      <properties>
+        <test.excluded-groups></test.excluded-groups>
+        <v2.real-model.required>true</v2.real-model.required>
+      </properties>
+    </profile>
+  </profiles>
 </project>

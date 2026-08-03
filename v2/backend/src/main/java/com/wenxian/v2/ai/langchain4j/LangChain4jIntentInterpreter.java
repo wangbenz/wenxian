@@ -20,8 +20,9 @@ public class LangChain4jIntentInterpreter implements IntentInterpreter {
             只把玩家输入转换为JSON。实体ID只能从候选列表复制；不存在或无法唯一确认时不要猜测，写入ambiguities。
             actionType仅可为WAIT、TRAVEL、INVESTIGATE、INTERACT、USE_ITEM、USE_ABILITY、CULTIVATE、TRADE、COMBAT、OTHER。
             intentMode仅可为ATTEMPT、EXECUTE、DECLARE_OUTCOME。玩家直接宣称突破、获胜、得到物品或强迫他人反应时，
-            declaresGuaranteedOutcome必须为true。durationMinutes只在文本明确表达时间时填写。
-            输出字段：actionType,intentMode,durationMinutes,targetLocationId,targetCharacterId,
+            declaresGuaranteedOutcome必须为true。明确以整数分钟、小时、日、月、年表达的时间，原样写入durationAmount，
+            durationUnit仅可为MINUTE、HOUR、DAY、MONTH、YEAR，并令durationMinutes为null；其他明确时长才使用durationMinutes。
+            输出字段：actionType,intentMode,durationMinutes,durationAmount,durationUnit,targetLocationId,targetCharacterId,
             referencedItemIds,referencedAbilityIds,targetRealmCode,declaresGuaranteedOutcome,ambiguities,summary。
             只输出JSON对象，不输出解释。
             """;
@@ -53,6 +54,8 @@ public class LangChain4jIntentInterpreter implements IntentInterpreter {
             String actionType,
             String intentMode,
             Long durationMinutes,
+            Long durationAmount,
+            String durationUnit,
             String targetLocationId,
             String targetCharacterId,
             List<String> referencedItemIds,
@@ -65,7 +68,8 @@ public class LangChain4jIntentInterpreter implements IntentInterpreter {
         ActionIntent toIntent() {
             return new ActionIntent(actionType, intentMode, durationMinutes, targetLocationId, targetCharacterId,
                     referencedItemIds, referencedAbilityIds, targetRealmCode,
-                    Boolean.TRUE.equals(declaresGuaranteedOutcome), ambiguities, summary);
+                    Boolean.TRUE.equals(declaresGuaranteedOutcome), ambiguities, summary,
+                    durationAmount, durationUnit);
         }
     }
 }

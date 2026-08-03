@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 
 @Service
 public class TurnStatusService {
@@ -15,8 +16,8 @@ public class TurnStatusService {
     }
 
     @Transactional
-    public void reject(String operationId, String code, String message) {
-        turns.reject(operationId, code, message, Instant.now());
+    public void reject(String operationId, String code, String message, List<String> suggestions) {
+        turns.reject(operationId, code, message, suggestions, Instant.now());
     }
 
     @Transactional

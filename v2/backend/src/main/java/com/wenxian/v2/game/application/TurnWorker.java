@@ -21,7 +21,7 @@ public class TurnWorker {
         try {
             resolution.resolve(operationId);
         } catch (V2ApiException business) {
-            statuses.reject(operationId, business.code(), business.getMessage());
+            statuses.reject(operationId, business.code(), business.getMessage(), business.suggestions());
         } catch (RuntimeException unexpected) {
             statuses.fail(operationId, UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         }

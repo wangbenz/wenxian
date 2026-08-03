@@ -18,6 +18,7 @@ public class ActionAdjudicator {
             "WAIT", "TRAVEL", "INVESTIGATE", "INTERACT", "USE_ITEM", "USE_ABILITY",
             "CULTIVATE", "TRADE", "COMBAT", "OTHER");
     private static final long MAX_WAIT_MINUTES = 100L * WorldCalendar.MINUTES_PER_YEAR;
+    private static final Set<String> OPEN_WORLD_DISCOVERY_TYPES = Set.of("INVESTIGATE", "INTERACT");
 
     private final LocationRepository locations;
 
@@ -26,7 +27,9 @@ public class ActionAdjudicator {
     }
 
     public ActionAdjudication adjudicate(IntentContext context, ActionIntent intent) {
-        if (!intent.ambiguities().isEmpty()) {
+        // Investigation and conversation may legitimately discover an incidental person or detail
+        // that has not been registered yet. Reference-bound actions remain strict below.
+        if (!intent.ambiguities().isEmpty() && !OPEN_WORLD_DISCOVERY_TYPES.contains(intent.actionType())) {
             return ActionAdjudication.clarify("这次行动还有无法唯一确认的对象或含义。",
                     "补充目标、地点或准备使用的事物");
         }
@@ -76,7 +79,8 @@ public class ActionAdjudicator {
     }
 
     private ActionAdjudication validateWait(ActionIntent intent) {
-        Long minutes = intent.durationMinutes();
+        Long minutes = WorldCalendar.durationMinutes(intent.durationAmount(), intent.durationUnit(),
+                intent.durationMinutes());
         if (minutes == null || minutes <= 0 || minutes > MAX_WAIT_MINUTES) {
             return ActionAdjudication.clarify("等待或闭关需要明确合理的持续时间。",
                     "例如休息一夜、等待三日或闭关一个月");

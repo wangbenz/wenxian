@@ -37,6 +37,16 @@ public final class RealmLadder {
                 .orElseThrow(() -> new IllegalArgumentException("境界不属于当前种族"));
     }
 
+    public static Realm next(Race race, String currentCode) {
+        List<Realm> realms = ladder(race);
+        int current = indexOf(realms, currentCode);
+        return current >= 0 && current + 1 < realms.size() ? realms.get(current + 1) : null;
+    }
+
+    public static int rank(Race race, String code) {
+        return indexOf(ladder(race), code);
+    }
+
     private static int indexOf(List<Realm> realms, String code) {
         for (int i = 0; i < realms.size(); i++) {
             if (realms.get(i).code().equals(code)) return i;
