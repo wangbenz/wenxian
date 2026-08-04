@@ -49,6 +49,14 @@ class AdminServiceUserFilterTest {
                 )
                 """);
         jdbc.execute("""
+                create table auth_registration (
+                    id varchar(64) primary key,
+                    user_id varchar(64) not null,
+                    ip_hash varchar(128) not null,
+                    created_at timestamp not null
+                )
+                """);
+        jdbc.execute("""
                 create table user_ai_credential (
                     user_id varchar(64) primary key,
                     masked_suffix varchar(16),
@@ -105,6 +113,24 @@ class AdminServiceUserFilterTest {
     }
 
     @Test
+    void usesFirstRegistrationEventWhenLoginHasMovedLegacyTimestamp() {
+        insertUser("user-returning", "returning@example.com", "2026-07-30", 10);
+        jdbc.update("""
+                insert into auth_registration(id, user_id, ip_hash, created_at)
+                values ('registration-returning', 'user-returning', 'test-ip', ?)
+                """, shanghaiTimestamp("2026-07-29", 9));
+
+        List<Map<String, Object>> wrongDay = service.users("", "", "", "", "2026-07-30", 0, 20);
+        assertEquals(0, wrongDay.getFirst().get("total"));
+
+        List<Map<String, Object>> trueDay = service.users("", "", "", "", "2026-07-29", 0, 20);
+        assertEquals(1, trueDay.getFirst().get("total"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) trueDay.get(1).get("rows");
+        assertEquals("2026-07-29T01:00:00Z", rows.getFirst().get("registeredAt"));
+    }
+
+    @Test
     void rejectsInvalidRegistrationDate() {
         assertThrows(ResponseStatusException.class,
                 () -> service.users("", "", "", "", "07-30-2026", 0, 20));
@@ -152,13 +178,17 @@ class AdminServiceUserFilterTest {
     }
 
     private void insertUser(String id, String email, String date, int hour) {
-        ZoneId shanghai = ZoneId.of("Asia/Shanghai");
-        Timestamp registeredAt = Timestamp.from(LocalDate.parse(date).atTime(hour, 0)
-                .atZone(shanghai).toInstant());
+        Timestamp registeredAt = shanghaiTimestamp(date, hour);
         jdbc.update("""
                 insert into app_user(id, email, status, registered_at, last_login_at)
                 values (?, ?, 'ACTIVE', ?, ?)
                 """, id, email, registeredAt, registeredAt);
+    }
+
+    private Timestamp shanghaiTimestamp(String date, int hour) {
+        ZoneId shanghai = ZoneId.of("Asia/Shanghai");
+        return Timestamp.from(LocalDate.parse(date).atTime(hour, 0)
+                .atZone(shanghai).toInstant());
     }
 
     private void insertCurrentTurn(String id, String saveId) {

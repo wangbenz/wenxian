@@ -5,7 +5,7 @@ create table if not exists app_user (
     password_set_at timestamp(6),
     registration_ip_hash varchar(128),
     status varchar(32) not null,
-    registered_at timestamp(6) not null,
+    registered_at timestamp(6) not null default current_timestamp(6),
     last_login_at timestamp(6),
     index idx_app_user_status_login (status, last_login_at)
 ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;

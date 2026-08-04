@@ -324,10 +324,17 @@ public class AdminService {
         Timestamp registrationsSince = Timestamp.from(today.minusDays(13)
                 .atStartOfDay(reportingZone).toInstant());
         List<Map<String, Object>> rawDailyRegistrations = jdbc.query("""
-                SELECT DATE(registered_at) registration_date, count(*) registration_count
-                FROM app_user
-                WHERE registered_at >= ?
-                GROUP BY DATE(registered_at)
+                SELECT DATE(COALESCE(registration.first_registered_at, u.registered_at)) registration_date,
+                       count(*) registration_count
+                FROM app_user u
+                LEFT JOIN (
+                    SELECT user_id, MIN(created_at) first_registered_at
+                    FROM auth_registration
+                    GROUP BY user_id
+                ) registration ON registration.user_id = u.id
+                WHERE u.status = 'ACTIVE'
+                  AND COALESCE(registration.first_registered_at, u.registered_at) >= ?
+                GROUP BY DATE(COALESCE(registration.first_registered_at, u.registered_at))
                 ORDER BY registration_date
                 """, (row, index) -> Map.<String, Object>of(
                 "date", row.getDate("registration_date").toLocalDate().toString(),
@@ -929,7 +936,10 @@ public class AdminService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "注册日期格式不正确");
             }
             ZoneId reportingZone = ZoneId.of("Asia/Shanghai");
-            where.append(" AND u.registered_at >= ? AND u.registered_at < ? ");
+            where.append("""
+                     AND COALESCE(registration.first_registered_at, u.registered_at) >= ?
+                     AND COALESCE(registration.first_registered_at, u.registered_at) < ?
+                    """);
             args.add(Timestamp.from(registrationDay.atStartOfDay(reportingZone).toInstant()));
             args.add(Timestamp.from(registrationDay.plusDays(1).atStartOfDay(reportingZone).toInstant()));
         }
@@ -947,6 +957,11 @@ public class AdminService {
                 ) active_saves ON active_saves.user_id = u.id
                 LEFT JOIN user_ai_credential cred ON cred.user_id = u.id
                 LEFT JOIN (
+                    SELECT user_id, MIN(created_at) first_registered_at
+                    FROM auth_registration
+                    GROUP BY user_id
+                ) registration ON registration.user_id = u.id
+                LEFT JOIN (
                     SELECT user_id, count(*) archive_count
                     FROM game_life_archive GROUP BY user_id
                 ) arc ON arc.user_id = u.id
@@ -954,13 +969,15 @@ public class AdminService {
         int total = jdbc.queryForObject("SELECT count(*) " + from + where, Integer.class, args.toArray());
 
         String sql = """
-                SELECT u.id, u.email, u.registered_at, u.last_login_at,
+                SELECT u.id, u.email,
+                       COALESCE(registration.first_registered_at, u.registered_at) AS registered_at,
+                       u.last_login_at,
                        gs.id AS save_id, gs.state_json, gs.updated_at AS save_updated,
                        coalesce(arc.archive_count, 0) AS archive_count,
                        coalesce(active_saves.active_save_count, 0) AS active_save_count,
                        cred.masked_suffix credential_suffix, cred.status credential_status,
                        cred.last_verified_at credential_verified_at
-                """ + from + where + " ORDER BY u.last_login_at DESC, u.registered_at DESC LIMIT ? OFFSET ?";
+                """ + from + where + " ORDER BY u.last_login_at DESC, registered_at DESC LIMIT ? OFFSET ?";
         List<Object> pageArgs = new ArrayList<>(args);
         pageArgs.add(limit);
         pageArgs.add(offset);
@@ -1054,11 +1071,18 @@ public class AdminService {
 
     public Map<String, Object> userDetail(String userId) {
         var users = jdbc.query("""
-                SELECT u.id, u.email, u.status, u.registered_at, u.last_login_at,
+                SELECT u.id, u.email, u.status,
+                       COALESCE(registration.first_registered_at, u.registered_at) AS registered_at,
+                       u.last_login_at,
                        u.password_hash, u.password_set_at, u.registration_ip_hash,
                        c.masked_suffix, c.status credential_status, c.last_verified_at
                 FROM app_user u
                 LEFT JOIN user_ai_credential c ON c.user_id=u.id
+                LEFT JOIN (
+                    SELECT user_id, MIN(created_at) first_registered_at
+                    FROM auth_registration
+                    GROUP BY user_id
+                ) registration ON registration.user_id = u.id
                 WHERE u.id = ?
                 """, (row, idx) -> {
             Map<String, Object> u = new LinkedHashMap<>();

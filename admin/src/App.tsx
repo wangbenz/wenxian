@@ -98,7 +98,7 @@ function Dashboard({ onSelectRegistrationDate }: { onSelectRegistrationDate: (da
   const todayPlatformTokens = query.data ? query.data.todayPlatformPromptTokens + query.data.todayPlatformCompletionTokens : 0;
   const todayCustomTokens = query.data ? query.data.todayCustomPromptTokens + query.data.todayCustomCompletionTokens : 0;
   const core = query.data ? [
-    ["总用户", num(query.data.totalUsers), `今日 +${num(query.data.todayRegistrations)} · 昨日 +${num(query.data.yesterdayRegistrations)}`],
+    ["总用户", num(query.data.totalUsers), `今日注册 ${num(query.data.todayRegistrations)} · 昨日注册 ${num(query.data.yesterdayRegistrations)}`],
     ["平台 Token 总量", num(query.data.totalPlatformTokens), `今日 ${num(todayPlatformTokens)}`],
     ["玩家 Token 总量", num(query.data.totalCustomTokens), `今日 ${num(todayCustomTokens)} · 玩家自行承担`],
     ["当前在线", num(query.data.onlinePlayers), "15分钟内有活动"],
