@@ -25,13 +25,14 @@ public class V014PromptAssembler {
         facts.put("location", state.currentLocation());
         facts.put("condition", state.condition());
         facts.put("narrativePerspective", "SECOND_PERSON");
-        facts.put("activeItems", tail(state.inventory().stream().filter(item -> Boolean.TRUE.equals(item.inPossession())).toList(), 30));
-        facts.put("knownAbilities", tail(state.abilities().stream().filter(ability -> !"LOST".equals(ability.status())).toList(), 30));
-        facts.put("knownCharacters", tail(state.characters().stream().filter(character -> Boolean.TRUE.equals(character.tracked()) && !"TRANSIENT".equals(character.tier())).toList(), 24));
-        facts.put("keyMemories", tail(state.memories().stream().filter(memory -> !"MINOR".equals(memory.importance())).toList(), 12));
-        facts.put("rollingSummary", trim(rollingSummary, 2400));
+        facts.put("activeItems", tail(state.inventory().stream().filter(item -> Boolean.TRUE.equals(item.inPossession())).toList(), 20));
+        facts.put("knownAbilities", tail(state.abilities().stream().filter(ability -> !"LOST".equals(ability.status())).toList(), 20));
+        facts.put("knownCharacters", tail(state.characters().stream().filter(character -> Boolean.TRUE.equals(character.tracked()) && !"TRANSIENT".equals(character.tier())).toList(), 16));
+        facts.put("keyMemories", tail(state.memories().stream().filter(memory -> !"MINOR".equals(memory.importance())).toList(), 8));
+        facts.put("rollingSummary", trim(rollingSummary, 1600));
         facts.put("recentTurns", recent.stream().map(turn -> Map.of(
-                "turn", turn.turnNumber(), "action", turn.action(), "narrative", trim(turn.narrative(), 1100))).toList());
+                "turn", turn.turnNumber(), "action", trim(turn.action(), 240),
+                "narrative", trim(turn.narrative(), 750))).toList());
 
         String system = """
                 你是《问仙录》V0.14 的故事导演。它是自由行动的 AI 修仙叙事游戏，不是数值 RPG。
@@ -50,7 +51,8 @@ public class V014PromptAssembler {
                 每轮正文以沉浸和完整事件为目标，通常 6 至 10 段；不要为了凑字数重复描写。
                 最后给出 3 至 5 个方向明显不同的行动建议，玩家仍可自由输入。
                 JSON 要紧凑：实体 description 与 memory summary 各用一至两句；rollingSummary 只保留后续仍有用的长期事实，不超过 500 字。
-                只返回一个 JSON 对象，不要 Markdown。字段：
+                只返回一个 JSON 对象，不要 Markdown，不要返回 currentWorldTime 等未列出的字段。
+                narrative 必须是单个 JSON 字符串，多个段落在字符串内用转义换行表示，不得把段落写成无字段名的 JSON 内容。字段：
                 title, narrative, elapsedMinutes, location, condition, realm, lifeGoal,
                 choices:[{title,description}],
                 items:[{operation,name,type,description,status,source,quantity}],

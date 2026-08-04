@@ -123,7 +123,7 @@ function v014SnapshotView(source: V014SaveResponse): ApiSnapshot {
     sceneTitle: state.sceneTitle, currentLocation: state.currentLocation,
     worldYear: Math.floor(state.worldTimeMinutes / minutesPerYear) + 1,
     day: Math.floor(inYear / 1440) + 1, minute: inYear % 1440, turn: state.turnNumber,
-    narrative: state.narrative.split(/\n+/).filter(Boolean), signals: [],
+    narrative: safeNarrativeParagraphs(state.narrative), signals: [],
     choices: state.choices.map((choice) => ({ id: choice.id, label: choice.title, hint: choice.description })),
     world: { id: state.world.code, title: state.world.name, era: "此生命卷", summary: state.world.premise,
       cultivationLaw: state.world.cultivationStyle, dangerRule: "人物、时间与得失会沿同一份命卷继续变化。",
@@ -148,6 +148,17 @@ function v014SnapshotView(source: V014SaveResponse): ApiSnapshot {
   };
   return { state: mapped, revision: source.revision, updatedAt: new Date().toISOString(), choices: mapped.choices,
     agent: { mode: source.generationMode === "PERSONAL" ? "自己的推演" : "命卷推演", authoritative: true, world: state.world.name }, actionResolution: null };
+}
+
+function safeNarrativeParagraphs(value: string): string[] {
+  const text = (value || "").trim();
+  const looksLikeRawPayload = /^[{[]/.test(text)
+    && /"(?:narrative|choices|elapsedMinutes|rollingSummary)"\s*:/.test(text);
+  if (looksLikeRawPayload) {
+    return ["这一页命卷的文字排版出现异常，原始报文已被隐藏。你可以从下方选择行动继续历练。"];
+  }
+  const paragraphs = text.split(/\n+/).map((paragraph) => paragraph.trim()).filter(Boolean);
+  return paragraphs.length > 0 ? paragraphs : ["这一页命卷只留下了模糊痕迹。"];
 }
 
 function problemFrom(error: unknown): UiProblem {
