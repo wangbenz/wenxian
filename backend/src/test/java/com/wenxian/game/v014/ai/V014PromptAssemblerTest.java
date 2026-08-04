@@ -31,6 +31,7 @@ class V014PromptAssemblerTest {
         assertTrue(assembled.system().contains("人物对白、书信与主角说出的台词可以正常使用“我”"));
         assertTrue(assembled.system().contains("800 至 1200 个汉字"));
         assertTrue(assembled.system().contains("8 至 12 个自然段"));
+        assertTrue(assembled.system().contains("调查、交谈、战斗、修炼或赶路"));
         assertTrue(assembled.system().contains("不要因正文略短而重写"));
         assertFalse(prompt.contains("旧石"));
         assertFalse(prompt.contains("旧识"));
