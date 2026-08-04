@@ -29,6 +29,9 @@ class V014PromptAssemblerTest {
         assertTrue(prompt.contains("SECOND_PERSON"));
         assertTrue(assembled.system().contains("始终以第二人称“你”指代主角"));
         assertTrue(assembled.system().contains("人物对白、书信与主角说出的台词可以正常使用“我”"));
+        assertTrue(assembled.system().contains("800 至 1200 个汉字"));
+        assertTrue(assembled.system().contains("8 至 12 个自然段"));
+        assertTrue(assembled.system().contains("不要因正文略短而重写"));
         assertFalse(prompt.contains("旧石"));
         assertFalse(prompt.contains("旧识"));
         assertFalse(prompt.contains("vitality"));
