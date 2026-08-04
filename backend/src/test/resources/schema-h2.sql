@@ -220,6 +220,29 @@ create table ai_model_config (
     updated_at timestamp not null
 );
 
+create table ai_provider_config (
+    provider_code varchar(32) primary key,
+    display_name varchar(80) not null,
+    base_url varchar(255) not null,
+    adapter_type varchar(32) not null default 'OPENAI_COMPATIBLE',
+    platform_secret_ciphertext clob,
+    enabled boolean not null default true,
+    user_key_enabled boolean not null default true,
+    updated_at timestamp not null
+);
+
+create table ai_provider_model (
+    provider_code varchar(32) not null,
+    model_code varchar(80) not null,
+    display_name varchar(80) not null,
+    api_model_name varchar(120) not null,
+    platform_enabled boolean not null default true,
+    user_selectable boolean not null default true,
+    updated_at timestamp not null,
+    primary key (provider_code, model_code),
+    constraint fk_ai_provider_model_provider foreign key (provider_code) references ai_provider_config(provider_code) on delete cascade
+);
+
 create table gameplay_config (
     config_key varchar(64) primary key,
     config_value varchar(255) not null,
@@ -248,6 +271,21 @@ create table user_ai_credential (
     constraint fk_user_ai_credential_user foreign key (user_id) references app_user(id) on delete cascade
 );
 
+create table user_ai_provider_credential (
+    user_id varchar(64) not null,
+    provider_code varchar(32) not null,
+    api_key_ciphertext clob not null,
+    masked_suffix varchar(8) not null,
+    status varchar(24) not null default 'ACTIVE',
+    last_verified_at timestamp,
+    last_error_code varchar(48),
+    created_at timestamp not null,
+    updated_at timestamp not null,
+    primary key (user_id, provider_code),
+    constraint fk_user_provider_credential_user foreign key (user_id) references app_user(id) on delete cascade,
+    constraint fk_user_provider_credential_provider foreign key (provider_code) references ai_provider_config(provider_code) on delete cascade
+);
+
 create table user_daily_quota (
     user_id varchar(64) not null,
     usage_date date not null,
@@ -255,4 +293,71 @@ create table user_daily_quota (
     updated_at timestamp not null,
     primary key (user_id, usage_date),
     constraint fk_daily_quota_user foreign key (user_id) references app_user(id) on delete cascade
+);
+
+create table v014_game_save (
+    id varchar(80) primary key,
+    user_id varchar(64) not null,
+    slot_no smallint not null default 1,
+    world_code varchar(40) not null,
+    state_schema_version integer not null default 14,
+    state_json clob not null,
+    revision bigint not null default 1,
+    status varchar(24) not null default 'ACTIVE',
+    created_at timestamp not null,
+    updated_at timestamp not null,
+    unique(user_id, slot_no),
+    constraint fk_v014_save_user foreign key (user_id) references app_user(id) on delete cascade
+);
+
+create table v014_game_turn (
+    id varchar(80) primary key,
+    save_id varchar(80) not null,
+    request_id varchar(80) not null,
+    turn_number integer not null,
+    player_action clob not null,
+    narrative_text clob not null,
+    choices_json clob not null,
+    memory_patch_json clob not null,
+    world_time_before bigint not null,
+    world_time_after bigint not null,
+    provider varchar(32) not null,
+    model varchar(120) not null,
+    credential_source varchar(20) not null,
+    prompt_tokens integer not null default 0,
+    completion_tokens integer not null default 0,
+    latency_ms bigint not null default 0,
+    created_at timestamp not null,
+    unique(save_id, turn_number),
+    unique(save_id, request_id),
+    constraint fk_v014_turn_save foreign key (save_id) references v014_game_save(id) on delete cascade
+);
+
+create table v014_conversation (
+    save_id varchar(80) primary key,
+    rolling_summary clob not null,
+    summarized_through_turn integer not null default 0,
+    updated_at timestamp not null,
+    constraint fk_v014_conversation_save foreign key (save_id) references v014_game_save(id) on delete cascade
+);
+
+create table v014_state_correction (
+    id varchar(80) primary key,
+    save_id varchar(80) not null,
+    user_id varchar(64) not null,
+    instruction_text clob not null,
+    before_json clob not null,
+    after_json clob not null,
+    created_at timestamp not null,
+    constraint fk_v014_correction_save foreign key (save_id) references v014_game_save(id) on delete cascade,
+    constraint fk_v014_correction_user foreign key (user_id) references app_user(id) on delete cascade
+);
+
+create table v014_user_model_preference (
+    user_id varchar(64) primary key,
+    provider_code varchar(32) not null default 'DEEPSEEK',
+    model_code varchar(80) not null default 'deepseek-v4-flash',
+    credential_source varchar(20) not null default 'PUBLIC',
+    updated_at timestamp not null,
+    constraint fk_v014_model_preference_user foreign key (user_id) references app_user(id) on delete cascade
 );

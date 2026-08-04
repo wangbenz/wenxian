@@ -224,6 +224,7 @@ export type BootstrapResponse = {
   }>;
   difficulties: Array<{ code: "NORMAL" | "HARD"; name: string; description: string }>;
   realmPath: string[];
+  worldOptions?: Array<{ code: string; name: string; premise: string; cultivationStyle: string; openingRegion: string; custom: boolean; available?: boolean; availabilityNote?: string }>;
 };
 
 export type CharacterDraft = {
@@ -234,6 +235,8 @@ export type CharacterDraft = {
   difficulty: "NORMAL" | "HARD";
   originPremise: string;
   preference: string;
+  worldCode?: string;
+  customWorld?: string;
 };
 
 export type ReleaseNote = {
@@ -271,6 +274,77 @@ export type SaveSummary = {
 };
 
 export type SaveList = { maxActiveSaves: number; saves: SaveSummary[] };
+
+export type V014Choice = { id: string; title: string; description: string };
+export type V014World = {
+  code: string; name: string; source: string; premise: string;
+  cultivationStyle: string; openingRegion: string;
+};
+export type V014State = {
+  schemaVersion: number;
+  saveId: string;
+  turnNumber: number;
+  status: string;
+  world: V014World;
+  protagonist: {
+    name: string; race: string; gender: string; origin: string;
+    realm: string; lifeGoal: string; storyTone: string;
+  };
+  worldTimeMinutes: number;
+  currentLocation: string;
+  condition: string;
+  sceneTitle: string;
+  narrative: string;
+  choices: V014Choice[];
+  inventory: Array<{ id: string; name: string; type: string; description: string; status: string; source: string; quantity: number; inPossession?: boolean }>;
+  abilities: Array<{ id: string; name: string; type: string; description: string; status: string; source: string }>;
+  characters: Array<{ id: string; name: string; tier: string; identity: string; relationship: string; status: string; lastKnownLocation: string; tracked?: boolean }>;
+  memories: Array<{ id: string; title: string; summary: string; worldTimeMinutes: number; importance: string }>;
+};
+export type V014SaveResponse = {
+  state: V014State;
+  revision: number;
+  generationMode: "PLATFORM" | "PERSONAL";
+  personalProvider: string | null;
+  personalModel: string | null;
+};
+export type V014SaveSummary = {
+  id: string; slotNo: number; worldName: string; playerName: string; race: string;
+  realm: string; turnNumber: number; status: string; updatedAt: string;
+};
+export type V014Bootstrap = {
+  version: string;
+  maxActiveSaves: number;
+  worlds: Array<{ code: string; name: string; premise: string; cultivationStyle: string; openingRegion: string; custom: boolean; available: boolean; availabilityNote: string }>;
+  races: string[];
+  origins: string[];
+};
+export type V014GenerationSettings = {
+  mode: "PLATFORM" | "PERSONAL";
+  platform: { turnLimit: number; usedTurns: number; remainingTurns: number; available: boolean };
+  personalProviders: Array<{
+    code: string;
+    name: string;
+    credentialConfigured: boolean;
+    credentialStatus: string | null;
+    maskedSuffix: string | null;
+    lastVerifiedAt: string | null;
+    models: Array<{ code: string; name: string }>;
+  }>;
+  selectedPersonalProvider: string | null;
+  selectedPersonalModel: string | null;
+};
+export type V014CreateSave = {
+  worldCode: string; customWorld?: string; playerName: string; race: string; gender: string;
+  origin: string; opening?: string; storyTone?: string;
+};
+export type V014CharacterRoute = {
+  id: string; title: string; origin: string; opening: string; preference: string;
+};
+export type V014CharacterRouteRequest = {
+  worldCode: string; customWorld?: string; playerName: string; race: string; gender: string;
+  roleSeed?: string; preferenceSeed?: string;
+};
 
 export class ApiError extends Error {
   status: number;
@@ -434,4 +508,35 @@ export const gameApi = {
   abandonSave: (saveId: string, playerName: string) => request<void>(`/api/v1/saves/${encodeURIComponent(saveId)}/abandon`, {
     method: "POST", body: JSON.stringify({ playerName }),
   }),
+  v014Bootstrap: () => request<V014Bootstrap>("/api/v1/v014/bootstrap"),
+  v014CharacterRoutes: (draft: V014CharacterRouteRequest) => request<{ routes: V014CharacterRoute[] }>("/api/v1/v014/character-routes", {
+    method: "POST", body: JSON.stringify(draft),
+  }),
+  v014Saves: () => request<V014SaveSummary[]>("/api/v1/v014/saves"),
+  v014Save: (saveId: string) => request<V014SaveResponse>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}`),
+  v014CreateSave: (draft: V014CreateSave) => request<V014SaveResponse>("/api/v1/v014/saves", {
+    method: "POST", body: JSON.stringify(draft),
+  }),
+  v014Turn: (saveId: string, action: string) => request<V014SaveResponse>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}/turns`, {
+    method: "POST",
+    body: JSON.stringify({ action, requestId: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `turn-${Date.now()}` }),
+  }),
+  v014Correct: (saveId: string, instruction: string) => request<V014SaveResponse>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}/corrections`, {
+    method: "POST", body: JSON.stringify({ instruction }),
+  }),
+  v014RemoveItem: (saveId: string, itemId: string, revision: number) => request<V014SaveResponse>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}/items/${encodeURIComponent(itemId)}?revision=${revision}`, {
+    method: "DELETE",
+  }),
+  v014UntrackCharacter: (saveId: string, characterId: string, revision: number) => request<V014SaveResponse>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}/characters/${encodeURIComponent(characterId)}?revision=${revision}`, {
+    method: "DELETE",
+  }),
+  v014Archive: (saveId: string) => request<void>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}`, { method: "DELETE" }),
+  v014GenerationSettings: () => request<V014GenerationSettings>("/api/v1/v014/generation-settings"),
+  v014SaveGenerationSettings: (settings: { mode: "PLATFORM" | "PERSONAL"; provider?: string; model?: string }) => request<V014GenerationSettings>("/api/v1/v014/generation-settings", {
+    method: "PUT", body: JSON.stringify(settings),
+  }),
+  v014SaveProviderCredential: (provider: string, model: string, apiKey: string) => request<V014GenerationSettings>(`/api/v1/v014/generation-settings/providers/${encodeURIComponent(provider)}/credential`, {
+    method: "PUT", body: JSON.stringify({ model, apiKey }),
+  }),
+  v014DeleteProviderCredential: (provider: string) => request<V014GenerationSettings>(`/api/v1/v014/generation-settings/providers/${encodeURIComponent(provider)}/credential`, { method: "DELETE" }),
 };

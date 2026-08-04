@@ -8,17 +8,19 @@
 - On wider screens, keep the paper background full-viewport and constrain the readable game content to a centered column.
 - Selected visual direction: `墨卷纪事` — warm xuan-paper, restrained ink wash, celadon accents, cinnabar risk states, and literary Chinese typography.
 - The core loop must support both quick choices and free-text actions.
-- A single world timeline is authoritative. Every named character has an independent record and evolves against the same timeline.
-- Keep product documentation compact: one game-design document and one Agent/data architecture document.
+- V0.14 is a multi-world, light-state, strong-memory narrative game. Each save has one authoritative timeline; official presets and player-authored worlds coexist.
+- Agent-generated items, abilities, and important characters are allowed. Java protects identity, lifecycle, time, persistence, and security boundaries instead of imposing an incomplete combat/economy simulation.
+- Keep product documentation compact: `docs/product-direction.md` records active direction and abandoned proposals, `docs/game-design.md` defines gameplay, and `docs/architecture.md` defines Agent/data boundaries.
 - Keep release history in `docs/version-history.md`. Every release-oriented commit must update the matching version entry for H5, admin, and backend/data changes; do not hardcode the displayed version in either frontend.
 
 ## Editing Boundary
 
-- Build game UI in `frontend/src/Prototype.tsx` and `frontend/src/prototype.css`.
+- The V0.2 gameplay/architecture proposal is abandoned and must not be revived as an implementation plan. The default V0.14 UI only reuses its proven H5 visual shell in `frontend/src/Prototype.tsx`; this visual reuse does not carry over V0.2 combat, economy, profession, map, event, or content-production rules. V0.14 state is mapped through a thin API/view adapter, while `?edition=v013` keeps the old backend compatibility path. Do not create a second look-alike V0.14 shell. Shared styling remains in `frontend/src/prototype.css`.
 - `frontend/src/App.tsx` is the deliberately minimal H5 entry and should render `Prototype` directly.
 - Treat `frontend/src/main.tsx`, `frontend/src/styles.css`, `frontend/vite.config.ts`, `frontend/worker/index.js`, and `frontend/scripts/prepare-sites-build.mjs` as runtime files. Edit them only when the requested runtime or deployment behavior requires it.
 - The old `frontend/src/mobile/` package and device assets remain only as unused template material; do not reconnect them to the app.
-- The authoritative game rules live in `backend/src/main/java/com/wenxian/game/`. Do not add a second game engine to the frontend.
+- V0.14 gameplay lives in `backend/src/main/java/com/wenxian/game/v014/` and its isolated `v014_*` tables. Shared auth, quota, release, access-control, and encrypted credential services remain outside that package. Do not write V0.14 gameplay into V0.13 tables.
+- `V014ModelGateway` is the model boundary. LangChain4j may implement transport/adapters, but it must not become the source of truth or bypass reducers/transactions.
 - If an intentional runtime change modifies a locked file, run `npm run update:runtime-lock`, then `npm run check:runtime`.
 
 ## Interaction Rules

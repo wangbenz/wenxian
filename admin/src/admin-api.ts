@@ -37,6 +37,15 @@ export type DashboardData = {
   recentTurns: Array<{ playerName: string; realm: string; turn: number; action: string; tokens: number; latency: number; model: string; at: string }>;
 };
 
+export type V014Overview = {
+  totalSaves: number; activeSaves: number; archivedSaves: number; players: number;
+  totalTurns: number; promptTokens: number; completionTokens: number; avgLatency: number;
+  personalCredentialUsers: number; invalidCredentialUsers: number; manualCorrections: number;
+  legacyCredentialMigrationGaps: number;
+  modelUsage: Array<{ provider: string; model: string; source: "PUBLIC" | "USER"; requests: number; promptTokens: number; completionTokens: number; avgLatency: number }>;
+  recentTurns: Array<{ saveId: string; userId: string; turn: number; action: string; model: string; source: "PUBLIC" | "USER"; tokens: number; latency: number; at: string }>;
+};
+
 export type InviteCodeItem = {
   id: string; codeDisplay: string | null; plaintextAvailable: boolean;
   status: "ACTIVE" | "EXHAUSTED"; maxUses: number; usedCount: number;
@@ -85,6 +94,13 @@ export type ModelConfig = {
   keyState: "CONFIGURED" | "MISSING" | "DECRYPT_ERROR";
   updatedAt: string; lastRequestStatus: string; lastUsedAt: string;
 };
+export type GenerationProvider = {
+  providerCode: string; displayName: string; baseUrl: string; adapterType: string;
+  enabled: boolean; userKeyEnabled: boolean; keyConfigured: boolean; keySuffix: string;
+  keyState: "CONFIGURED" | "MISSING" | "DECRYPT_ERROR"; updatedAt: string;
+  models: Array<{ modelCode: string; displayName: string; apiModelName: string;
+    platformEnabled: boolean; userSelectable: boolean; activePlatform: boolean; updatedAt: string }>;
+};
 export type GameplayConfig = { accountPublicTurnLimit: number; limitMessage: string; customApiEnabled: boolean; customApiUsers: number; invalidCredentialUsers: number; todayPublicInvocations: number; todayCustomTurns: number; maxActiveSaves: number; activeSaveCount: number; usersWithMultipleSaves: number };
 export type RegistrationConfig = { maxUsers: number; currentUsers: number; remainingSlots: number; limitMessage: string; contactText: string };
 export type AccessControl = {
@@ -129,6 +145,7 @@ export const adminApi = {
   updateAdminAccountStatus: (adminId: string, active: boolean) => request<{ ok: boolean }>(`/admin-accounts/${encodeURIComponent(adminId)}/status`, { method: "POST", body: JSON.stringify({ active }) }),
   resetAdminAccountPassword: (adminId: string) => request<{ temporaryPassword: string }>(`/admin-accounts/${encodeURIComponent(adminId)}/temporary-password`, { method: "POST" }),
   dashboard: () => request<DashboardData>("/dashboard"),
+  v014Overview: () => request<V014Overview>("/v014/overview"),
   inviteCodes: (status = "") => request<InviteCodeItem[]>(`/invite-codes?status=${encodeURIComponent(status)}`),
   generateInviteCodes: (count: number, maxUses: number) => request<{ codes: string[]; count: number }>("/invite-codes", { method: "POST", body: JSON.stringify({ count, maxUses }) }),
   users: (search = "", characterState = "", difficulty = "", realm = "", registeredDate = "", page = 0, size = 20) => request<UserListResult>(`/users?search=${encodeURIComponent(search)}&characterState=${characterState}&difficulty=${difficulty}&realm=${encodeURIComponent(realm)}&registeredDate=${encodeURIComponent(registeredDate)}&page=${page}&size=${size}`),
@@ -146,6 +163,9 @@ export const adminApi = {
   clearLoginAnnouncement: () => request<{ ok: boolean; updated: number; message: string }>("/release-notes/login-announcement", { method: "DELETE" }),
   modelConfigs: () => request<ModelConfig[]>("/model-configs"),
   updateModelConfig: (modelCode: string, active: boolean, apiKey = "") => request<{ ok: boolean }>(`/model-configs/${encodeURIComponent(modelCode)}`, { method: "POST", body: JSON.stringify({ active, apiKey }) }),
+  generationProviders: () => request<GenerationProvider[]>("/generation-providers"),
+  updateGenerationProvider: (providerCode: string, payload: { displayName: string; baseUrl: string; enabled: boolean; userKeyEnabled: boolean; apiKey?: string }) => request<{ ok: boolean }>(`/generation-providers/${encodeURIComponent(providerCode)}`, { method: "POST", body: JSON.stringify(payload) }),
+  updateGenerationModel: (providerCode: string, modelCode: string, payload: { displayName: string; apiModelName: string; platformEnabled: boolean; userSelectable: boolean; activePlatform: boolean }) => request<{ ok: boolean }>(`/generation-providers/${encodeURIComponent(providerCode)}/models/${encodeURIComponent(modelCode)}`, { method: "POST", body: JSON.stringify(payload) }),
   gameplayConfig: () => request<GameplayConfig>("/gameplay-config"),
   updateGameplayConfig: (accountPublicTurnLimit: number, customApiEnabled: boolean, limitMessage: string, maxActiveSaves: number) => request<GameplayConfig>("/gameplay-config", { method: "POST", body: JSON.stringify({ accountPublicTurnLimit, customApiEnabled, limitMessage, maxActiveSaves }) }),
   registrationConfig: () => request<RegistrationConfig>("/registration-config"),

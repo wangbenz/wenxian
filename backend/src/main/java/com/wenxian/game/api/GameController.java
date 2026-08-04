@@ -29,6 +29,7 @@ import com.wenxian.game.service.ReleaseNoteService;
 import com.wenxian.game.service.PlayerAiService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -144,6 +145,7 @@ public class GameController {
     public GameResponse createSave(
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @Valid @RequestBody CreateSaveRequest request) {
+        requireLegacyWritable();
         return gameService.create(user(token), request);
     }
 
@@ -170,6 +172,7 @@ public class GameController {
     public void deleteSave(
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId) {
+        requireLegacyWritable();
         gameService.delete(user(token), saveId);
     }
 
@@ -178,6 +181,7 @@ public class GameController {
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
             @Valid @RequestBody CreateSaveRequest request) {
+        requireLegacyWritable();
         return gameService.restart(user(token), saveId, request);
     }
 
@@ -186,6 +190,7 @@ public class GameController {
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
             @Valid @RequestBody AbandonSaveRequest request) {
+        requireLegacyWritable();
         gameService.abandon(user(token), saveId, request.playerName());
     }
 
@@ -194,6 +199,7 @@ public class GameController {
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
             @Valid @RequestBody SelectProtagonistRequest request) {
+        requireLegacyWritable();
         return gameService.start(user(token), saveId, request.candidateId());
     }
 
@@ -201,6 +207,7 @@ public class GameController {
     public GameResponse rerollTalents(
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId) {
+        requireLegacyWritable();
         return gameService.rerollTalents(user(token), saveId);
     }
 
@@ -209,6 +216,7 @@ public class GameController {
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
             @Valid @RequestBody SelectTalentRequest request) {
+        requireLegacyWritable();
         return gameService.selectTalent(user(token), saveId, request.talentId());
     }
 
@@ -216,6 +224,7 @@ public class GameController {
     public GameResponse skipTalent(
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId) {
+        requireLegacyWritable();
         return gameService.skipTalent(user(token), saveId);
     }
 
@@ -224,6 +233,7 @@ public class GameController {
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
             @Valid @RequestBody TurnRequest request) {
+        requireLegacyWritable();
         return gameService.act(user(token), saveId, request);
     }
 
@@ -292,5 +302,13 @@ public class GameController {
 
     private UserIdentity user(String token) {
         return authService.requireUser(token);
+    }
+
+    private void requireLegacyWritable() {
+        if (gameVersionService.legacyWritesAllowed()) return;
+        throw GameApiException.of(HttpStatus.CONFLICT, "LEGACY_SAVE_ARCHIVED", "BUSINESS",
+                "旧版命卷已经封存",
+                "V0.14 上线后，旧版角色只保留为可查阅档案，不再继续生成剧情、重开或修改。",
+                List.of("返回新版开启或继续 V0.14 命卷", "旧版角色、纪事与物品仍可查阅"));
     }
 }

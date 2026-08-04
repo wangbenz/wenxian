@@ -89,6 +89,14 @@ test("keeps implementation details out of player-facing copy", async () => {
   }
 });
 
+test("keeps the platform generation provider and model private", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+
+  assert.equal(prototype.includes("平台推演由游戏统一维护，不展示具体供应商与模型"), true);
+  assert.equal(prototype.includes("只有使用自己的密钥时，才需要在这里选择服务与模型"), true);
+  assert.equal(prototype.includes("玩家可修改平台当前模型"), false);
+});
+
 test("keeps adjudication numbers out of the narrative character UI", async () => {
   const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
   const forbiddenFragments = [
@@ -113,6 +121,25 @@ test("uses the server quota instead of hardcoding twenty turns", async () => {
   assert.equal(prototype.includes("PUBLIC_TURN_LIMIT_REACHED"), true);
 });
 
+test("uses the server-managed active save limit", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+  const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
+
+  assert.equal(api.includes("maxActiveSaves: number"), true);
+  assert.equal(prototype.includes("source.maxActiveSaves"), true);
+  assert.equal(prototype.includes("const list = { maxActiveSaves: 2"), false);
+});
+
+test("keeps V0.14 record cleanup soft and outside the turn composer", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+  const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
+
+  assert.equal(prototype.includes("整理记录"), true);
+  assert.equal(prototype.includes("不调用推演 · 不消耗回合 · 不推进时间"), true);
+  assert.equal(api.includes("v014RemoveItem"), true);
+  assert.equal(api.includes("v014UntrackCharacter"), true);
+});
+
 test("keeps adjudication rewrites separate from normal story choices", async () => {
   const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
 
@@ -129,6 +156,18 @@ test("separates authoritative origin from soft story preferences", async () => {
   assert.equal(prototype.includes("命格偏好"), true);
   assert.equal(prototype.includes("本源 · {option.originPremise}"), true);
   assert.equal(api.includes("originPremise: string"), true);
+});
+
+test("uses dynamic V0.14 character routes and keeps custom worlds locked", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+  const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
+
+  assert.equal(prototype.includes("推演三条角色路线"), true);
+  assert.equal(prototype.includes("路线只是开端，不会限制之后的自由行动"), true);
+  assert.equal(prototype.includes("world.available === false"), true);
+  assert.equal(prototype.includes("后续开放"), true);
+  assert.equal(prototype.includes("{!isV014 && <>"), true);
+  assert.equal(api.includes('"/api/v1/v014/character-routes"'), true);
 });
 
 test("keeps restart safe and exposes the account key before entering the world", async () => {

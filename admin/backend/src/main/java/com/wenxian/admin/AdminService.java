@@ -89,7 +89,7 @@ public class AdminService {
         ensureGameplayConfig("account_public_turn_limit_message", "本账号获赠的推演回合已经用完。你可以前往「世界」接入自己的推演密钥继续游玩。");
         ensureGameplayConfig("custom_api_enabled", "true");
         ensureGameplayConfig("max_active_saves", "2");
-        ensureGameplayConfig("current_game_version", "V0.13");
+        ensureGameplayConfig("current_game_version", "V0.14");
         ensureGameplayConfig("game_access_mode", "OPEN");
         ensureGameplayConfig("game_access_notice_title", "命卷暂时封存");
         ensureGameplayConfig("game_access_notice_content", "游戏正在更新中，请稍后再回来。");
@@ -229,6 +229,82 @@ public class AdminService {
     }
 
     // ---- dashboard ----
+
+    public Map<String, Object> v014Overview() {
+        Map<String, Number> saves = jdbc.queryForObject("""
+                SELECT count(*) total_saves,
+                       coalesce(sum(case when status='ACTIVE' then 1 else 0 end), 0) active_saves,
+                       coalesce(sum(case when status<>'ACTIVE' then 1 else 0 end), 0) archived_saves,
+                       count(distinct user_id) players
+                FROM v014_game_save
+                """, (row, index) -> Map.of(
+                "totalSaves", row.getLong("total_saves"),
+                "activeSaves", row.getLong("active_saves"),
+                "archivedSaves", row.getLong("archived_saves"),
+                "players", row.getLong("players")));
+        Map<String, Number> turns = jdbc.queryForObject("""
+                SELECT count(*) total_turns,
+                       coalesce(sum(prompt_tokens), 0) prompt_tokens,
+                       coalesce(sum(completion_tokens), 0) completion_tokens,
+                       coalesce(avg(case when latency_ms > 0 then latency_ms end), 0) avg_latency
+                FROM v014_game_turn
+                """, (row, index) -> Map.of(
+                "totalTurns", row.getLong("total_turns"),
+                "promptTokens", row.getLong("prompt_tokens"),
+                "completionTokens", row.getLong("completion_tokens"),
+                "avgLatency", row.getDouble("avg_latency")));
+        List<Map<String, Object>> modelUsage = jdbc.query("""
+                SELECT provider, model, credential_source, count(*) requests,
+                       coalesce(sum(prompt_tokens), 0) prompt_tokens,
+                       coalesce(sum(completion_tokens), 0) completion_tokens,
+                       coalesce(avg(case when latency_ms > 0 then latency_ms end), 0) avg_latency
+                FROM v014_game_turn
+                GROUP BY provider, model, credential_source
+                ORDER BY requests DESC
+                """, (row, index) -> Map.of(
+                "provider", row.getString("provider"), "model", row.getString("model"),
+                "source", row.getString("credential_source"), "requests", row.getLong("requests"),
+                "promptTokens", row.getLong("prompt_tokens"), "completionTokens", row.getLong("completion_tokens"),
+                "avgLatency", row.getDouble("avg_latency")));
+        List<Map<String, Object>> recentTurns = jdbc.query("""
+                SELECT t.save_id, s.user_id, t.turn_number, t.player_action, t.model,
+                       t.credential_source, t.prompt_tokens, t.completion_tokens, t.latency_ms, t.created_at
+                FROM v014_game_turn t
+                JOIN v014_game_save s ON s.id=t.save_id
+                ORDER BY t.created_at DESC LIMIT 30
+                """, (row, index) -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("saveId", row.getString("save_id"));
+            item.put("userId", row.getString("user_id"));
+            item.put("turn", row.getInt("turn_number"));
+            item.put("action", row.getString("player_action"));
+            item.put("model", row.getString("model"));
+            item.put("source", row.getString("credential_source"));
+            item.put("tokens", row.getLong("prompt_tokens") + row.getLong("completion_tokens"));
+            item.put("latency", row.getLong("latency_ms"));
+            item.put("at", row.getTimestamp("created_at").toInstant().toString());
+            return item;
+        });
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.putAll(saves == null ? Map.of() : saves);
+        result.putAll(turns == null ? Map.of() : turns);
+        result.put("personalCredentialUsers", count("""
+                SELECT count(distinct user_id) FROM user_ai_provider_credential WHERE status='ACTIVE'
+                """));
+        result.put("invalidCredentialUsers", count("""
+                SELECT count(distinct user_id) FROM user_ai_provider_credential WHERE status<>'ACTIVE'
+                """));
+        result.put("manualCorrections", count("SELECT count(*) FROM v014_state_correction"));
+        result.put("legacyCredentialMigrationGaps", count("""
+                SELECT count(*) FROM user_ai_credential legacy
+                LEFT JOIN user_ai_provider_credential current
+                  ON current.user_id=legacy.user_id AND current.provider_code=legacy.provider
+                WHERE legacy.status='ACTIVE' AND current.user_id IS NULL
+                """));
+        result.put("modelUsage", modelUsage);
+        result.put("recentTurns", recentTurns);
+        return result;
+    }
 
     public Map<String, Object> dashboard() {
         long nowMillis = System.currentTimeMillis();
@@ -1238,7 +1314,7 @@ public class AdminService {
     }
 
     public Map<String, Object> appVersion() {
-        return Map.of("version", configValue("current_game_version", "V0.13"));
+        return Map.of("version", configValue("current_game_version", "V0.14"));
     }
 
     public Map<String, Object> updateAppVersion(String rawVersion) {
@@ -1333,6 +1409,180 @@ public class AdminService {
                     result.put("lastUsedAt", recent.isEmpty() ? "" : recent.getFirst().get("at"));
                     return result;
                 });
+    }
+
+    public List<Map<String, Object>> generationProviders() {
+        String activeProvider = configValue("v014_platform_provider", "DEEPSEEK");
+        String activeModel = configValue("v014_platform_model", "deepseek-v4-flash");
+        return jdbc.query("""
+                select provider_code, display_name, base_url, adapter_type, platform_secret_ciphertext,
+                       enabled, user_key_enabled, updated_at
+                from ai_provider_config order by display_name, provider_code
+                """, (row, index) -> {
+            String provider = row.getString("provider_code");
+            String ciphertext = row.getString("platform_secret_ciphertext");
+            if ((ciphertext == null || ciphertext.isBlank()) && "DEEPSEEK".equals(provider)) {
+                ciphertext = jdbc.query("""
+                        select secret_ciphertext from ai_model_config
+                        where provider_code='DEEPSEEK' and active=true and secret_ciphertext is not null limit 1
+                        """, (legacy, legacyIndex) -> legacy.getString(1)).stream().findFirst().orElse(null);
+            }
+            String key = "";
+            String keyState = "MISSING";
+            try {
+                key = ciphertext == null || ciphertext.isBlank()
+                        ? ("DEEPSEEK".equals(provider) ? fallbackApiKey : "")
+                        : SecretCipher.decrypt(ciphertext, aiConfigMasterKey);
+                keyState = key.isBlank() ? "MISSING" : "CONFIGURED";
+            } catch (IllegalStateException error) {
+                keyState = "DECRYPT_ERROR";
+            }
+            List<Map<String, Object>> models = jdbc.query("""
+                    select model_code, display_name, api_model_name, platform_enabled, user_selectable, updated_at
+                    from ai_provider_model where provider_code=? order by display_name, model_code
+                    """, (modelRow, modelIndex) -> {
+                Map<String, Object> model = new LinkedHashMap<>();
+                String modelCode = modelRow.getString("model_code");
+                model.put("modelCode", modelCode);
+                model.put("displayName", modelRow.getString("display_name"));
+                model.put("apiModelName", modelRow.getString("api_model_name"));
+                model.put("platformEnabled", modelRow.getBoolean("platform_enabled"));
+                model.put("userSelectable", modelRow.getBoolean("user_selectable"));
+                model.put("activePlatform", provider.equals(activeProvider) && modelCode.equals(activeModel));
+                model.put("updatedAt", displayTime(modelRow.getTimestamp("updated_at")));
+                return model;
+            }, provider);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("providerCode", provider);
+            result.put("displayName", row.getString("display_name"));
+            result.put("baseUrl", row.getString("base_url"));
+            result.put("adapterType", row.getString("adapter_type"));
+            result.put("enabled", row.getBoolean("enabled"));
+            result.put("userKeyEnabled", row.getBoolean("user_key_enabled"));
+            result.put("keyConfigured", !key.isBlank());
+            result.put("keySuffix", suffix(key));
+            result.put("keyState", keyState);
+            result.put("updatedAt", displayTime(row.getTimestamp("updated_at")));
+            result.put("models", models);
+            return result;
+        });
+    }
+
+    @Transactional
+    public void updateGenerationProvider(String providerCode, String displayName, String baseUrl,
+                                         boolean enabled, boolean userKeyEnabled, String apiKey) {
+        String provider = providerCode == null ? "" : providerCode.strip().toUpperCase();
+        if (!provider.matches("[A-Z0-9_]{2,32}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "供应商代号格式不正确");
+        }
+        String normalizedName = displayName == null ? "" : displayName.strip();
+        if (normalizedName.isBlank() || normalizedName.length() > 80) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "供应商名称需为 1-80 个字符");
+        }
+        if (baseUrl == null || !baseUrl.strip().matches("https://[^\\s]{3,240}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "连接地址必须是 HTTPS 地址");
+        }
+        if (!enabled && provider.equals(configValue("v014_platform_provider", "DEEPSEEK"))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "不能停用平台当前供应商，请先将平台推演切换到其他可用模型");
+        }
+        Instant now = Instant.now();
+        String ciphertext = apiKey == null || apiKey.isBlank() ? null
+                : SecretCipher.encrypt(apiKey.strip(), aiConfigMasterKey);
+        int changed = ciphertext == null
+                ? jdbc.update("""
+                        update ai_provider_config set display_name=?, base_url=?, enabled=?, user_key_enabled=?, updated_at=?
+                        where provider_code=?
+                        """, normalizedName, baseUrl.strip(), enabled, userKeyEnabled, Timestamp.from(now), provider)
+                : jdbc.update("""
+                        update ai_provider_config set display_name=?, base_url=?, platform_secret_ciphertext=?,
+                            enabled=?, user_key_enabled=?, updated_at=? where provider_code=?
+                        """, normalizedName, baseUrl.strip(), ciphertext, enabled, userKeyEnabled,
+                        Timestamp.from(now), provider);
+        if (changed == 0) {
+            jdbc.update("""
+                    insert into ai_provider_config(provider_code, display_name, base_url, adapter_type,
+                        platform_secret_ciphertext, enabled, user_key_enabled, updated_at)
+                    values (?, ?, ?, 'OPENAI_COMPATIBLE', ?, ?, ?, ?)
+                    """, provider, normalizedName, baseUrl.strip(), ciphertext, enabled, userKeyEnabled,
+                    Timestamp.from(now));
+        }
+        audit("UPDATE_GENERATION_PROVIDER", "更新推演供应商 " + provider);
+    }
+
+    @Transactional
+    public void updateGenerationModel(String providerCode, String modelCode, String displayName,
+                                      String apiModelName, boolean platformEnabled,
+                                      boolean userSelectable, boolean activePlatform) {
+        String provider = providerCode == null ? "" : providerCode.strip().toUpperCase();
+        String normalizedModel = modelCode == null ? "" : modelCode.strip();
+        String normalizedName = displayName == null ? "" : displayName.strip();
+        String normalizedApiModel = apiModelName == null ? "" : apiModelName.strip();
+        if (!provider.matches("[A-Z0-9_]{2,32}") || !normalizedModel.matches("[A-Za-z0-9._-]{2,80}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "供应商或模型代号不正确");
+        }
+        if (normalizedName.isBlank() || normalizedName.length() > 80
+                || normalizedApiModel.isBlank() || normalizedApiModel.length() > 120) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "模型名称或接口模型名称不正确");
+        }
+        String currentProvider = configValue("v014_platform_provider", "DEEPSEEK");
+        String currentModel = configValue("v014_platform_model", "deepseek-v4-flash");
+        boolean current = provider.equals(currentProvider) && normalizedModel.equals(currentModel);
+        if (current && !platformEnabled) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "不能停用平台当前模型，请先切换到其他可用模型");
+        }
+        if (activePlatform) {
+            if (!platformEnabled) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "平台当前模型必须允许平台调用");
+            if (!providerAvailableForPlatform(provider)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "该供应商尚未启用或没有可用平台密钥，不能设为平台当前模型");
+            }
+        }
+        Instant now = Instant.now();
+        int changed = jdbc.update("""
+                update ai_provider_model set display_name=?, api_model_name=?, platform_enabled=?,
+                    user_selectable=?, updated_at=? where provider_code=? and model_code=?
+                """, normalizedName, normalizedApiModel, platformEnabled, userSelectable,
+                Timestamp.from(now), provider, normalizedModel);
+        if (changed == 0) {
+            jdbc.update("""
+                    insert into ai_provider_model(provider_code, model_code, display_name, api_model_name,
+                        platform_enabled, user_selectable, updated_at) values (?, ?, ?, ?, ?, ?, ?)
+                    """, provider, normalizedModel, normalizedName, normalizedApiModel,
+                    platformEnabled, userSelectable, Timestamp.from(now));
+        }
+        if (activePlatform) {
+            putGameplayConfig("v014_platform_provider", provider);
+            putGameplayConfig("v014_platform_model", normalizedModel);
+            if ("DEEPSEEK".equals(provider)) {
+                jdbc.update("update ai_model_config set active=(model_code=?)", normalizedModel);
+            }
+        }
+        audit("UPDATE_GENERATION_MODEL", "更新推演模型 " + provider + "/" + modelCode
+                + (activePlatform ? "，并设为平台当前模型" : ""));
+    }
+
+    private boolean providerAvailableForPlatform(String provider) {
+        return jdbc.query("""
+                select platform_secret_ciphertext, enabled from ai_provider_config where provider_code=?
+                """, (row, index) -> {
+            if (!row.getBoolean("enabled")) return false;
+            String ciphertext = row.getString("platform_secret_ciphertext");
+            if ((ciphertext == null || ciphertext.isBlank()) && "DEEPSEEK".equals(provider)) {
+                ciphertext = jdbc.query("""
+                        select secret_ciphertext from ai_model_config
+                        where provider_code='DEEPSEEK' and active=true and secret_ciphertext is not null limit 1
+                        """, (legacy, legacyIndex) -> legacy.getString(1)).stream().findFirst().orElse(null);
+                if ((ciphertext == null || ciphertext.isBlank()) && !fallbackApiKey.isBlank()) return true;
+            }
+            if (ciphertext == null || ciphertext.isBlank()) return false;
+            try {
+                return !SecretCipher.decrypt(ciphertext, aiConfigMasterKey).isBlank();
+            } catch (RuntimeException error) {
+                return false;
+            }
+        }, provider).stream().findFirst().orElse(false);
     }
 
     @Transactional

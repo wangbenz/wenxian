@@ -85,6 +85,11 @@ public class AdminController {
         return adminService.dashboard();
     }
 
+    @GetMapping("/v014/overview")
+    public Map<String, Object> v014Overview() {
+        return adminService.v014Overview();
+    }
+
     @GetMapping("/invite-codes")
     public List<Map<String, Object>> inviteCodes(@RequestParam(defaultValue = "") String status) {
         return adminService.inviteCodes(status);
@@ -202,6 +207,30 @@ public class AdminController {
     @PostMapping("/model-configs/{modelCode}")
     public Map<String, Object> updateModelConfig(@PathVariable String modelCode, @RequestBody Map<String, Object> body) {
         adminService.updateModelConfig(modelCode, Boolean.TRUE.equals(body.get("active")), string(body.get("apiKey")));
+        return Map.of("ok", true);
+    }
+
+    @GetMapping("/generation-providers")
+    public List<Map<String, Object>> generationProviders() {
+        return adminService.generationProviders();
+    }
+
+    @PostMapping("/generation-providers/{providerCode}")
+    public Map<String, Object> updateGenerationProvider(@PathVariable String providerCode,
+                                                        @RequestBody Map<String, Object> body) {
+        adminService.updateGenerationProvider(providerCode, string(body.get("displayName")),
+                string(body.get("baseUrl")), Boolean.TRUE.equals(body.get("enabled")),
+                Boolean.TRUE.equals(body.get("userKeyEnabled")), string(body.get("apiKey")));
+        return Map.of("ok", true);
+    }
+
+    @PostMapping("/generation-providers/{providerCode}/models/{modelCode}")
+    public Map<String, Object> updateGenerationModel(@PathVariable String providerCode,
+                                                     @PathVariable String modelCode,
+                                                     @RequestBody Map<String, Object> body) {
+        adminService.updateGenerationModel(providerCode, modelCode, string(body.get("displayName")),
+                string(body.get("apiModelName")), Boolean.TRUE.equals(body.get("platformEnabled")),
+                Boolean.TRUE.equals(body.get("userSelectable")), Boolean.TRUE.equals(body.get("activePlatform")));
         return Map.of("ok", true);
     }
 

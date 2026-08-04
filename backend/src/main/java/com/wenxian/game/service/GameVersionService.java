@@ -11,7 +11,7 @@ import java.time.Instant;
 @Service
 public class GameVersionService {
     public static final String CONFIG_KEY = "current_game_version";
-    public static final String DEFAULT_VERSION = "V0.13";
+    public static final String DEFAULT_VERSION = "V0.14";
 
     private final JdbcTemplate jdbc;
 
@@ -35,5 +35,21 @@ public class GameVersionService {
         return jdbc.query("select config_value from gameplay_config where config_key=?",
                 (row, ignored) -> row.getString(1), CONFIG_KEY)
                 .stream().findFirst().filter(value -> !value.isBlank()).orElse(DEFAULT_VERSION);
+    }
+
+    public boolean legacyWritesAllowed() {
+        return versionNumber(current()) < versionNumber(DEFAULT_VERSION);
+    }
+
+    private static int versionNumber(String value) {
+        if (value == null) return 0;
+        String normalized = value.trim().toUpperCase().replaceFirst("^V", "");
+        String[] parts = normalized.split("\\.");
+        if (parts.length < 2) return 0;
+        try {
+            return Integer.parseInt(parts[0]) * 10_000 + Integer.parseInt(parts[1]) * 100;
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 }

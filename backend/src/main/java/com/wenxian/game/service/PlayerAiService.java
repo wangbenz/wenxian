@@ -92,6 +92,11 @@ public class PlayerAiService {
         }
     }
 
+    /** V0.14 model preferences can explicitly choose the shared platform route. */
+    public Route publicRoute() {
+        return new Route(runtimeConfig.current(), PUBLIC_SOURCE);
+    }
+
     public void assertPublicQuota(String userId, Route route) {
         if (route.custom()) return;
         int limit = accountLimit();

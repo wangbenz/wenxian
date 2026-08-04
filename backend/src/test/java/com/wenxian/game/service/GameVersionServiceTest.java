@@ -10,6 +10,8 @@ import java.sql.Timestamp;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GameVersionServiceTest {
     @Test
@@ -25,6 +27,25 @@ class GameVersionServiceTest {
             service.ensureDefault();
 
             assertEquals("V0.12", service.current());
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
+    void legacyWritesAreAllowedBeforeV014AndSealedFromV014Onward() {
+        EmbeddedDatabase database = new EmbeddedDatabaseBuilder().setType(EmbeddedDatabaseType.H2).build();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            jdbc.execute("create table gameplay_config(config_key varchar(64) primary key, config_value varchar(255) not null, updated_at timestamp not null)");
+            jdbc.update("insert into gameplay_config values ('current_game_version','V0.13',?)", Timestamp.from(Instant.now()));
+            GameVersionService service = new GameVersionService(jdbc);
+
+            assertTrue(service.legacyWritesAllowed());
+            jdbc.update("update gameplay_config set config_value='V0.14' where config_key='current_game_version'");
+            assertFalse(service.legacyWritesAllowed());
+            jdbc.update("update gameplay_config set config_value='V0.15' where config_key='current_game_version'");
+            assertFalse(service.legacyWritesAllowed());
         } finally {
             database.shutdown();
         }
