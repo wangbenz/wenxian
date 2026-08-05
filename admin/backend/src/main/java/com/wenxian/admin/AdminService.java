@@ -375,15 +375,21 @@ public class AdminService {
         Map<String, Number> turnMetrics = jdbc.queryForObject("""
                 SELECT count(*) total_turns,
                        coalesce(sum(case when created_at >= ? then 1 else 0 end), 0) today_turns,
-                       coalesce(sum(case when model like '%@USER' then 1 else 0 end), 0) custom_turns,
-                       coalesce(sum(case when model not like '%@USER' then 1 else 0 end), 0) platform_turns,
-                       coalesce(sum(case when created_at >= ? and model like '%@USER' then 1 else 0 end), 0) today_custom_turns,
-                       coalesce(sum(case when created_at >= ? and model not like '%@USER' then 1 else 0 end), 0) today_platform_turns,
+                       coalesce(sum(case when credential_source = 'USER' then 1 else 0 end), 0) custom_turns,
+                       coalesce(sum(case when credential_source = 'PUBLIC' then 1 else 0 end), 0) platform_turns,
+                       coalesce(sum(case when created_at >= ? and credential_source = 'USER' then 1 else 0 end), 0) today_custom_turns,
+                       coalesce(sum(case when created_at >= ? and credential_source = 'PUBLIC' then 1 else 0 end), 0) today_platform_turns,
                        coalesce(avg(case when latency_ms > 0 then latency_ms end), 0) avg_latency
                 FROM (
-                    SELECT created_at, prompt_tokens, completion_tokens, latency_ms, model FROM game_turn
+                    SELECT created_at, latency_ms,
+                           case when model like '%@USER' then 'USER' else 'PUBLIC' end credential_source
+                    FROM game_turn
                     UNION ALL
-                    SELECT created_at, prompt_tokens, completion_tokens, latency_ms, model FROM game_life_turn_archive
+                    SELECT created_at, latency_ms,
+                           case when model like '%@USER' then 'USER' else 'PUBLIC' end credential_source
+                    FROM game_life_turn_archive
+                    UNION ALL
+                    SELECT created_at, latency_ms, credential_source FROM v014_game_turn
                 ) all_turns
                 """, (row, index) -> Map.of(
                 "totalTurns", row.getLong("total_turns"),
@@ -428,12 +434,16 @@ public class AdminService {
         Timestamp trackingStartedAt = jdbc.queryForObject(
                 "SELECT min(created_at) FROM ai_usage_log", Timestamp.class);
         Map<String, Number> todayChapterCosts = jdbc.queryForObject("""
-                SELECT coalesce(avg(case when model not like '%@USER' then prompt_tokens + completion_tokens end), 0) platform_average,
-                       coalesce(avg(case when model like '%@USER' then prompt_tokens + completion_tokens end), 0) custom_average
+                SELECT coalesce(avg(case when credential_source = 'PUBLIC' then prompt_tokens + completion_tokens end), 0) platform_average,
+                       coalesce(avg(case when credential_source = 'USER' then prompt_tokens + completion_tokens end), 0) custom_average
                 FROM (
-                    SELECT model, prompt_tokens, completion_tokens, created_at FROM game_turn
+                    SELECT case when model like '%@USER' then 'USER' else 'PUBLIC' end credential_source,
+                           prompt_tokens, completion_tokens, created_at FROM game_turn
                     UNION ALL
-                    SELECT model, prompt_tokens, completion_tokens, created_at FROM game_life_turn_archive
+                    SELECT case when model like '%@USER' then 'USER' else 'PUBLIC' end credential_source,
+                           prompt_tokens, completion_tokens, created_at FROM game_life_turn_archive
+                    UNION ALL
+                    SELECT credential_source, prompt_tokens, completion_tokens, created_at FROM v014_game_turn
                 ) completed_turns
                 WHERE created_at >= ?
                 """, (row, index) -> Map.of(
@@ -490,19 +500,25 @@ public class AdminService {
         rawDailyTokens.forEach(day -> dailyByDate.put(String.valueOf(day.get("date")), new LinkedHashMap<>(day)));
         List<Map<String, Object>> rawDailyTurns = jdbc.query("""
                 SELECT DATE(created_at) usage_date,
-                       coalesce(sum(case when model like '%@USER' then 1 else 0 end), 0) custom_turns,
-                       coalesce(sum(case when model not like '%@USER' then 1 else 0 end), 0) platform_turns
+                       coalesce(sum(case when credential_source = 'USER' then 1 else 0 end), 0) custom_turns,
+                       coalesce(sum(case when credential_source = 'PUBLIC' then 1 else 0 end), 0) platform_turns
                 FROM (
-                    SELECT created_at, model FROM game_turn WHERE created_at >= ?
+                    SELECT created_at,
+                           case when model like '%@USER' then 'USER' else 'PUBLIC' end credential_source
+                    FROM game_turn WHERE created_at >= ?
                     UNION ALL
-                    SELECT created_at, model FROM game_life_turn_archive WHERE created_at >= ?
+                    SELECT created_at,
+                           case when model like '%@USER' then 'USER' else 'PUBLIC' end credential_source
+                    FROM game_life_turn_archive WHERE created_at >= ?
+                    UNION ALL
+                    SELECT created_at, credential_source FROM v014_game_turn WHERE created_at >= ?
                 ) turn_usage
                 GROUP BY DATE(created_at)
                 """, (row, index) -> Map.<String, Object>of(
                 "date", row.getDate("usage_date").toLocalDate().toString(),
                 "platformTurns", row.getLong("platform_turns"),
                 "customTurns", row.getLong("custom_turns")
-        ), tokenSince, tokenSince);
+        ), tokenSince, tokenSince, tokenSince);
         rawDailyTurns.forEach(turns -> {
             String date = String.valueOf(turns.get("date"));
             Map<String, Object> day = dailyByDate.computeIfAbsent(date, ignored -> emptyDailyUsage(date));
@@ -519,11 +535,25 @@ public class AdminService {
         }
 
         List<Map<String, Object>> recentTurns = jdbc.query("""
-                SELECT gt.turn_number, gt.player_action,
-                       gt.prompt_tokens + gt.completion_tokens AS tokens,
-                       gt.latency_ms, gt.model, gt.created_at, gs.state_json
-                FROM game_turn gt JOIN game_save gs ON gs.id = gt.save_id
-                ORDER BY gt.created_at DESC LIMIT 8
+                SELECT turn_number, player_action, tokens, latency_ms, model, created_at, state_json
+                FROM (
+                    SELECT * FROM (
+                        SELECT gt.turn_number, gt.player_action,
+                               gt.prompt_tokens + gt.completion_tokens AS tokens,
+                               gt.latency_ms, gt.model, gt.created_at, gs.state_json
+                        FROM game_turn gt JOIN game_save gs ON gs.id = gt.save_id
+                        ORDER BY gt.created_at DESC LIMIT 8
+                    ) legacy_recent
+                    UNION ALL
+                    SELECT * FROM (
+                        SELECT gt.turn_number, gt.player_action,
+                               gt.prompt_tokens + gt.completion_tokens AS tokens,
+                               gt.latency_ms, gt.model, gt.created_at, gs.state_json
+                        FROM v014_game_turn gt JOIN v014_game_save gs ON gs.id = gt.save_id
+                        ORDER BY gt.created_at DESC LIMIT 8
+                    ) v014_recent
+                ) recent_turns
+                ORDER BY created_at DESC LIMIT 8
                 """, (row, idx) -> {
             String playerName = "";
             String realm = "";
@@ -678,13 +708,6 @@ public class AdminService {
         result.put("currentModel", currentModel);
         result.put("customApiUsers", count("SELECT count(*) FROM user_ai_credential WHERE status = 'ACTIVE'"));
         result.put("todayPublicInvocations", count("SELECT coalesce(sum(used_count), 0) FROM user_daily_quota WHERE usage_date = ?", java.sql.Date.valueOf(today)));
-        result.put("todayCustomTurns", count("""
-                SELECT count(*) FROM (
-                    SELECT model, created_at FROM game_turn
-                    UNION ALL
-                    SELECT model, created_at FROM game_life_turn_archive
-                ) custom_turns WHERE created_at >= ? AND model LIKE '%@USER'
-                """, todayStart));
         result.put("dailyTokens", dailyTokens);
         result.put("modelUsage", modelUsage);
         result.put("versionMetrics", new ArrayList<>(versionMetricsByVersion.values()));
