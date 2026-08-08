@@ -185,6 +185,7 @@ Java 不维护精密战力、统一物价或关键词裁决。Agent 不能直接
 
 ```text
 GET    /api/v1/story/bootstrap
+POST   /api/v1/story/character-routes
 GET    /api/v1/story/saves
 POST   /api/v1/story/saves
 GET    /api/v1/story/saves/{saveId}
@@ -246,6 +247,20 @@ POST /api/v1/story/saves/{saveId}/turns
   "action": "先回客栈查看青纹令"
 }
 ```
+
+`expectedRevision` 必须与服务端当前修订号一致。兼容期由旧引擎适配器校验，统一命卷表接管后由数据库乐观锁和回合事务再次校验。
+
+### 修正命卷
+
+```json
+POST /api/v1/story/saves/{saveId}/corrections
+{
+  "expectedRevision": 138,
+  "instruction": "当前地点应为青岐城北门"
+}
+```
+
+修正属于显式状态写入，也必须携带当前修订号；失败时不得覆盖较新的命卷。
 
 成功响应返回完整当前视图、最新 `revision`、回合号和 capabilities。`requestId` 已提交时返回同一结果；同账号另一轮仍在生成时返回可重试的 `TURN_IN_PROGRESS`，不得在服务端排队执行。
 
