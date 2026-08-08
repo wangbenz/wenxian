@@ -13,6 +13,7 @@
 | 运营层 | 公告、白名单、额度、配置 | `release_note`、`game_access_whitelist`、`gameplay_config`、`user_daily_quota` |
 | 模型层 | 供应商、模型、加密密钥与用量 | `ai_provider_*`、`user_ai_provider_credential`、`user_model_preference`、`ai_usage_log` |
 | 命卷层 | 当前状态、回合、实体、记忆与修正 | `story_*` |
+| 统计层 | 产品事件、日活、日汇总与留存批次 | `analytics_*` |
 | 历史层 | V0.13、V0.14 原始档案 | `game_*`、`v014_*`，迁移后只读 |
 
 ## 2. 通用约定
@@ -26,8 +27,33 @@
 - JSON 字段必须有结构版本，不能依赖产品发布版本推断结构；
 - 产品版本只用于发布和统计，不能决定物理表；
 - 玩家 API 不返回平台密钥、平台模型、内部异常和数据库结构。
+- 统计表不保存邮箱、密钥、完整 Prompt 或剧情正文，用户和命卷只保留稳定 ID；
+- 统计分日与留存统一使用 Asia/Shanghai，`data_origin` 区分 `REALTIME/BACKFILL`。
 
-## 3. 继续保留的共享表
+## 3. 统计层
+
+### `analytics_event`
+
+不可变的产品行为事实表。当前事件包括 `USER_REGISTERED`、`SAVE_CREATED`、`TURN_SUCCEEDED`、
+`CORRECTION_APPLIED`、`ENTITY_REMOVED` 和 `SAVE_ARCHIVED`。`event_key` 保证同一业务结果不会因网络重试重复统计；
+`release_version`、`engine_code` 和 `data_origin` 仅作为分析维度。该表不与版本业务表建立外键。
+
+### `analytics_user_day`
+
+用户每日有效活动表，主键为 `(activity_date, user_id)`。创建命卷、成功回合、修正和整理会更新对应计数及
+首次/最后活动时间；单纯登录不会写入。DAU、WAU、MAU、回流和留存都从本表计算。
+
+### `analytics_daily_metric`
+
+每日汇总指标表，主键为 `(metric_date, metric_code, dimension_type, dimension_value)`。指标值使用小数存储，
+`calculation_version` 允许口径升级后重算。首页和趋势页优先读取本表，不能每次跨历史回合表实时聚合。
+
+### `analytics_retention_cohort`
+
+注册批次留存表，主键为 `(cohort_date, retention_day)`。保存批次注册人数、完成首回合人数和对应天数留存人数；
+`retention_day` 首版支持 1、3、7、14。历史回算和实时采集通过 `data_origin` 区分。
+
+## 4. 继续保留的共享表
 
 ### `app_user`
 
@@ -82,7 +108,7 @@
 
 替代 `v014_user_model_preference`，保存账号当前选择的平台/自备模式、供应商和模型。它属于账号生成偏好，不属于产品版本。
 
-## 4. `story_save`：统一命卷主表
+## 5. `story_save`：统一命卷主表
 
 **职责**：保存每份命卷的核心权威快照、引擎、结构版本、来源、状态和乐观锁。
 
@@ -110,7 +136,7 @@
 
 **权威性**：当前主角、世界时间、当前位置、当前处境和使用的引擎以本表为准。
 
-## 5. `story_turn`：回合事实表
+## 6. `story_turn`：回合事实表
 
 **职责**：追加保存每次正式行动、正文、结构化补丁、模型路由、Token和延迟。成功写入后不可修改剧情事实。
 
@@ -142,7 +168,7 @@
 - `(save_id, turn_number)` 防止同一回合号重复；
 - `(save_id, request_id)` 防止网络重试重复推进。
 
-## 6. `story_entity`：当前实体表
+## 7. `story_entity`：当前实体表
 
 **职责**：保存命卷中需要跨回合保持一致的物品、能力、重要人物、势力和地点。
 
@@ -164,7 +190,7 @@
 
 **删除策略**：玩家整理记录时设置 `visible=false` 并更新状态；不物理删除，不修改历史回合。
 
-## 7. `story_memory`：关键记忆表
+## 8. `story_memory`：关键记忆表
 
 **职责**：保存跨回合仍需记住的承诺、关系、事件和线索，不代替完整回合历史。
 
@@ -181,7 +207,7 @@
 | `status` | 当前有效、已解决或仅历史 |
 | `created_at` | 建立时间 |
 
-## 8. `story_conversation`：上下文摘要表
+## 9. `story_conversation`：上下文摘要表
 
 **职责**：保存可重建的滚动摘要和已总结回合，只用于降低模型上下文成本。
 
@@ -195,7 +221,7 @@
 
 摘要不是权威事实；与快照、实体或回合冲突时，以后者为准。
 
-## 9. `story_state_correction`：修正审计表
+## 10. `story_state_correction`：修正审计表
 
 **职责**：记录玩家无回合消耗修正命卷时的指令、类型和前后值。
 
@@ -208,7 +234,7 @@
 | `before_json/after_json` | 修正前后结构化值 |
 | `created_at` | 修正时间 |
 
-## 10. `story_save_migration`：迁移审计表
+## 11. `story_save_migration`：迁移审计表
 
 **职责**：保证每份旧命卷只迁移一次，并记录可重试、可核对的迁移结果。
 
@@ -229,7 +255,7 @@
 批量调度不新增任务队列表：`story_save_migration` 本身记录每份命卷进度，`gameplay_config` 保存准备、激活和
 单次批量上限。批量准备逐份提交事务，单份失败不会回滚其他已校验候选；激活永远是单份操作并再次复验双哈希。
 
-## 11. `story_engine_catalog`：引擎目录
+## 12. `story_engine_catalog`：引擎目录
 
 **职责**：让管理台在不发版的情况下控制某个引擎是否允许创建、继续和迁移。
 
@@ -244,7 +270,7 @@
 | `continuation_enabled` | 是否允许继续旧命卷 |
 | `created_at/updated_at` | 创建和更新时间 |
 
-## 12. 旧表迁移映射
+## 13. 旧表迁移映射
 
 ### V0.14
 
@@ -264,7 +290,7 @@
 
 V0.13 不完整迁入当前可写结构。统一列表通过旧版适配器读取；承接时复制可靠身份、境界、地点、重要能力、当前持有物品、重要人物和关键经历摘要。体力、追查、旧裁决、异常货币和临时人物不进入目标命卷。
 
-## 13. 权威冲突顺序
+## 14. 权威冲突顺序
 
 同一事实出现冲突时按以下顺序处理：
 
@@ -276,7 +302,7 @@ V0.13 不完整迁入当前可写结构。统一列表通过旧版适配器读�
 
 摘要和正文不能静默覆盖权威快照。
 
-## 14. 中文注释要求
+## 15. 中文注释要求
 
 新迁移脚本必须满足：
 

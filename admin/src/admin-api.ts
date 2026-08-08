@@ -1,5 +1,24 @@
 export type LoginResponse = { ok: boolean; token: string };
 
+export type AnalyticsDay = { date: string; [metric: string]: string | number };
+export type AnalyticsOverview = {
+  today: AnalyticsDay; totalUsers: number; totalSuccessfulTurns: number;
+  trend: AnalyticsDay[]; alerts: string[]; calculatedAt: string;
+};
+export type GrowthAnalytics = {
+  daily: AnalyticsDay[];
+  retention: Array<{ cohortDate: string; day: number; registered: number; activated: number; retained: number; rate: number; origin: string }>;
+  definition: string;
+};
+export type GameplayAnalytics = {
+  daily: AnalyticsDay[];
+  totals: { turns: number; createdSaves: number; corrections: number; entityRemovals: number; archivedSaves: number };
+};
+export type AiUsageAnalytics = {
+  platform: AnalyticsDay[]; player: AnalyticsDay[];
+  models: Array<{ provider: string; model: string; source: string; requests: number; promptTokens: number; completionTokens: number; cacheHitTokens: number; cacheMissTokens: number; failures: number; averageLatency: number }>;
+};
+
 export type DashboardData = {
   totalUsers: number; usersWithCharacter: number; todayActive: number; onlinePlayers: number;
   usersWithAnyCharacter: number; currentCharacters: number; historicalCharacters: number; totalCharacters: number;
@@ -167,6 +186,11 @@ export const adminApi = {
   updateAdminAccountStatus: (adminId: string, active: boolean) => request<{ ok: boolean }>(`/admin-accounts/${encodeURIComponent(adminId)}/status`, { method: "POST", body: JSON.stringify({ active }) }),
   resetAdminAccountPassword: (adminId: string) => request<{ temporaryPassword: string }>(`/admin-accounts/${encodeURIComponent(adminId)}/temporary-password`, { method: "POST" }),
   dashboard: () => request<DashboardData>("/dashboard"),
+  analyticsOverview: (days = 14) => request<AnalyticsOverview>(`/analytics/overview?days=${days}`),
+  analyticsGrowth: (days = 30) => request<GrowthAnalytics>(`/analytics/growth?days=${days}`),
+  analyticsGameplay: (days = 30) => request<GameplayAnalytics>(`/analytics/gameplay?days=${days}`),
+  analyticsAiUsage: (days = 14) => request<AiUsageAnalytics>(`/analytics/ai-usage?days=${days}`),
+  refreshAnalytics: () => request<{ ok: boolean; message: string }>("/analytics/refresh", { method: "POST" }),
   v014Overview: () => request<V014Overview>("/v014/overview"),
   inviteCodes: (status = "") => request<InviteCodeItem[]>(`/invite-codes?status=${encodeURIComponent(status)}`),
   generateInviteCodes: (count: number, maxUses: number) => request<{ codes: string[]; count: number }>("/invite-codes", { method: "POST", body: JSON.stringify({ count, maxUses }) }),

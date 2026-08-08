@@ -34,6 +34,14 @@
 - Every schema or key-field change must update `docs/data-dictionary.md` in the same commit. API or migration-boundary changes must also update `docs/architecture.md`.
 - Current production Hotfixes and unified-story refactors must use separate commits/branches; do not mix an incident fix with migration work.
 
+## Analytics Contract
+
+- 管理台统计属于独立观察层，不得通过跨版本业务表 `UNION` 作为长期查询方案。当前游戏只写中立 `analytics_*` 事实与汇总结构，旧版表只允许离线回算。
+- “活跃玩家”必须来自创建命卷、成功推进、修正或整理实体等有效行为；登录和长期会话不能冒充活跃或在线。
+- 模型请求、最终失败操作和成功游戏回合是三种不同事实，不得互相替代。重试可以增加模型请求数，但不能重复增加成功回合。
+- 统计写入和汇总失败不得阻塞、回滚或延长玩家的命卷事务；管理台必须优先读取带索引的日汇总，历史明细按需加载。
+- 统计事件不得保存邮箱、API Key、完整 Prompt 或剧情正文。所有指标必须声明北京时间口径、实时/历史回算来源和计算版本。
+
 ## Interaction Rules
 
 - Keep the scene content vertically scrollable while the action composer and primary navigation remain fixed.

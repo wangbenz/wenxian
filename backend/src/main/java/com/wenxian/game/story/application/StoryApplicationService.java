@@ -1,5 +1,7 @@
 package com.wenxian.game.story.application;
 
+import com.wenxian.game.analytics.AnalyticsEventPublisher;
+import com.wenxian.game.analytics.AnalyticsEventType;
 import com.wenxian.game.auth.AuthService.UserIdentity;
 import com.wenxian.game.story.engine.StoryEngineRegistry;
 import com.wenxian.game.story.model.StoryApiModels.BootstrapResponse;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 统一命卷用例门面。
@@ -24,9 +27,11 @@ import java.util.List;
 @Service
 public class StoryApplicationService {
     private final StoryEngineRegistry engines;
+    private final AnalyticsEventPublisher analytics;
 
-    public StoryApplicationService(StoryEngineRegistry engines) {
+    public StoryApplicationService(StoryEngineRegistry engines, AnalyticsEventPublisher analytics) {
         this.engines = engines;
+        this.analytics = analytics;
     }
 
     public BootstrapResponse bootstrap() {
@@ -38,7 +43,10 @@ public class StoryApplicationService {
     }
 
     public SaveResponse create(UserIdentity user, CreateSaveRequest request) {
-        return engines.defaultEngine().create(user, request);
+        SaveResponse created = engines.defaultEngine().create(user, request);
+        analytics.publish("SAVE_CREATED:" + created.saveId(), AnalyticsEventType.SAVE_CREATED,
+                user.userId(), created.saveId(), created.engineCode(), Map.of("worldCode", request.worldCode()));
+        return created;
     }
 
     public List<SaveSummary> list(UserIdentity user) {
@@ -52,18 +60,36 @@ public class StoryApplicationService {
     }
 
     public SaveResponse takeTurn(UserIdentity user, String saveId, TurnRequest request) {
-        return engines.requireForSave(saveId).takeTurn(user, saveId, request);
+        SaveResponse updated = engines.requireForSave(saveId).takeTurn(user, saveId, request);
+        analytics.publish("TURN_SUCCEEDED:" + saveId + ":" + request.requestId(),
+                AnalyticsEventType.TURN_SUCCEEDED, user.userId(), saveId, updated.engineCode(),
+                Map.of("turnNumber", updated.turnNumber(), "generationMode", safe(updated.generationMode())));
+        return updated;
     }
 
     public SaveResponse correct(UserIdentity user, String saveId, CorrectionRequest request) {
-        return engines.requireForSave(saveId).correct(user, saveId, request);
+        SaveResponse updated = engines.requireForSave(saveId).correct(user, saveId, request);
+        analytics.publish("CORRECTION_APPLIED:" + saveId + ":" + updated.revision(),
+                AnalyticsEventType.CORRECTION_APPLIED, user.userId(), saveId, updated.engineCode(), Map.of());
+        return updated;
     }
 
     public void archive(UserIdentity user, String saveId) {
-        engines.requireForSave(saveId).archive(user, saveId);
+        var engine = engines.requireForSave(saveId);
+        engine.archive(user, saveId);
+        analytics.publish("SAVE_ARCHIVED:" + saveId, AnalyticsEventType.SAVE_ARCHIVED,
+                user.userId(), saveId, engine.descriptor().code(), Map.of());
     }
 
     public SaveResponse removeEntity(UserIdentity user, String saveId, String entityId, long expectedRevision) {
-        return engines.requireForSave(saveId).removeEntity(user, saveId, entityId, expectedRevision);
+        SaveResponse updated = engines.requireForSave(saveId).removeEntity(user, saveId, entityId, expectedRevision);
+        analytics.publish("ENTITY_REMOVED:" + saveId + ":" + entityId + ":" + updated.revision(),
+                AnalyticsEventType.ENTITY_REMOVED, user.userId(), saveId, updated.engineCode(),
+                Map.of("entityId", entityId));
+        return updated;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 }

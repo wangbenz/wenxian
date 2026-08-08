@@ -19,9 +19,15 @@ import java.util.Map;
 public class AdminController {
 
     private final AdminService adminService;
+    private final AdminAnalyticsService analyticsService;
+    private final AnalyticsAggregationService aggregationService;
 
-    public AdminController(AdminService adminService) {
+    public AdminController(AdminService adminService,
+                           AdminAnalyticsService analyticsService,
+                           AnalyticsAggregationService aggregationService) {
         this.adminService = adminService;
+        this.analyticsService = analyticsService;
+        this.aggregationService = aggregationService;
     }
 
     @PostMapping("/login")
@@ -83,6 +89,32 @@ public class AdminController {
     @GetMapping("/dashboard")
     public Map<String, Object> dashboard() {
         return adminService.dashboard();
+    }
+
+    @GetMapping("/analytics/overview")
+    public Map<String, Object> analyticsOverview(@RequestParam(defaultValue = "14") int days) {
+        return analyticsService.overview(days);
+    }
+
+    @GetMapping("/analytics/growth")
+    public Map<String, Object> analyticsGrowth(@RequestParam(defaultValue = "30") int days) {
+        return analyticsService.growth(days);
+    }
+
+    @GetMapping("/analytics/gameplay")
+    public Map<String, Object> analyticsGameplay(@RequestParam(defaultValue = "30") int days) {
+        return analyticsService.gameplay(days);
+    }
+
+    @GetMapping("/analytics/ai-usage")
+    public Map<String, Object> analyticsAiUsage(@RequestParam(defaultValue = "14") int days) {
+        return analyticsService.aiUsage(days);
+    }
+
+    @PostMapping("/analytics/refresh")
+    public Map<String, Object> refreshAnalytics() {
+        aggregationService.refreshRecentHistory();
+        return Map.of("ok", true, "message", "统计数据已重新汇总");
     }
 
     @GetMapping("/v014/overview")

@@ -517,3 +517,58 @@ create table user_model_preference (
     constraint fk_user_model_preference_model foreign key (provider_code, model_code)
         references ai_provider_model(provider_code, model_code)
 );
+
+create table analytics_event (
+    id varchar(80) primary key,
+    event_key varchar(180) not null unique,
+    event_type varchar(48) not null,
+    user_id varchar(64) not null,
+    save_id varchar(80),
+    release_version varchar(32) not null,
+    engine_code varchar(48) not null,
+    data_origin varchar(16) not null,
+    metadata_json clob,
+    occurred_at timestamp not null,
+    recorded_at timestamp not null
+);
+
+create table analytics_user_day (
+    activity_date date not null,
+    user_id varchar(64) not null,
+    created_save_count integer not null default 0,
+    successful_turn_count integer not null default 0,
+    correction_count integer not null default 0,
+    entity_removal_count integer not null default 0,
+    archived_save_count integer not null default 0,
+    first_activity_at timestamp not null,
+    last_activity_at timestamp not null,
+    first_release_version varchar(32) not null,
+    last_release_version varchar(32) not null,
+    data_origin varchar(16) not null,
+    updated_at timestamp not null,
+    primary key (activity_date, user_id)
+);
+
+create table analytics_daily_metric (
+    metric_date date not null,
+    metric_code varchar(64) not null,
+    dimension_type varchar(32) not null,
+    dimension_value varchar(120) not null,
+    metric_value decimal(24,4) not null,
+    data_origin varchar(16) not null,
+    calculation_version integer not null,
+    calculated_at timestamp not null,
+    primary key (metric_date, metric_code, dimension_type, dimension_value)
+);
+
+create table analytics_retention_cohort (
+    cohort_date date not null,
+    retention_day smallint not null,
+    registered_users integer not null,
+    activated_users integer not null,
+    retained_users integer not null,
+    data_origin varchar(16) not null,
+    calculation_version integer not null,
+    calculated_at timestamp not null,
+    primary key (cohort_date, retention_day)
+);

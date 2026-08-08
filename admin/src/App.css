@@ -93,7 +93,9 @@ h1, h2, h3, p { margin-top: 0; }
 .sidebar-brand { padding: 28px 22px 22px; border-bottom: 1px solid #ffffff14; }
 .sidebar-brand strong { display: block; color: #f3eee0; font-family: serif; font-size: 27px; letter-spacing: .08em; }
 .sidebar-brand span { color: #88a998; font-size: 10px; letter-spacing: .1em; }
-.sidebar nav { min-height: 0; flex: 1; display: grid; align-content: start; gap: 3px; padding: 16px 10px; overflow-y: auto; }
+.sidebar nav { min-height: 0; flex: 1; display: grid; align-content: start; gap: 15px; padding: 14px 10px; overflow-y: auto; }
+.nav-group { display: grid; gap: 2px; }
+.nav-group h2 { margin: 0 13px 4px; color: #668173; font-size: 9px; font-weight: 650; letter-spacing: .12em; }
 .sidebar nav button { display: grid; gap: 2px; min-height: 52px; padding: 10px 13px; color: #bac8c0; text-align: left; background: transparent; border: 0; border-left: 3px solid transparent; }
 .sidebar nav small { color: #7f9a8c; font-size: 9px; letter-spacing: .14em; }
 .sidebar nav button[aria-current="page"] { color: #fff; background: #ffffff0b; border-left-color: #82b29c; }
@@ -146,6 +148,7 @@ h1, h2, h3, p { margin-top: 0; }
 .operation-alerts strong { flex: 0 0 auto; font-size: 13px; }
 .operation-alerts div { display: grid; gap: 4px; }
 .operation-alerts p { margin: 0; font-size: 12px; line-height: 1.55; }
+.data-freshness { color: var(--muted); font-size: 12px; white-space: nowrap; }
 
 /* Panels and tables */
 .panel, .release-card, .model-card { background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow); }
