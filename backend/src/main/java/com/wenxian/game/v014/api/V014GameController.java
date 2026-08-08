@@ -21,6 +21,8 @@ import com.wenxian.game.v014.service.V014ModelPreferenceService;
 import com.wenxian.game.v014.service.V014WorldCatalog;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -32,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -46,11 +49,14 @@ public class V014GameController {
     private final V014CharacterRouteService characterRoutes;
     private final GameVersionService version;
     private final ActiveSavePolicyService savePolicy;
+    private final boolean persistedRuntimeEnabled;
 
     public V014GameController(AuthService auth, V014GameService game,
                               V014WorldCatalog worlds, V014ModelPreferenceService models,
                               V014CharacterRouteService characterRoutes, GameVersionService version,
-                              ActiveSavePolicyService savePolicy) {
+                              ActiveSavePolicyService savePolicy,
+                              @Value("${wenxian.story.persisted-runtime-enabled:false}")
+                              boolean persistedRuntimeEnabled) {
         this.auth = auth;
         this.game = game;
         this.worlds = worlds;
@@ -58,12 +64,14 @@ public class V014GameController {
         this.characterRoutes = characterRoutes;
         this.version = version;
         this.savePolicy = savePolicy;
+        this.persistedRuntimeEnabled = persistedRuntimeEnabled;
     }
 
     @PostMapping("/character-routes")
     public CharacterRouteResponse characterRoutes(
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @Valid @RequestBody CharacterRouteRequest request) {
+        requireCurrentClient();
         return characterRoutes.generate(user(token), request);
     }
 
@@ -77,17 +85,20 @@ public class V014GameController {
     @PostMapping("/saves")
     public SaveResponse create(@CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
                                @Valid @RequestBody CreateSaveRequest request) {
+        requireCurrentClient();
         return game.create(user(token), request);
     }
 
     @GetMapping("/saves")
     public List<SaveSummary> saves(@CookieValue(name = AuthService.COOKIE_NAME, required = false) String token) {
+        requireCurrentClient();
         return game.list(user(token));
     }
 
     @GetMapping("/saves/{saveId}")
     public SaveResponse save(@CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
                              @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId) {
+        requireCurrentClient();
         return game.get(user(token), saveId);
     }
 
@@ -95,6 +106,7 @@ public class V014GameController {
     public SaveResponse turn(@CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
                              @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
                              @Valid @RequestBody TurnRequest request) {
+        requireCurrentClient();
         return game.takeTurn(user(token), saveId, request.action(), request.requestId());
     }
 
@@ -102,12 +114,14 @@ public class V014GameController {
     public SaveResponse correct(@CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
                                 @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
                                 @Valid @RequestBody CorrectionRequest request) {
+        requireCurrentClient();
         return game.correct(user(token), saveId, request.instruction());
     }
 
     @DeleteMapping("/saves/{saveId}")
     public void archive(@CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
                         @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId) {
+        requireCurrentClient();
         game.archive(user(token), saveId);
     }
 
@@ -117,6 +131,7 @@ public class V014GameController {
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,100}") String itemId,
             @RequestParam long revision) {
+        requireCurrentClient();
         return game.removeItem(user(token), saveId, itemId, revision);
     }
 
@@ -126,6 +141,7 @@ public class V014GameController {
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,80}") String saveId,
             @PathVariable @Pattern(regexp = "[a-zA-Z0-9-]{8,100}") String characterId,
             @RequestParam long revision) {
+        requireCurrentClient();
         return game.untrackCharacter(user(token), saveId, characterId, revision);
     }
 
@@ -158,4 +174,15 @@ public class V014GameController {
     }
 
     private UserIdentity user(String token) { return auth.requireUser(token); }
+
+    /**
+     * 统一命卷运行时启用后，旧版页面不得继续写 V0.14 源表。旧浏览器只需刷新页面，
+     * 即会加载使用 /api/v1/story 的新版前端；模型密钥接口不在此限制范围内。
+     */
+    private void requireCurrentClient() {
+        if (persistedRuntimeEnabled) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "命卷已经完成升级，请刷新页面后继续游玩；当前操作没有消耗回合。");
+        }
+    }
 }

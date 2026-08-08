@@ -81,7 +81,7 @@ create table if not exists story_entity (
     save_id varchar(80) not null comment '所属统一命卷ID',
     entity_type varchar(24) not null comment '实体类型：ITEM、ABILITY、CHARACTER、FACTION或LOCATION',
     name varchar(120) not null comment '实体当前名称',
-    status varchar(80) not null comment '实体当前自然状态编码或简短状态',
+    status varchar(255) not null comment '实体当前自然状态编码或简短自然语言状态',
     visible boolean not null default true comment '是否进入玩家当前列表和常规Prompt',
     summary text not null comment '跨回合需要保持一致的当前事实摘要',
     attributes_json longtext not null comment '不同实体的可扩展属性JSON',
