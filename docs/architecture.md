@@ -376,6 +376,29 @@ public interface StateMigrator {
 单条历史补丁隔离不应阻断当前权威命卷迁移。
 实体平均约 30 个、单档最高 989 个，迁移可保留隐藏历史实体，但运行时上下文和玩家列表只能加载可见实体。
 
+全量复核统一使用 `V014MigrationFullAuditRdsReadOnlyTest`。该入口必须由
+`WENXIAN_RDS_FULL_AUDIT=true` 显式开启，并要求单独提供 RDS URL、账号和密码；测试会同时设置 JDBC 只读连接、
+MySQL `REPEATABLE READ` 与 `READ ONLY` 事务，在同一数据库快照中按稳定 ID 游标扫描全部命卷。报告默认写入本地
+`backend/target/v014-migration-audit.json`，只包含命卷 ID、结论、问题码、数量和哈希，不包含邮箱、剧情正文或完整状态。
+执行命令：
+
+```bash
+cd backend
+WENXIAN_RDS_FULL_AUDIT=true \
+WENXIAN_RDS_URL='jdbc:mysql://数据库地址:3306/wenxian?...' \
+WENXIAN_RDS_USER='只读账号' \
+WENXIAN_RDS_PASSWORD='数据库密码' \
+mvn -Dtest=V014MigrationFullAuditRdsReadOnlyTest test
+```
+
+报告属于本地审计产物，不得提交仓库。若扫描总数与事务快照内源命卷总数不一致，测试必须失败；任何 `INVALID`、
+`ERROR` 或新增问题码都必须先人工核对，不能直接进入批量准备阶段。
+
+2026-08-08 全量只读复核结果：一致性快照内 920/920 份命卷全部完成预演，共 29,352 回合、27,910 个实体、
+23,071 条记忆；未发现 `INVALID` 或 `ERROR`。全部命卷显示为 `WARNING` 是因为旧结构没有保存实体首次出现回合，
+其中 799 份还包含按世界时间推定发生回合的记忆；另包含前述 3 个确定性修复补丁和 1 个隔离补丁，没有新增问题码。
+通过京东云 SSH 通道逐命卷复用正式预演逻辑耗时约 16.5 分钟，因此该入口只用于离线发布审计，不接入管理台在线请求。
+
 ### V0.13 旧世承接
 
 V0.13 原表不直接变为当前可写命卷。适配器统一展示旧档；玩家发起承接时复制姓名、性别、种族、出身、最后可靠境界和地点、重要能力、持有物品、重要人物以及关键经历摘要。旧体力、追查、旧裁决、异常货币和临时路人不迁移。原档案永远保留。
