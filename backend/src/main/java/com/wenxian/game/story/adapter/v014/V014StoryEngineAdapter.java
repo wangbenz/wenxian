@@ -125,14 +125,13 @@ public class V014StoryEngineAdapter implements StoryEngine {
 
     @Override
     public SaveResponse takeTurn(UserIdentity user, String saveId, TurnRequest request) {
-        assertRevision(user, saveId, request.expectedRevision());
-        return stable(() -> map(game.takeTurn(user, saveId, request.action(), request.requestId())));
+        return stable(() -> map(game.takeTurn(user, saveId, request.action(), request.requestId(),
+                request.expectedRevision())));
     }
 
     @Override
     public SaveResponse correct(UserIdentity user, String saveId, CorrectionRequest request) {
-        assertRevision(user, saveId, request.expectedRevision());
-        return stable(() -> map(game.correct(user, saveId, request.instruction())));
+        return stable(() -> map(game.correct(user, saveId, request.instruction(), request.expectedRevision())));
     }
 
     @Override
@@ -157,10 +156,6 @@ public class V014StoryEngineAdapter implements StoryEngine {
         throw GameApiException.of(HttpStatus.NOT_FOUND, "STORY_ENTITY_NOT_FOUND", "STATE",
                 "当前记录中没有这个内容", "它可能已经被整理，或命卷刚刚在其他页面发生了变化。",
                 List.of("刷新角色页后再查看"));
-    }
-
-    private void assertRevision(UserIdentity user, String saveId, long expectedRevision) {
-        assertExpectedRevision(get(user, saveId).revision(), expectedRevision);
     }
 
     private void assertExpectedRevision(long currentRevision, long expectedRevision) {

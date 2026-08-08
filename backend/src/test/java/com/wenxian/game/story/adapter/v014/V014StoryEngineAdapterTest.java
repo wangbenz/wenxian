@@ -99,7 +99,13 @@ class V014StoryEngineAdapterTest {
 
         @Override
         public V014ApiModels.SaveResponse takeTurn(UserIdentity user, String saveId,
-                                                    String action, String requestId) {
+                                                    String action, String requestId,
+                                                    long expectedRevision) {
+            if (expectedRevision != response.revision()) {
+                throw GameApiException.of(HttpStatus.CONFLICT, "STATE_CONFLICT", "STATE",
+                        "命卷已经在别处发生变化", "已阻止覆盖较新的记录，请刷新后再操作。",
+                        List.of("刷新当前命卷后继续"));
+            }
             turnCalled = true;
             return response;
         }

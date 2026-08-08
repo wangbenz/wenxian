@@ -118,6 +118,18 @@ public class V014GameService {
         }
     }
 
+    /**
+     * 兼容统一命卷 API 的乐观锁入口。修订号检查与回合读取必须处于同一账号锁内，
+     * 防止两个请求先后通过外层检查后覆盖较新的命卷。
+     */
+    public SaveResponse takeTurn(UserIdentity user, String saveId, String action,
+                                 String suppliedRequestId, long expectedRevision) {
+        synchronized (accountLock(user.userId())) {
+            assertRevision(user, saveId, expectedRevision);
+            return takeTurnLocked(user, saveId, action, suppliedRequestId);
+        }
+    }
+
     private SaveResponse takeTurnLocked(UserIdentity user, String saveId, String action, String suppliedRequestId) {
         V014SaveStore.StoredSave saved = saves.requireOwned(user.userId(), saveId);
         if (!"ACTIVE".equals(saved.status())) {
@@ -152,6 +164,14 @@ public class V014GameService {
 
     public SaveResponse correct(UserIdentity user, String saveId, String instruction) {
         synchronized (accountLock(user.userId())) {
+            return correctLocked(user, saveId, instruction);
+        }
+    }
+
+    /** 统一命卷 API 的带修订号修正入口，检查失败时不会进入状态转换或写入事务。 */
+    public SaveResponse correct(UserIdentity user, String saveId, String instruction, long expectedRevision) {
+        synchronized (accountLock(user.userId())) {
+            assertRevision(user, saveId, expectedRevision);
             return correctLocked(user, saveId, instruction);
         }
     }
@@ -298,6 +318,15 @@ public class V014GameService {
                     "命卷已经在别处发生变化", "已阻止覆盖较新的记录，请刷新后再操作。", List.of("刷新角色页后重试"));
         }
         return saved;
+    }
+
+    private void assertRevision(UserIdentity user, String saveId, long expectedRevision) {
+        V014SaveStore.StoredSave saved = saves.requireOwned(user.userId(), saveId);
+        if (saved.revision() != expectedRevision) {
+            throw GameApiException.of(HttpStatus.CONFLICT, "STATE_CONFLICT", "STATE",
+                    "命卷已经在别处发生变化", "已阻止覆盖较新的记录，请刷新后再操作。",
+                    List.of("刷新当前命卷后继续"));
+        }
     }
 
     private long persistManualChange(String userId, V014SaveStore.StoredSave saved,

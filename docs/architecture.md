@@ -257,7 +257,7 @@ POST /api/v1/story/saves/{saveId}/turns
 }
 ```
 
-`expectedRevision` 必须与服务端当前修订号一致。兼容期由旧引擎适配器校验，统一命卷表接管后由数据库乐观锁和回合事务再次校验。
+`expectedRevision` 必须与服务端当前修订号一致。兼容期由旧引擎入口在账号锁内部校验，不能在适配器先读后写；统一命卷表接管后由数据库乐观锁和回合事务再次校验。
 
 ### 修正命卷
 
@@ -271,7 +271,7 @@ POST /api/v1/story/saves/{saveId}/corrections
 
 修正属于显式状态写入，也必须携带当前修订号；失败时不得覆盖较新的命卷。
 
-成功响应返回完整当前视图、最新 `revision`、回合号和 capabilities。`requestId` 已提交时返回同一结果；同账号另一轮仍在生成时返回可重试的 `TURN_IN_PROGRESS`，不得在服务端排队执行。
+成功响应返回完整当前视图、最新 `revision`、回合号和 capabilities。`requestId` 已提交时返回同一结果；正式统一引擎应在同账号另一轮仍在生成时返回可重试的 `TURN_IN_PROGRESS`。兼容引擎至少必须用账号锁与 `revision` 保证并发请求只能成功一次，不得覆盖较新的命卷。
 
 ### 承接旧世
 
