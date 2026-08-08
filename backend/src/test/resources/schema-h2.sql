@@ -361,3 +361,159 @@ create table v014_user_model_preference (
     updated_at timestamp not null,
     constraint fk_v014_model_preference_user foreign key (user_id) references app_user(id) on delete cascade
 );
+
+create table story_engine_catalog (
+    engine_code varchar(40) not null,
+    engine_version integer not null,
+    display_name varchar(80) not null,
+    status varchar(24) not null,
+    min_schema_version integer not null,
+    current_schema_version integer not null,
+    new_save_enabled boolean not null default false,
+    continuation_enabled boolean not null default false,
+    created_at timestamp not null,
+    updated_at timestamp not null,
+    primary key (engine_code, engine_version)
+);
+
+insert into story_engine_catalog(engine_code, engine_version, display_name, status,
+    min_schema_version, current_schema_version, new_save_enabled, continuation_enabled, created_at, updated_at)
+values ('LIGHT_NARRATIVE', 1, '轻叙事引擎', 'DRAFT', 1, 1, false, false, current_timestamp, current_timestamp);
+
+create table story_save (
+    id varchar(80) primary key,
+    user_id varchar(64) not null,
+    slot_no smallint not null,
+    status varchar(24) not null,
+    world_code varchar(40) not null,
+    engine_code varchar(40) not null,
+    engine_version integer not null,
+    state_schema_version integer not null,
+    source_type varchar(24) not null,
+    source_edition varchar(32),
+    source_save_id varchar(80),
+    parent_save_id varchar(80),
+    state_json clob not null,
+    revision bigint not null default 1,
+    turn_number integer not null default 0,
+    created_release varchar(32) not null,
+    last_played_release varchar(32) not null,
+    created_at timestamp not null,
+    updated_at timestamp not null,
+    unique(user_id, slot_no),
+    unique(source_type, source_save_id),
+    constraint fk_story_save_user foreign key (user_id) references app_user(id) on delete cascade,
+    constraint fk_story_save_parent foreign key (parent_save_id) references story_save(id),
+    constraint fk_story_save_engine foreign key (engine_code, engine_version)
+        references story_engine_catalog(engine_code, engine_version)
+);
+
+create table story_turn (
+    id varchar(80) primary key,
+    save_id varchar(80) not null,
+    request_id varchar(80) not null,
+    turn_number integer not null,
+    player_action clob not null,
+    narrative_text clob not null,
+    choices_json clob not null,
+    state_patch_json clob not null,
+    world_time_before bigint not null,
+    world_time_after bigint not null,
+    engine_code varchar(40) not null,
+    engine_version integer not null,
+    prompt_version varchar(64) not null,
+    provider varchar(32) not null,
+    model varchar(120) not null,
+    credential_source varchar(20) not null,
+    prompt_tokens integer not null default 0,
+    completion_tokens integer not null default 0,
+    cache_hit_tokens integer not null default 0,
+    cache_miss_tokens integer not null default 0,
+    latency_ms bigint not null default 0,
+    release_version varchar(32) not null,
+    created_at timestamp not null,
+    unique(save_id, turn_number),
+    unique(save_id, request_id),
+    constraint fk_story_turn_save foreign key (save_id) references story_save(id) on delete cascade
+);
+
+create table story_entity (
+    id varchar(80) primary key,
+    save_id varchar(80) not null,
+    entity_type varchar(24) not null,
+    name varchar(120) not null,
+    status varchar(80) not null,
+    visible boolean not null default true,
+    summary clob not null,
+    attributes_json clob not null,
+    first_turn integer not null,
+    last_changed_turn integer not null,
+    created_at timestamp not null,
+    updated_at timestamp not null,
+    constraint fk_story_entity_save foreign key (save_id) references story_save(id) on delete cascade
+);
+
+create table story_memory (
+    id varchar(80) primary key,
+    save_id varchar(80) not null,
+    memory_type varchar(24) not null,
+    importance varchar(24) not null,
+    title varchar(160) not null,
+    summary clob not null,
+    occurred_turn integer not null,
+    world_time bigint not null,
+    status varchar(24) not null,
+    created_at timestamp not null,
+    constraint fk_story_memory_save foreign key (save_id) references story_save(id) on delete cascade
+);
+
+create table story_conversation (
+    save_id varchar(80) primary key,
+    rolling_summary clob not null,
+    summarized_through_turn integer not null default 0,
+    summary_schema_version integer not null default 1,
+    updated_at timestamp not null,
+    constraint fk_story_conversation_save foreign key (save_id) references story_save(id) on delete cascade
+);
+
+create table story_state_correction (
+    id varchar(80) primary key,
+    save_id varchar(80) not null,
+    user_id varchar(64) not null,
+    instruction_text clob not null,
+    correction_type varchar(32) not null,
+    before_json clob not null,
+    after_json clob not null,
+    created_at timestamp not null,
+    constraint fk_story_correction_save foreign key (save_id) references story_save(id) on delete cascade,
+    constraint fk_story_correction_user foreign key (user_id) references app_user(id) on delete cascade
+);
+
+create table story_save_migration (
+    id varchar(80) primary key,
+    source_engine varchar(40) not null,
+    source_save_id varchar(80) not null,
+    target_engine varchar(40) not null,
+    target_save_id varchar(80),
+    source_schema_version integer not null,
+    target_schema_version integer not null,
+    status varchar(24) not null,
+    before_hash varchar(128) not null,
+    after_hash varchar(128),
+    error_message varchar(1000),
+    started_at timestamp,
+    completed_at timestamp,
+    unique(source_engine, source_save_id),
+    constraint fk_story_migration_target foreign key (target_save_id) references story_save(id)
+);
+
+create table user_model_preference (
+    user_id varchar(64) primary key,
+    provider_code varchar(32) not null,
+    model_code varchar(80) not null,
+    credential_source varchar(20) not null,
+    updated_at timestamp not null,
+    constraint fk_user_model_preference_user foreign key (user_id) references app_user(id) on delete cascade,
+    constraint fk_user_model_preference_model foreign key (provider_code, model_code)
+        references ai_provider_model(provider_code, model_code)
+);
