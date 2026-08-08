@@ -57,6 +57,25 @@ public class StorySaveRepository {
                 """, (row, index) -> map(row), userId);
     }
 
+    /** 统计账号当前仍可游玩的命卷；封存档案不占存活上限。 */
+    public int countActive(String userId) {
+        Integer value = jdbc.queryForObject("""
+                select count(*) from story_save where user_id=? and status='ACTIVE'
+                """, Integer.class, userId);
+        return value == null ? 0 : value;
+    }
+
+    /**
+     * 为新命卷分配只增不复用的展示序号。调用方必须先锁定全局命卷上限配置并处于同一事务，
+     * 防止并发创建拿到相同序号；已封存命卷保留原序号，不能被新角色覆盖。
+     */
+    public int nextSlotNo(String userId) {
+        Integer value = jdbc.queryForObject("""
+                select coalesce(max(slot_no), 0) + 1 from story_save where user_id=?
+                """, Integer.class, userId);
+        return value == null ? 1 : value;
+    }
+
     /** 将可玩命卷封存并递增 revision；已封存或不属于该账号时拒绝静默成功。 */
     public void archive(String userId, String saveId) {
         int changed = jdbc.update("""

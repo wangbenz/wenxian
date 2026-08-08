@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.api.GameApiException;
 import com.wenxian.game.auth.AuthService.UserIdentity;
 import com.wenxian.game.config.RuntimeAiConfigService;
+import com.wenxian.game.service.ActiveSavePolicyService;
 import com.wenxian.game.service.GameVersionService;
 import com.wenxian.game.service.PlayerAiService;
 import com.wenxian.game.story.model.StoryApiModels.Ability;
@@ -25,6 +26,7 @@ import com.wenxian.game.story.model.StoryApiModels.SaveSummary;
 import com.wenxian.game.story.model.StoryApiModels.StoryState;
 import com.wenxian.game.story.model.StoryApiModels.TurnRequest;
 import com.wenxian.game.story.model.StoryApiModels.WorldProfile;
+import com.wenxian.game.story.model.StoryApiModels.WorldOption;
 import com.wenxian.game.story.persistence.StoryConversationRepository;
 import com.wenxian.game.story.persistence.StoryCorrectionRepository;
 import com.wenxian.game.story.persistence.StoryEntityRepository;
@@ -41,7 +43,9 @@ import com.wenxian.game.v014.model.V014State;
 import com.wenxian.game.v014.persistence.V014TurnStore.RecentTurn;
 import com.wenxian.game.v014.service.V014ModelPreferenceService;
 import com.wenxian.game.v014.service.V014ModelPreferenceService.ResolvedRoute;
+import com.wenxian.game.v014.service.V014CharacterRouteService;
 import com.wenxian.game.v014.service.V014StateReducer;
+import com.wenxian.game.v014.service.V014WorldCatalog;
 import dev.langchain4j.exception.AuthenticationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -93,6 +97,9 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
     private final V014StoryAgent agent;
     private final V014StateReducer reducer;
     private final V014ModelPreferenceService models;
+    private final V014WorldCatalog worlds;
+    private final V014CharacterRouteService characterRoutes;
+    private final ActiveSavePolicyService savePolicy;
     private final PlayerAiService playerAi;
     private final GameVersionService releases;
     private final TransactionTemplate transactions;
@@ -112,6 +119,9 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
             V014StoryAgent agent,
             V014StateReducer reducer,
             V014ModelPreferenceService models,
+            V014WorldCatalog worlds,
+            V014CharacterRouteService characterRoutes,
+            ActiveSavePolicyService savePolicy,
             PlayerAiService playerAi,
             GameVersionService releases,
             TransactionTemplate transactions,
@@ -127,6 +137,9 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         this.agent = agent;
         this.reducer = reducer;
         this.models = models;
+        this.worlds = worlds;
+        this.characterRoutes = characterRoutes;
+        this.savePolicy = savePolicy;
         this.playerAi = playerAi;
         this.releases = releases;
         this.transactions = transactions;
@@ -152,17 +165,73 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
 
     @Override
     public BootstrapResponse bootstrap() {
-        throw creationNotEnabled();
+        assertCreationEnabled();
+        List<WorldOption> options = worlds.all().stream()
+                .map(world -> new WorldOption(world.code(), world.name(), world.premise(),
+                        world.cultivationStyle(), world.openingRegion(), world.custom(),
+                        world.available(), world.availabilityNote()))
+                .toList();
+        return new BootstrapResponse(releases.current(), savePolicy.maximum(), descriptor(), options,
+                List.of("人族", "妖族", "灵族", "自定种族"),
+                List.of("凡俗出身", "宗门弟子", "世家之后", "王族血脉", "妖王后代", "器物化灵", "自由描述"));
     }
 
     @Override
     public CharacterRouteResponse characterRoutes(UserIdentity user, CharacterRouteRequest request) {
-        throw creationNotEnabled();
+        assertCreationEnabled();
+        var result = characterRoutes.generate(user,
+                new com.wenxian.game.v014.model.V014ApiModels.CharacterRouteRequest(
+                        request.worldCode(), request.customWorld(), request.playerName(), request.race(),
+                        request.gender(), request.roleSeed(), request.preferenceSeed()));
+        return new CharacterRouteResponse(result.routes().stream()
+                .map(route -> new com.wenxian.game.story.model.StoryApiModels.CharacterRoute(
+                        route.id(), route.title(), route.origin(), route.opening(), route.preference()))
+                .toList());
     }
 
     @Override
     public SaveResponse create(UserIdentity user, CreateSaveRequest request) {
-        throw creationNotEnabled();
+        assertCreationEnabled();
+        synchronized (accountLock(user.userId())) {
+            StoredSave created = transactions.execute(status -> createLocked(user, request));
+            if (created == null) throw new IllegalStateException("统一命卷创建事务没有返回结果");
+            return response(user.userId(), created, readState(created));
+        }
+    }
+
+    private StoredSave createLocked(UserIdentity user, CreateSaveRequest request) {
+        int maximum = savePolicy.lockMaximum();
+        if (saves.countActive(user.userId()) >= maximum) {
+            throw GameApiException.of(HttpStatus.CONFLICT, "ACTIVE_SAVE_LIMIT_REACHED", "STATE",
+                    "当前账号的存活命卷已经达到上限",
+                    "请先继续现有命卷，或将不再游玩的角色封存为只读档案。",
+                    List.of("返回我的命卷", "封存一名现有角色"));
+        }
+        int slotNo = saves.nextSlotNo(user.userId());
+        String saveId = SAVE_PREFIX + UUID.randomUUID();
+        V014State.WorldProfile world = worlds.resolve(request.worldCode(), request.customWorld());
+        String preference = text(request.storyPreference(), "自由探索，机缘与风险并存");
+        V014State.Protagonist protagonist = new V014State.Protagonist(
+                request.playerName().strip(), request.race().strip(), request.gender().strip(),
+                request.origin().strip(), initialRealm(request.race()), "尚未定下，随此生经历逐渐形成", preference);
+        String opening = text(request.opening(), "你的人生并非从同一扇门开始。此刻，你身在"
+                + world.openingRegion() + "，过往出身已经落定，前路却仍由自己选择。");
+        V014State state = new V014State(14, saveId, 0, "ACTIVE", world, protagonist, 0,
+                world.openingRegion(), "神完气足", "命卷初开", opening,
+                List.of(new V014State.Choice(id("choice"), "观察周围", "先弄清自己身处何地与眼前局势。"),
+                        new V014State.Choice(id("choice"), "追寻旧因", "从自己的出身与未竟之事开始行动。"),
+                        new V014State.Choice(id("choice"), "主动寻机缘", "不等待命运安排，寻找修行的第一步。")),
+                List.of(), List.of(), List.of(),
+                List.of(new V014State.Memory(id("memory"), "此生来处", protagonist.origin(), 0, "KEY")));
+        String release = releases.current();
+        Instant now = Instant.now();
+        saves.insert(new com.wenxian.game.story.persistence.StoryPersistenceModels.NewSave(
+                saveId, user.userId(), slotNo, "ACTIVE", world.code(), ENGINE_CODE, ENGINE_VERSION,
+                STATE_SCHEMA_VERSION, "NATIVE", release, null, null, coreState(state), 0,
+                release, release, now));
+        appendNewMemories(saveId, state);
+        return saves.findOwned(user.userId(), saveId)
+                .orElseThrow(() -> new IllegalStateException("统一命卷创建后无法回读：" + saveId));
     }
 
     @Override
@@ -561,9 +630,22 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         return List.of("READ", "PLAY", "ARCHIVE", "CORRECT", "REMOVE_ENTITY");
     }
 
-    private IllegalStateException creationNotEnabled() {
-        return new IllegalStateException("通用表运行时尚未接管新命卷创建");
+    private void assertCreationEnabled() {
+        if (!enabled) throw new IllegalStateException("通用表运行时尚未启用");
     }
+
+    private String initialRealm(String race) {
+        String value = race.toLowerCase(Locale.ROOT);
+        if (value.contains("妖")) return "启灵";
+        if (value.contains("灵")) return "凝形";
+        return "凡境";
+    }
+
+    private String text(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.strip();
+    }
+
+    private String id(String prefix) { return prefix + "-" + UUID.randomUUID(); }
 
     private JsonNode readJson(String value) {
         try {

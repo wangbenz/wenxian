@@ -2,7 +2,9 @@ package com.wenxian.game.story.engine;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.wenxian.game.api.GameApiException;
 import com.wenxian.game.auth.AuthService.UserIdentity;
+import com.wenxian.game.service.ActiveSavePolicyService;
 import com.wenxian.game.service.GameVersionService;
 import com.wenxian.game.story.persistence.StoryConversationRepository;
 import com.wenxian.game.story.persistence.StoryCorrectionRepository;
@@ -16,10 +18,12 @@ import com.wenxian.game.story.persistence.StorySaveRepository;
 import com.wenxian.game.story.persistence.StoryTurnRepository;
 import com.wenxian.game.story.model.StoryApiModels.TurnRequest;
 import com.wenxian.game.story.model.StoryApiModels.CorrectionRequest;
+import com.wenxian.game.story.model.StoryApiModels.CreateSaveRequest;
 import com.wenxian.game.v014.model.V014ApiModels.ModelPreference;
 import com.wenxian.game.v014.model.V014State;
 import com.wenxian.game.v014.service.V014ModelPreferenceService;
 import com.wenxian.game.v014.service.V014StateReducer;
+import com.wenxian.game.v014.service.V014WorldCatalog;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -35,6 +39,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PersistedLightNarrativeEngineTest {
     private static final UserIdentity USER = new UserIdentity("story-user", "story@test.local", true);
@@ -120,6 +125,39 @@ class PersistedLightNarrativeEngineTest {
         }
     }
 
+    @Test
+    void createsInUnifiedTablesAndArchivedHistoryDoesNotConsumeActiveLimit() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            saves.insert(new NewSave("story-existing-active", USER.userId(), 1, "ACTIVE", "XUANXU",
+                    "LIGHT_NARRATIVE", 1, 1, "NATIVE", "V0.14", null, null,
+                    core(), 3, "V0.14", "V0.14", Instant.now()));
+            for (int slot = 2; slot <= 14; slot++) {
+                saves.insert(new NewSave("story-archive-" + slot, USER.userId(), slot, "ARCHIVED", "XUANXU",
+                        "LIGHT_NARRATIVE", 1, 1, "NATIVE", "V0.14", null, null,
+                        core(), slot, "V0.14", "V0.14", Instant.now()));
+            }
+            PersistedLightNarrativeEngine engine = engine(database, saves, entities, memories);
+            CreateSaveRequest request = new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索");
+
+            var created = engine.create(USER, request);
+
+            assertTrue(created.saveId().startsWith("story-"));
+            assertEquals(15, saves.findOwned(USER.userId(), created.saveId()).orElseThrow().slotNo());
+            assertEquals(2, saves.countActive(USER.userId()));
+            assertEquals("楚星河", created.state().protagonist().name());
+            GameApiException error = assertThrows(GameApiException.class, () -> engine.create(USER, request));
+            assertEquals("ACTIVE_SAVE_LIMIT_REACHED", error.code());
+        } finally {
+            database.shutdown();
+        }
+    }
+
     private PersistedLightNarrativeEngine engine(EmbeddedDatabase database, StorySaveRepository saves,
                                                   StoryEntityRepository entities,
                                                   StoryMemoryRepository memories) {
@@ -130,9 +168,11 @@ class PersistedLightNarrativeEngineTest {
                                                   StoryEntityRepository entities,
                                                   StoryMemoryRepository memories, boolean enabled) {
         JdbcTemplate jdbc = new JdbcTemplate(database);
+        ActiveSavePolicyService savePolicy = new ActiveSavePolicyService(jdbc);
         return new PersistedLightNarrativeEngine(saves, new StoryTurnRepository(jdbc, mapper), entities, memories,
                 new StoryConversationRepository(jdbc), new StoryCorrectionRepository(jdbc, mapper), null,
-                new V014StateReducer(), new StubModels(), null, new GameVersionService(jdbc),
+                new V014StateReducer(), new StubModels(), new V014WorldCatalog(false), null, savePolicy,
+                null, new GameVersionService(jdbc),
                 new TransactionTemplate(new DataSourceTransactionManager(database)), mapper, enabled,
                 "https://example.com");
     }
@@ -144,6 +184,8 @@ class PersistedLightNarrativeEngineTest {
         Timestamp now = Timestamp.from(Instant.now());
         jdbc.update("insert into app_user(id,email,status,registered_at,last_login_at) values (?,?,?,?,?)",
                 USER.userId(), USER.email(), "ACTIVE", now, now);
+        jdbc.update("insert into gameplay_config(config_key,config_value,updated_at) values (?,?,?)",
+                ActiveSavePolicyService.CONFIG_KEY, "2", now);
         return database;
     }
 

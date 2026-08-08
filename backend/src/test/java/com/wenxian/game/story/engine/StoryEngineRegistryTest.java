@@ -25,7 +25,7 @@ class StoryEngineRegistryTest {
     void routesSaveToTheOnlySupportingEngine() {
         FakeEngine legacy = new FakeEngine("LEGACY", "old-");
         FakeEngine current = new FakeEngine("LIGHT_NARRATIVE", "v014-save-");
-        StoryEngineRegistry registry = new StoryEngineRegistry(List.of(legacy, current), "LIGHT_NARRATIVE");
+        StoryEngineRegistry registry = new StoryEngineRegistry(List.of(legacy, current), "LIGHT_NARRATIVE", false);
 
         assertSame(current, registry.defaultEngine());
         assertSame(current, registry.requireForSave("v014-save-12345678"));
@@ -37,7 +37,7 @@ class StoryEngineRegistryTest {
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> new StoryEngineRegistry(List.of(
                         new FakeEngine("LIGHT_NARRATIVE", "a-"),
-                        new FakeEngine("LIGHT_NARRATIVE", "b-")), "LIGHT_NARRATIVE"));
+                        new FakeEngine("LIGHT_NARRATIVE", "b-")), "LIGHT_NARRATIVE", false));
 
         assertEquals("故事引擎路由编码重复：LIGHT_NARRATIVE", error.getMessage());
     }
@@ -45,12 +45,23 @@ class StoryEngineRegistryTest {
     @Test
     void unknownSaveNeverFallsBackToDefaultEngine() {
         StoryEngineRegistry registry = new StoryEngineRegistry(
-                List.of(new FakeEngine("LIGHT_NARRATIVE", "v014-save-")), "LIGHT_NARRATIVE");
+                List.of(new FakeEngine("LIGHT_NARRATIVE", "v014-save-")), "LIGHT_NARRATIVE", false);
 
         GameApiException error = assertThrows(GameApiException.class,
                 () -> registry.requireForSave("unmapped-save-123"));
 
         assertEquals("STORY_SAVE_NOT_FOUND", error.code());
+    }
+
+    @Test
+    void persistedRuntimeBecomesDefaultCreationRouteAfterCutover() {
+        FakeEngine legacy = new FakeEngine("LIGHT_NARRATIVE_V014", "v014-save-");
+        FakeEngine persisted = new FakeEngine(PersistedLightNarrativeEngine.ROUTE_CODE, "story-");
+
+        StoryEngineRegistry registry = new StoryEngineRegistry(
+                List.of(legacy, persisted), "LIGHT_NARRATIVE_V014", true);
+
+        assertSame(persisted, registry.defaultEngine());
     }
 
     private static final class FakeEngine implements StoryEngine {

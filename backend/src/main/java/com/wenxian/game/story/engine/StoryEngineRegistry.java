@@ -17,11 +17,13 @@ import java.util.Map;
  */
 @Component
 public class StoryEngineRegistry {
+    private static final String PERSISTED_ROUTE = PersistedLightNarrativeEngine.ROUTE_CODE;
     private final Map<String, StoryEngine> engines;
     private final StoryEngine defaultEngine;
 
     public StoryEngineRegistry(List<StoryEngine> registered,
-                               @Value("${wenxian.story.default-route:LIGHT_NARRATIVE_V014}") String defaultCode) {
+                               @Value("${wenxian.story.default-route:LIGHT_NARRATIVE_V014}") String defaultCode,
+                               @Value("${wenxian.story.persisted-runtime-enabled:false}") boolean persistedEnabled) {
         Map<String, StoryEngine> indexed = new LinkedHashMap<>();
         for (StoryEngine engine : registered) {
             String code = engine.routeCode();
@@ -30,9 +32,11 @@ public class StoryEngineRegistry {
             }
         }
         this.engines = Map.copyOf(indexed);
-        this.defaultEngine = indexed.get(defaultCode);
+        String effectiveDefault = persistedEnabled && indexed.containsKey(PERSISTED_ROUTE)
+                ? PERSISTED_ROUTE : defaultCode;
+        this.defaultEngine = indexed.get(effectiveDefault);
         if (defaultEngine == null) {
-            throw new IllegalStateException("默认故事引擎尚未注册：" + defaultCode);
+            throw new IllegalStateException("默认故事引擎尚未注册：" + effectiveDefault);
         }
     }
 
