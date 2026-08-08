@@ -59,6 +59,9 @@
 | `registration_contact_text` | 玩家反馈与社群入口 |
 | `legacy_archive_enabled` | 是否展示旧世档案 |
 | `legacy_fork_enabled` | 是否允许承接旧世 |
+| `story_migration_prepare_enabled` | 是否允许迁移器写入隔离候选，默认关闭 |
+| `story_migration_activation_enabled` | 是否允许逐份激活候选，默认关闭 |
+| `story_migration_batch_limit` | 单次预演或准备的最大命卷数，范围 1—50 |
 
 现有 `current_game_version` 在迁移期继续兼容，完成改造后改为 `current_release_version`。现有 `v014_platform_provider/model` 改为模型层中性配置。
 
@@ -221,6 +224,9 @@
 
 迁移分为两步：准备阶段将目标命卷保持为 `MIGRATING`，只有源数据哈希和目标回读哈希
 都通过复核后才能显式激活。`HASH_MISMATCH` 候选不进入玩家可玩列表。
+
+批量调度不新增任务队列表：`story_save_migration` 本身记录每份命卷进度，`gameplay_config` 保存准备、激活和
+单次批量上限。批量准备逐份提交事务，单份失败不会回滚其他已校验候选；激活永远是单份操作并再次复验双哈希。
 
 ## 11. `story_engine_catalog`：引擎目录
 

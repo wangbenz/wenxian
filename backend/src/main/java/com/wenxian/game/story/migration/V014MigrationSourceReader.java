@@ -18,6 +18,26 @@ public class V014MigrationSourceReader {
         this.jdbc = jdbc;
     }
 
+    /** 统计仍保存在 V0.14 旧表中的全部命卷，用于管理台展示迁移基数。 */
+    public long countAll() {
+        Long count = jdbc.queryForObject("select count(*) from v014_game_save", Long.class);
+        return count == null ? 0 : count;
+    }
+
+    /**
+     * 按稳定 ID 游标读取一小批源命卷。游标为空时从第一条开始；该方法不会因旧命卷是否已有迁移任务而跳过，
+     * 便于管理台完整观察 READY、SUCCESS 和异常任务。
+     */
+    public List<String> listSaveIdsAfter(String cursor, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 50));
+        if (cursor == null || cursor.isBlank()) {
+            return jdbc.query("select id from v014_game_save order by id limit ?",
+                    (row, index) -> row.getString(1), safeLimit);
+        }
+        return jdbc.query("select id from v014_game_save where id>? order by id limit ?",
+                (row, index) -> row.getString(1), cursor.strip(), safeLimit);
+    }
+
     /** 读取单份旧命卷及其关联事实；未找到时直接终止预演。 */
     public SourceSave read(String saveId) {
         SourceSaveHeader header = jdbc.query("""

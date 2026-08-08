@@ -25,6 +25,9 @@ wenxian:
   admin:
     initial-username: ${ADMIN_INITIAL_USERNAME:}
     initial-password: ${ADMIN_INITIAL_PASSWORD:}
+  game-service:
+    base-url: ${WENXIAN_GAME_SERVICE_BASE_URL:http://127.0.0.1:18080}
+    migration-admin-token: ${WENXIAN_MIGRATION_ADMIN_TOKEN:}
 
 deepseek:
   api-key: ${DEEPSEEK_API_KEY:}

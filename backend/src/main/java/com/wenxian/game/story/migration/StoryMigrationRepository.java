@@ -15,7 +15,11 @@ import org.springframework.stereotype.Repository;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
+
+import com.wenxian.game.story.migration.V014MigrationBatchModels.MigrationTaskItem;
 
 /**
  * 统一命卷迁移的专用写入与回读边界。它只写入 story 候选表和迁移审计表，
@@ -38,6 +42,33 @@ public class StoryMigrationRepository {
                 """, (row, index) -> new MigrationRecord(row.getString("id"), row.getString("source_save_id"),
                 row.getString("target_save_id"), row.getString("status"), row.getString("before_hash"),
                 row.getString("after_hash"), row.getString("error_message")), sourceSaveId).stream().findFirst();
+    }
+
+    /** 按状态汇总 V0.14 迁移任务，未知状态也会原样展示，避免管理台把异常数据吞掉。 */
+    public Map<String, Long> countByStatus() {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        jdbc.queryForList("""
+                select status,count(*) as total from story_save_migration
+                where source_engine='V014' group by status order by status
+                """).forEach(row -> counts.put(String.valueOf(row.get("status")),
+                ((Number) row.get("total")).longValue()));
+        return Map.copyOf(counts);
+    }
+
+    /** 读取最近迁移任务供管理台复核，不包含剧情正文和完整状态 JSON。 */
+    public List<MigrationTaskItem> recentTasks(int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        return jdbc.query("""
+                select source_save_id,target_save_id,status,before_hash,after_hash,error_message,
+                       started_at,completed_at
+                from story_save_migration where source_engine='V014'
+                order by coalesce(completed_at,started_at) desc,id desc limit ?
+                """, (row, index) -> new MigrationTaskItem(
+                row.getString("source_save_id"), row.getString("target_save_id"), row.getString("status"),
+                row.getString("before_hash"), row.getString("after_hash"), row.getString("error_message"),
+                row.getTimestamp("started_at") == null ? null : row.getTimestamp("started_at").toInstant(),
+                row.getTimestamp("completed_at") == null ? null : row.getTimestamp("completed_at").toInstant()),
+                safeLimit);
     }
 
     public void insertRunning(String migrationId, PreviewReport report) {

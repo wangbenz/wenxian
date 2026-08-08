@@ -116,6 +116,28 @@ export type OperationError = {
   httpStatus: number; message: string; diagnostic: string; email: string; playerName: string; at: string;
 };
 
+export type MigrationPolicy = { prepareEnabled: boolean; activationEnabled: boolean; batchLimit: number };
+export type MigrationOverview = {
+  sourceTotal: number; unprocessed: number; statusCounts: Record<string, number>; policy: MigrationPolicy;
+};
+export type MigrationPreviewItem = {
+  sourceSaveId: string; targetSaveId: string | null; previewStatus: "READY" | "WARNING" | "INVALID" | "ERROR";
+  migrationStatus: string; turns: number; entities: number; memories: number; issueCodes: string[];
+  beforeHash: string | null; afterHash: string | null; error: string | null;
+};
+export type MigrationPreviewPage = {
+  cursor: string; nextCursor: string | null; requestedLimit: number; items: MigrationPreviewItem[];
+};
+export type MigrationTask = {
+  sourceSaveId: string; targetSaveId: string | null; status: string; beforeHash: string; afterHash: string | null;
+  errorMessage: string | null; startedAt: string | null; completedAt: string | null;
+};
+export type MigrationOperationItem = {
+  sourceSaveId: string; success: boolean; stage: string; targetSaveId: string | null;
+  beforeHash: string | null; afterHash: string | null; message: string;
+};
+export type MigrationBatchResult = { requested: number; succeeded: number; failed: number; items: MigrationOperationItem[] };
+
 const TOKEN_KEY = "wenxian_admin_token";
 const BASE = "/api/admin";
 function token() { return window.sessionStorage.getItem(TOKEN_KEY); }
@@ -176,4 +198,10 @@ export const adminApi = {
   removeAccessWhitelist: (userId: string) => request<AccessControl>(`/access-control/whitelist/${encodeURIComponent(userId)}`, { method: "DELETE" }),
   operationLogs: () => request<Array<{ operation: string; detail: string; at: string }>>("/operation-logs"),
   operationErrors: (search = "", category = "", limit = 100) => request<OperationError[]>(`/operation-errors?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}&limit=${limit}`),
+  migrationOverview: () => request<MigrationOverview>("/story-migrations/overview"),
+  migrationPreview: (cursor = "", limit = 10) => request<MigrationPreviewPage>(`/story-migrations/preview?cursor=${encodeURIComponent(cursor)}&limit=${limit}`),
+  migrationTasks: (limit = 30) => request<MigrationTask[]>(`/story-migrations/tasks?limit=${limit}`),
+  prepareMigrations: (sourceSaveIds: string[]) => request<MigrationBatchResult>("/story-migrations/prepare", { method: "POST", body: JSON.stringify({ sourceSaveIds }) }),
+  activateMigration: (sourceSaveId: string, expectedBeforeHash: string, expectedAfterHash: string) => request<MigrationOperationItem>("/story-migrations/activate", { method: "POST", body: JSON.stringify({ sourceSaveId, expectedBeforeHash, expectedAfterHash }) }),
+  updateMigrationPolicy: (policy: MigrationPolicy) => request<MigrationPolicy>("/story-migrations/policy", { method: "POST", body: JSON.stringify(policy) }),
 };

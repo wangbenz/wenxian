@@ -1,10 +1,10 @@
 import "./App.css";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { adminApi, clearToken, isAuthenticated, setToken, type AccessControl, type ActionAdjudication, type AdminAccount, type AgentExecution, type DashboardData, type GameplayConfig, type GenerationProvider, type LifeSummary, type OperationError, type RegistrationConfig, type ReleaseNoteAdmin, type TurnPage, type TurnRankingItem, type TurnRow, type UserDetail, type UserRow, type V014Overview } from "./admin-api";
+import { adminApi, clearToken, isAuthenticated, setToken, type AccessControl, type ActionAdjudication, type AdminAccount, type AgentExecution, type DashboardData, type GameplayConfig, type GenerationProvider, type LifeSummary, type MigrationOverview, type MigrationPolicy, type MigrationPreviewPage, type MigrationTask, type OperationError, type RegistrationConfig, type ReleaseNoteAdmin, type TurnPage, type TurnRankingItem, type TurnRow, type UserDetail, type UserRow, type V014Overview } from "./admin-api";
 
-type Page = "dashboard" | "v014" | "users" | "errors" | "releases" | "models" | "limits" | "access" | "operations" | "admins" | "logs";
+type Page = "dashboard" | "v014" | "migrations" | "users" | "errors" | "releases" | "models" | "limits" | "access" | "operations" | "admins" | "logs";
 const NAV: Array<[Page, string, string]> = [
-  ["dashboard", "运营概览", "OVERVIEW"], ["v014", "V0.14 观察", "NEW EDITION"], ["users", "玩家档案", "PLAYERS"],
+  ["dashboard", "运营概览", "OVERVIEW"], ["v014", "V0.14 观察", "NEW EDITION"], ["migrations", "命卷迁移", "MIGRATION"], ["users", "玩家档案", "PLAYERS"],
   ["errors", "问题查询", "SUPPORT"],
   ["releases", "版本公告", "RELEASES"],
   ["models", "生成模型", "MODELS"], ["limits", "推演额度", "LIMITS"], ["access", "灰度访问", "ACCESS"], ["operations", "运营配置", "OPERATIONS"],
@@ -51,12 +51,96 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   const [page, setPage] = useState<Page>("dashboard"); const [open, setOpen] = useState(false); const [securityOpen, setSecurityOpen] = useState(false); const [registrationDate, setRegistrationDate] = useState("");
   const version = useLoad(() => adminApi.appVersion(), []);
   const item = NAV.find(([id]) => id === page)!;
-  return <div className="admin-shell"><aside aria-label="管理台导航" className={open ? "sidebar open" : "sidebar"}><button aria-label="关闭导航菜单" className="sidebar-close" onClick={() => setOpen(false)}>×</button><div className="sidebar-brand"><strong>问仙录</strong><span>试玩运营台 · {version.data?.version ?? "同步中"}</span></div><nav>{NAV.map(([id, label, english]) => <button aria-current={page === id ? "page" : undefined} key={id} onClick={() => { if (id === "users") setRegistrationDate(""); setPage(id); setOpen(false); }}><small>{english}</small>{label}</button>)}</nav><div className="sidebar-actions"><button onClick={() => { setSecurityOpen(true); setOpen(false); }}>修改管理密码</button><button onClick={onLogout}>退出管理台</button></div></aside>{open && <button aria-label="关闭导航菜单" className="sidebar-mask" onClick={() => setOpen(false)} />}<main className="admin-main"><header><button aria-expanded={open} aria-label="打开导航菜单" className="menu" onClick={() => setOpen(true)}><span aria-hidden="true">☰</span></button><div><p>{item[2]}</p><h1>{item[1]}</h1></div><span className="environment">内部试玩环境</span></header><section className="admin-content">{page === "dashboard" && <Dashboard onSelectRegistrationDate={(date) => { setRegistrationDate(date); setPage("users"); }} />}{page === "v014" && <V014Operations />}{page === "users" && <Users initialRegisteredDate={registrationDate} />}{page === "errors" && <OperationErrors />}{page === "releases" && <Releases currentVersion={version.data?.version ?? ""} onVersionChanged={version.reload} />}{page === "models" && <Models />}{page === "limits" && <Limits />}{page === "access" && <AccessControlPage />}{page === "operations" && <Operations />}{page === "admins" && <AdminAccounts />}{page === "logs" && <Logs />}</section></main>{securityOpen && <ChangePasswordModal onClose={() => setSecurityOpen(false)} onChanged={onLogout} />}</div>;
+  return <div className="admin-shell"><aside aria-label="管理台导航" className={open ? "sidebar open" : "sidebar"}><button aria-label="关闭导航菜单" className="sidebar-close" onClick={() => setOpen(false)}>×</button><div className="sidebar-brand"><strong>问仙录</strong><span>试玩运营台 · {version.data?.version ?? "同步中"}</span></div><nav>{NAV.map(([id, label, english]) => <button aria-current={page === id ? "page" : undefined} key={id} onClick={() => { if (id === "users") setRegistrationDate(""); setPage(id); setOpen(false); }}><small>{english}</small>{label}</button>)}</nav><div className="sidebar-actions"><button onClick={() => { setSecurityOpen(true); setOpen(false); }}>修改管理密码</button><button onClick={onLogout}>退出管理台</button></div></aside>{open && <button aria-label="关闭导航菜单" className="sidebar-mask" onClick={() => setOpen(false)} />}<main className="admin-main"><header><button aria-expanded={open} aria-label="打开导航菜单" className="menu" onClick={() => setOpen(true)}><span aria-hidden="true">☰</span></button><div><p>{item[2]}</p><h1>{item[1]}</h1></div><span className="environment">内部试玩环境</span></header><section className="admin-content">{page === "dashboard" && <Dashboard onSelectRegistrationDate={(date) => { setRegistrationDate(date); setPage("users"); }} />}{page === "v014" && <V014Operations />}{page === "migrations" && <MigrationCenter />}{page === "users" && <Users initialRegisteredDate={registrationDate} />}{page === "errors" && <OperationErrors />}{page === "releases" && <Releases currentVersion={version.data?.version ?? ""} onVersionChanged={version.reload} />}{page === "models" && <Models />}{page === "limits" && <Limits />}{page === "access" && <AccessControlPage />}{page === "operations" && <Operations />}{page === "admins" && <AdminAccounts />}{page === "logs" && <Logs />}</section></main>{securityOpen && <ChangePasswordModal onClose={() => setSecurityOpen(false)} onChanged={onLogout} />}</div>;
 }
 
 function V014Operations() {
   const query = useLoad<V014Overview>(() => adminApi.v014Overview(), []);
   return <State loading={query.loading} error={query.error}>{query.data && <><div className="page-intro"><div><h2>V0.14 独立数据观察</h2><p>只统计新命卷表，不与 V0.13 历史角色和回合混算。</p></div><button className="secondary" onClick={query.reload}>刷新</button></div><MetricSection primary title="新版本命卷" items={[["参与玩家", num(query.data.players), "至少创建一份 V0.14 命卷"], ["存活命卷", num(query.data.activeSaves), `全部 ${num(query.data.totalSaves)} 份`], ["封存档案", num(query.data.archivedSaves), "只读保留"], ["累计行动", num(query.data.totalTurns), `平均生成 ${latency(query.data.avgLatency)}`]]} /><MetricSection title="运行与迁移" items={[["自备密钥用户", num(query.data.personalCredentialUsers), query.data.invalidCredentialUsers ? `${num(query.data.invalidCredentialUsers)} 个密钥待处理` : "当前没有失效密钥"], ["命卷人工整理", num(query.data.manualCorrections), "修正、移出物品与取消人物关注"], ["旧密钥迁移缺口", num(query.data.legacyCredentialMigrationGaps), query.data.legacyCredentialMigrationGaps ? "上线前必须处理" : "迁移完整"]]} /><MetricSection title="模型消耗" items={[["输入 Token", num(query.data.promptTokens), "V0.14 累计"], ["输出 Token", num(query.data.completionTokens), "V0.14 累计"], ["单回合平均", num(query.data.totalTurns ? Math.round((query.data.promptTokens + query.data.completionTokens) / query.data.totalTurns) : 0), "输入与输出合计"]]} /><Panel title="模型与密钥来源"><Table label="V0.14 模型统计"><thead><tr><th>供应商</th><th>模型</th><th>来源</th><th>请求</th><th>输入 Token</th><th>输出 Token</th><th>平均耗时</th></tr></thead><tbody>{query.data.modelUsage.map((row) => <tr key={`${row.provider}-${row.model}-${row.source}`}><td>{row.provider}</td><td>{row.model}</td><td>{row.source === "USER" ? "玩家自备" : "平台"}</td><td>{num(row.requests)}</td><td>{num(row.promptTokens)}</td><td>{num(row.completionTokens)}</td><td>{latency(row.avgLatency)}</td></tr>)}</tbody></Table>{query.data.modelUsage.length === 0 && <p className="empty-state">尚未产生真实模型回合。</p>}</Panel><Panel title="最近 30 次行动"><Table label="V0.14 最近行动"><thead><tr><th>用户</th><th>命卷</th><th>回合</th><th>行动</th><th>来源</th><th>Token</th><th>耗时</th><th>时间</th></tr></thead><tbody>{query.data.recentTurns.map((row) => <tr key={`${row.saveId}-${row.turn}`}><td>{shortId(row.userId)}</td><td>{shortId(row.saveId)}</td><td>{row.turn}</td><td className="wide">{row.action}</td><td>{row.source === "USER" ? "玩家" : "平台"}</td><td>{num(row.tokens)}</td><td>{latency(row.latency)}</td><td>{fmt(row.at)}</td></tr>)}</tbody></Table>{query.data.recentTurns.length === 0 && <p className="empty-state">尚未产生 V0.14 行动。</p>}</Panel></>}</State>;
+}
+
+function MigrationCenter() {
+  const overview = useLoad<MigrationOverview>(() => adminApi.migrationOverview(), []);
+  const tasks = useLoad<MigrationTask[]>(() => adminApi.migrationTasks(), []);
+  const [preview, setPreview] = useState<MigrationPreviewPage | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState("");
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [policy, setPolicy] = useState<MigrationPolicy>({ prepareEnabled: false, activationEnabled: false, batchLimit: 10 });
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [activation, setActivation] = useState<MigrationTask | null>(null);
+
+  useEffect(() => { if (overview.data) setPolicy(overview.data.policy); }, [overview.data]);
+  const refresh = () => { overview.reload(); tasks.reload(); };
+  const loadPreview = async (cursor = "", remember = true) => {
+    setPreviewLoading(true); setPreviewError(""); setSelected([]);
+    try {
+      const page = await adminApi.migrationPreview(cursor, policy.batchLimit);
+      if (remember && preview) setCursorHistory((current) => [...current, preview.cursor]);
+      setPreview(page);
+    } catch (reason) { setPreviewError(reason instanceof Error ? reason.message : "预演失败"); }
+    finally { setPreviewLoading(false); }
+  };
+  const previousPreview = () => {
+    const previous = cursorHistory.at(-1) ?? "";
+    setCursorHistory((current) => current.slice(0, -1));
+    void loadPreview(previous, false);
+  };
+  const savePolicy = async () => {
+    setBusy(true); setNotice("");
+    try { const result = await adminApi.updateMigrationPolicy(policy); setPolicy(result); setNotice("迁移安全开关已更新。"); refresh(); }
+    catch (reason) { setNotice(reason instanceof Error ? reason.message : "保存失败"); }
+    finally { setBusy(false); }
+  };
+  const prepare = async () => {
+    setBusy(true); setNotice("");
+    try {
+      const result = await adminApi.prepareMigrations(selected);
+      setNotice(`准备完成：成功 ${result.succeeded} 份，失败 ${result.failed} 份。候选命卷尚未激活。`);
+      await loadPreview(preview?.cursor ?? "", false); refresh();
+    } catch (reason) { setNotice(reason instanceof Error ? reason.message : "准备失败"); }
+    finally { setBusy(false); }
+  };
+  const toggle = (sourceSaveId: string) => setSelected((current) => current.includes(sourceSaveId)
+    ? current.filter((id) => id !== sourceSaveId) : [...current, sourceSaveId]);
+  const statusCount = (key: string) => overview.data?.statusCounts[key] ?? 0;
+
+  return <><State loading={overview.loading || tasks.loading} error={overview.error || tasks.error}>{overview.data && tasks.data && <>
+    <div className="page-intro"><div><h2>V0.14 命卷迁移中心</h2><p>先只读预演，再写入隔离候选，最后逐份激活。旧表始终保留且不会被迁移流程修改。</p></div><button className="secondary" onClick={refresh}>刷新</button></div>
+    <MetricSection primary title="迁移进度" items={[["旧命卷总数", num(overview.data.sourceTotal), "V0.14 源表"], ["尚未处理", num(overview.data.unprocessed), "没有迁移审计任务"], ["等待激活", num(statusCount("READY")), "仍对玩家不可见"], ["已激活", num(statusCount("SUCCESS")), "已通过双重哈希校验"]]} />
+    <Panel title="迁移安全开关"><div className="config-form migration-policy">
+      <label className="check"><input checked={policy.prepareEnabled} onChange={(event) => setPolicy({ ...policy, prepareEnabled: event.currentTarget.checked })} type="checkbox" />允许写入隔离候选</label>
+      <label className="check"><input checked={policy.activationEnabled} onChange={(event) => setPolicy({ ...policy, activationEnabled: event.currentTarget.checked })} type="checkbox" />允许单份激活</label>
+      <label>单次批量上限<input max="50" min="1" type="number" value={policy.batchLimit} onChange={(event) => setPolicy({ ...policy, batchLimit: Number(event.currentTarget.value) })} /></label>
+      <p>两个写开关默认关闭。开启“候选”不会影响玩家；开启“激活”后仍需在下方逐份确认双哈希，不存在全量激活入口。</p>
+      {notice && <p className="notice" role="status">{notice}</p>}
+      <button className="primary" disabled={busy || policy.batchLimit < 1 || policy.batchLimit > 50} onClick={() => void savePolicy()}>{busy ? "正在保存…" : "保存迁移策略"}</button>
+    </div></Panel>
+    <Panel title="只读批量预演"><div className="migration-toolbar"><button className="secondary" disabled={previewLoading} onClick={() => void loadPreview("")}>{previewLoading ? "正在预演…" : "从第一批开始预演"}</button><span>每次最多 {policy.batchLimit} 份，仅查询旧表并计算候选哈希。</span></div>
+      {previewError && <p className="error migration-message">{previewError}</p>}
+      {preview && <><Table label="迁移预演结果"><thead><tr><th>选择</th><th>源命卷</th><th>预演</th><th>迁移任务</th><th>内容量</th><th>检查项</th><th>哈希</th></tr></thead><tbody>{preview.items.map((item) => {
+        const selectable = ["READY", "WARNING"].includes(item.previewStatus) && item.migrationStatus === "UNPROCESSED";
+        return <tr key={item.sourceSaveId}><td><input aria-label={`选择 ${item.sourceSaveId}`} checked={selected.includes(item.sourceSaveId)} disabled={!selectable || busy} onChange={() => toggle(item.sourceSaveId)} type="checkbox" /></td><td>{shortId(item.sourceSaveId)}</td><td><Badge value={item.previewStatus} />{item.error && <small>{item.error}</small>}</td><td><Badge value={item.migrationStatus} /></td><td>{item.turns} 回合<small>{item.entities} 实体 · {item.memories} 记忆</small></td><td className="wide">{item.issueCodes.length ? item.issueCodes.join("、") : "无阻断项"}</td><td>{shortHash(item.beforeHash)}<small>{shortHash(item.afterHash)}</small></td></tr>;
+      })}</tbody></Table><div className="migration-actions"><div><button className="secondary" disabled={!cursorHistory.length || previewLoading} onClick={previousPreview}>上一批</button><button className="secondary" disabled={!preview.nextCursor || previewLoading} onClick={() => void loadPreview(preview.nextCursor ?? "")}>下一批</button></div><button className="primary" disabled={busy || !policy.prepareEnabled || !selected.length} onClick={() => void prepare()}>准备所选 {selected.length} 份候选</button></div></>}
+    </Panel>
+    <Panel title="最近迁移任务"><Table label="迁移任务"><thead><tr><th>源命卷</th><th>目标命卷</th><th>状态</th><th>双哈希</th><th>说明</th><th>时间</th><th>操作</th></tr></thead><tbody>{tasks.data.map((task) => <tr key={task.sourceSaveId}><td>{shortId(task.sourceSaveId)}</td><td>{task.targetSaveId ? shortId(task.targetSaveId) : "—"}</td><td><Badge value={task.status} /></td><td>{shortHash(task.beforeHash)}<small>{shortHash(task.afterHash)}</small></td><td className="wide">{task.errorMessage || "—"}</td><td>{fmt(task.completedAt || task.startedAt)}</td><td><button className="table-action" disabled={task.status !== "READY" || !policy.activationEnabled} onClick={() => setActivation(task)}>核对并激活</button></td></tr>)}</tbody></Table>{tasks.data.length === 0 && <p className="empty-state">尚未产生迁移任务。</p>}</Panel>
+  </>}</State>{activation && <MigrationActivationModal task={activation} onClose={() => setActivation(null)} onCompleted={(message) => { setActivation(null); setNotice(message); refresh(); if (preview) void loadPreview(preview.cursor, false); }} />}</>;
+}
+
+function MigrationActivationModal({ task, onClose, onCompleted }: { task: MigrationTask; onClose: () => void; onCompleted: (message: string) => void }) {
+  useOverlay(onClose);
+  const [confirmation, setConfirmation] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const expected = task.sourceSaveId;
+  const submit = async () => {
+    if (confirmation !== expected || !task.afterHash) return;
+    setBusy(true); setError("");
+    try { const result = await adminApi.activateMigration(task.sourceSaveId, task.beforeHash, task.afterHash); onCompleted(result.message); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "激活失败"); }
+    finally { setBusy(false); }
+  };
+  return <div className="modal-mask"><section aria-labelledby="migration-activation-title" aria-modal="true" className="modal confirm-modal" role="dialog"><header className="drawer-header"><div><p className="kicker">FINAL ACTIVATION</p><h2 id="migration-activation-title">激活单份候选命卷</h2></div><button aria-label="关闭激活确认" className="drawer-close" onClick={onClose}>×</button></header><p>激活后该候选会进入统一命卷可见范围。系统仍会再次核对源数据与候选数据哈希。</p><div className="migration-hash"><span>迁移前<strong>{task.beforeHash}</strong></span><span>迁移后<strong>{task.afterHash}</strong></span></div><label>输入完整源命卷 ID 确认<input autoComplete="off" autoFocus value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} /><small>{expected}</small></label>{error && <p className="error" role="alert">{error}</p>}<div className="modal-actions"><button className="secondary" onClick={onClose}>取消</button><button className="danger-link" disabled={busy || confirmation !== expected} onClick={() => void submit()}>{busy ? "正在校验…" : "确认激活"}</button></div></section></div>;
 }
 
 function State({ loading, error, children }: { loading: boolean; error: string; children: ReactNode }) { if (loading) return <div aria-live="polite" className="state state-loading"><i /><span>正在读取数据…</span></div>; if (error) return <div className="state error" role="alert">{error}</div>; return <>{children}</>; }
@@ -544,7 +628,8 @@ function MetricSection({ title, items, primary = false }: { title: string; items
 function Panel({ title, children }: { title: ReactNode; children: ReactNode }) { return <section className="panel"><header><h2>{title}</h2></header>{children}</section>; }
 function Table({ children, label = "数据列表" }: { children: ReactNode; label?: string }) { return <div className="table-scroll"><table aria-label={label}>{children}</table></div>; }
 function Pager({ page, size, total, onPage }: { page: number; size: number; total: number; onPage: (page: number) => void }) { return <div className="pager"><button disabled={page <= 0} onClick={() => onPage(page - 1)}>上一页</button><span>第 {page + 1} / {Math.max(1, Math.ceil(total / size))} 页</span><button disabled={(page + 1) * size >= total} onClick={() => onPage(page + 1)}>下一页</button></div>; }
-function Badge({ value }: { value: string }) { const labels: Record<string, string> = { ACTIVE: "可用", DISABLED: "已停用", EXHAUSTED: "已失效", SUCCESS: "成功", FAILED: "失败", NONE: "尚未创建", CURRENT: "当前角色", RESTARTED: "仅有前世", DRAFT: "草稿", PUBLISHED: "已发布", ARCHIVED: "已归档", ACTIVE_MODEL: "当前使用", STANDBY: "备用" }; return <span className={`badge badge-${value.toLowerCase()}`}>{labels[value] ?? value}</span>; }
+function Badge({ value }: { value: string }) { const labels: Record<string, string> = { ACTIVE: "可用", DISABLED: "已停用", EXHAUSTED: "已失效", SUCCESS: "已激活", FAILED: "失败", NONE: "尚未创建", CURRENT: "当前角色", RESTARTED: "仅有前世", DRAFT: "草稿", PUBLISHED: "已发布", ARCHIVED: "已归档", ACTIVE_MODEL: "当前使用", STANDBY: "备用", READY: "可迁移", WARNING: "需留意", INVALID: "不可迁移", ERROR: "预演异常", UNPROCESSED: "未处理", RUNNING: "准备中", HASH_MISMATCH: "哈希不一致" }; return <span className={`badge badge-${value.toLowerCase()}`}>{labels[value] ?? value}</span>; }
 function shortId(value: string) { return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value; }
+function shortHash(value?: string | null) { return value ? `${value.slice(0, 8)}…${value.slice(-6)}` : "—"; }
 function relativeTime(value?: string | null) { if (!value) return "从未登录"; const diff = Date.now() - new Date(value).getTime(); if (diff < 60_000) return "刚刚活跃"; if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`; if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`; return `${Math.floor(diff / 86_400_000)} 天前`; }
 function prettyJson(value: string) { if (!value) return "本回合未记录结构化变化。"; try { return JSON.stringify(JSON.parse(value), null, 2); } catch { return value; } }

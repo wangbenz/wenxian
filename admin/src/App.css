@@ -265,6 +265,23 @@ td small { display: block; max-width: 220px; margin-top: 3px; overflow: hidden; 
 .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; color: #53615b; background: #eef1ef; border: 1px solid #d8ded9; border-radius: 20px; font-size: 10px; white-space: nowrap; }
 .badge-active, .badge-success, .badge-published, .badge-current, .badge-active_model { color: #286148; background: #e9f4ed; border-color: #b9d8c5; }
 .badge-failed, .badge-exhausted, .badge-disabled { color: var(--danger); background: #f8ecea; border-color: #e5c1bc; }
+.badge-warning, .badge-hash_mismatch { color: #8d4d29; background: #fff4e8; border-color: #e0bd9e; }
+.badge-invalid, .badge-error { color: var(--danger); background: #f8ecea; border-color: #e5c1bc; }
+.badge-ready { color: #286148; background: #e9f4ed; border-color: #b9d8c5; }
+
+/* Migration center */
+.migration-policy { grid-template-columns: repeat(2, minmax(180px, 1fr)) minmax(180px, .7fr); }
+.migration-policy > p, .migration-policy > .notice, .migration-policy > button { grid-column: 1 / -1; }
+.migration-toolbar, .migration-actions { display: flex; justify-content: space-between; gap: 14px; align-items: center; padding: 14px 18px; }
+.migration-toolbar { border-bottom: 1px solid #e2e6e3; }
+.migration-toolbar span { color: var(--muted); font-size: 12px; }
+.migration-actions { border-top: 1px solid #e2e6e3; }
+.migration-actions > div { display: flex; gap: 8px; }
+.migration-message { margin: 14px 18px; }
+.migration-hash { display: grid; gap: 8px; margin: 14px 0; }
+.migration-hash span { padding: 10px; color: var(--muted); background: #f3f6f4; border: 1px solid #d9e0dc; font-size: 11px; }
+.migration-hash strong { display: block; margin-top: 4px; overflow-wrap: anywhere; color: var(--ink); font-family: ui-monospace, monospace; font-size: 10px; }
+.confirm-modal label small { margin-top: 5px; overflow-wrap: anywhere; color: var(--muted); }
 
 /* Players */
 .mobile-player-list { display: none; }
@@ -481,6 +498,11 @@ td small { display: block; max-width: 220px; margin-top: 3px; overflow: hidden; 
   .panel-title-row { align-items: flex-start; }
   .panel-title-row > span:first-child { line-height: 1.5; }
   .operation-alerts { flex-direction: column; gap: 7px; }
+  .migration-policy { grid-template-columns: 1fr; }
+  .migration-policy > p, .migration-policy > .notice, .migration-policy > button { grid-column: auto; }
+  .migration-toolbar, .migration-actions { align-items: stretch; flex-direction: column; }
+  .migration-toolbar button, .migration-actions > button { width: 100%; }
+  .migration-actions > div { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
 }
 
 @media (max-width: 430px) {
