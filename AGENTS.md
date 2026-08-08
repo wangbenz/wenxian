@@ -8,9 +8,9 @@
 - On wider screens, keep the paper background full-viewport and constrain the readable game content to a centered column.
 - Selected visual direction: `墨卷纪事` — warm xuan-paper, restrained ink wash, celadon accents, cinnabar risk states, and literary Chinese typography.
 - The core loop must support both quick choices and free-text actions.
-- V0.14 is a multi-world, light-state, strong-memory narrative game. Each save has one authoritative timeline; official presets and player-authored worlds coexist.
+- The current gameplay is a multi-world, light-state, strong-memory narrative game. Product releases do not create a new gameplay engine, API namespace, Java package, or table set by default.
 - Agent-generated items, abilities, and important characters are allowed. Java protects identity, lifecycle, time, persistence, and security boundaries instead of imposing an incomplete combat/economy simulation.
-- Keep product documentation compact: `docs/product-direction.md` records active direction and abandoned proposals, `docs/game-design.md` defines gameplay, and `docs/architecture.md` defines Agent/data boundaries.
+- Keep product documentation compact: `docs/product-direction.md` records active direction and abandoned proposals, `docs/game-design.md` defines gameplay, `docs/architecture.md` defines Agent/API/migration boundaries, and `docs/data-dictionary.md` is the single Chinese data dictionary.
 - Keep release history in `docs/version-history.md`. Every release-oriented commit must update the matching version entry for H5, admin, and backend/data changes; do not hardcode the displayed version in either frontend.
 
 ## Editing Boundary
@@ -19,9 +19,20 @@
 - `frontend/src/App.tsx` is the deliberately minimal H5 entry and should render `Prototype` directly.
 - Treat `frontend/src/main.tsx`, `frontend/src/styles.css`, `frontend/vite.config.ts`, `frontend/worker/index.js`, and `frontend/scripts/prepare-sites-build.mjs` as runtime files. Edit them only when the requested runtime or deployment behavior requires it.
 - The old `frontend/src/mobile/` package and device assets remain only as unused template material; do not reconnect them to the app.
-- V0.14 gameplay lives in `backend/src/main/java/com/wenxian/game/v014/` and its isolated `v014_*` tables. Shared auth, quota, release, access-control, and encrypted credential services remain outside that package. Do not write V0.14 gameplay into V0.13 tables.
+- The deployed V0.14 gameplay still lives in `backend/src/main/java/com/wenxian/game/v014/` and `v014_*`; treat it as a compatibility source during migration. New long-lived work targets the neutral `story` domain described in `docs/architecture.md`. Do not add `v015_*`, `V015*`, or `/api/v1/v015/*` business structures.
 - `V014ModelGateway` is the model boundary. LangChain4j may implement transport/adapters, but it must not become the source of truth or bypass reducers/transactions.
 - If an intentional runtime change modifies a locked file, run `npm run update:runtime-lock`, then `npm run check:runtime`.
+
+## Architecture and Chinese Documentation
+
+- Product release, story engine, engine version, state schema version, and prompt version are separate concepts. Never infer one from another.
+- A new feature must identify its domain owner, authoritative data source, state transitions, Agent/Java/H5 boundaries, old-save behavior, rollback path, admin observability, and verification before implementation.
+- New stable APIs, Java business classes, and database tables must use domain names rather than product release names.
+- Every new or changed MySQL table must have a Chinese table comment. Important columns and business-protecting indexes must have Chinese comments explaining meaning and constraints.
+- Every new Service, Engine, Repository, Migrator, and non-trivial DTO must have Chinese Javadoc describing responsibility, authority, transaction boundary, and failure behavior.
+- Complex TypeScript state, compatibility adapters, and retry/reconciliation branches require concise Chinese comments. Do not add comments that merely repeat obvious code.
+- Every schema or key-field change must update `docs/data-dictionary.md` in the same commit. API or migration-boundary changes must also update `docs/architecture.md`.
+- Current production Hotfixes and unified-story refactors must use separate commits/branches; do not mix an incident fix with migration work.
 
 ## Interaction Rules
 

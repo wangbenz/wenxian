@@ -1,112 +1,376 @@
-# 《问仙录》V0.14 Agent 与数据架构
+# 《问仙录》统一命卷平台架构
 
-V0.2 的重规则文字 RPG 架构已经废弃并仅作历史实验封存。V0.14 只复用经过验证的视觉外壳和通用交互，不继承 V0.2 的战力、经济、职业、固定地图或预制内容体系。当前产品决策见 `docs/product-direction.md`。
+> 状态：已确认的目标架构，尚未完成代码与数据迁移
+> 最近更新：2026-08-08
 
-## 1. 边界
+## 1. 决策背景
 
-V0.14 复用账号系统，但使用独立游戏表。V0.13 的角色、回合和上下文不写入新表；旧版本只读入口保留。这样既能重新设计玩法，又不会破坏现有账号、密码、自备密钥、公告、白名单和额度。
+V0.13 与 V0.14 为了快速验证不同玩法，分别形成了独立接口、Service、状态模型和数据表。V0.14 的隔离在当时保护了旧玩家数据，但不能继续演变为每个产品版本复制一套代码和表的长期模式。
 
-共享数据：`app_user`、`user_session`、`user_daily_quota`、`gameplay_config`、公告和灰度访问表。旧版继续读取 `user_ai_credential`；V0.14 使用供应商级密钥表，不覆盖旧版回滚数据。
+当前生产组合基线：
 
-V0.14 数据：
+| 部分 | 线上构建对应提交 |
+|---|---|
+| H5 | `9d6731c` |
+| 游戏后端 | `57061d9` |
+| 管理台 | `5050e3e` |
 
-- `v014_game_save`：轻量权威快照、版本号、槽位、状态和乐观锁。
-- `v014_game_turn`：玩家行动、正文、选择、模型补丁、时间、模型用量和幂等请求号。
-- `v014_conversation`：滚动摘要与已总结回合。
-- `v014_state_correction`：玩家修正前后快照和原因。
-- `v014_user_model_preference`：供应商、模型和平台/玩家密钥来源。
-- `ai_provider_config`：供应商白名单、服务端 Base URL、适配类型、平台密钥和开放开关。
-- `ai_provider_model`：供应商下的模型目录，以及平台可用、玩家自备可选开关。
-- `user_ai_provider_credential`：账号按供应商保存的加密密钥；账号注销时级联删除。
+生产环境以实际部署构建为准；本地未提交 Hotfix 不属于上述基线，不得混入架构迁移提交。
 
-## 2. 单回合流水线
+本架构采用“统一命卷平台 + 可插拔故事引擎 + 历史档案适配器”。产品版本只用于发布和统计，不再决定业务类、接口或物理表名。
 
-```text
-H5 行动
-  → Auth / 白名单 / 账号额度
-  → 读取 v014_game_save（权威快照）
-  → PromptContextAssembler（相关事实 + 滚动摘要 + 最近两回合）
-  → ModelGateway（LangChain4j）
-  → 容错解析 AiTurnEnvelope
-  → V014StateReducer（时间、物品、能力、人物、记忆）
-  → Java 结构校验
-  → 单事务保存快照、回合和滚动摘要
-  → 成功后记录平台赠送回合
-```
+## 2. 架构原则
 
-`request_id` 在同一命卷内唯一；客户端重试不会生成第二个正式回合。快照使用 revision 乐观锁，冲突时整轮不写入。
+1. 一个账号系统、一个命卷入口、一套稳定 API；
+2. 产品版本、故事引擎、引擎版本、存档结构版本分离；
+3. 当前快照、实体现状和不可变回合历史分离；
+4. Agent 提出叙事结果，Java 保护系统边界并原子落库；
+5. 历史数据只复制或适配，不做不可逆原地覆盖；
+6. 先建立统一外壳，再迁移物理表，不进行一次性大爆炸重写；
+7. 迁移期间不长期双写；最终切换前使用短暂写入冻结同步增量；
+8. 新增表按业务能力命名，禁止按产品发布版本命名。
 
-创角前的 `CharacterRouteAgent` 是独立轻量调用：读取世界、种族、性别、姓名与可选偏好，使用关闭思考的 Flash 一次生成三条路线，不创建存档、不推进时间、不消耗游戏回合。自定世界默认由服务端开关关闭；H5 置灰只是提示，后端仍会拒绝绕过请求。
-
-## 3. Java 与 Agent 职责
-
-Java 负责：身份和数据归属、命卷数量、状态枚举、ID、幂等、乐观锁、事务、时间显式输入、实体生命周期、密钥安全、错误协议和审计。
-
-Agent 负责：理解玩家意图、剧情过程、人物反应、合理得失、新实体提案、场景标题、推荐行动和滚动摘要。
-
-Java 不再用大量关键词决定所有剧情是否“合理”，也不维护一套不完整的战力公式。Agent 不能直接写数据库、修改账号额度或决定任意模型地址。
-
-## 4. 模型适配
-
-业务层只依赖 `V014ModelGateway`。首版实现 `LangChain4jModelGateway`，通过 OpenAI-compatible 适配器接入 DeepSeek；供应商和模型目录已独立，后续可以在不修改命卷表的前提下增加其他适配器。
-
-平台路由完全由管理台配置，H5 和玩家响应不返回平台供应商或模型。玩家只有在自备模式下才能选择服务端允许的供应商与模型；密钥必须与供应商一致且状态有效，不接受自定义 Base URL，防止 SSRF。自备路由失败不会回退平台路由。
-
-以后接入其他模型时增加 Gateway/配置映射，不改命卷表和 reducer。LangChain4j 只是调用适配器，不是权威世界状态或自主 Agent 框架。
-
-## 5. Prompt 上下文
-
-每回合只发送必要事实：
-
-- 世界前提与主角核心身份；
-- 当前时间、地点、处境和境界；
-- 当前可用物品与能力；
-- 重要/相关人物；
-- 关键记忆、滚动摘要和最近两回合；
-- 本轮玩家行动。
-
-已消耗/售出/遗失的物品、路人、无关旧回合和完整数据库历史不进入常规 Prompt。数据库继续保存历史，Prompt 不等于数据库。
-
-主剧情一次调用完成，不因略短而整章重写。JSON 不完整但正文可用时采用容错结果和通用选择；完全失败时返回明确错误且不改变存档。
-
-## 6. Agent 输出
-
-模型返回 `AiTurnEnvelope`，核心字段包括正文、场景、地点、状态、境界、经过时间、选择、物品/能力/人物变化、记忆和滚动摘要。Prompt 同时提供数字时间和可读世界时刻；模型返回的经过时间必须与正文最后一幕一致。
-
-所有更新按稳定 ID 或名称归并：已有实体更新生命周期，新实体由服务端分配 ID；路人不长期保存。正文结束后仍持有的物品、货币、能力和持续关系必须同时进入补丁。玩家明确时长由 Java 解析并覆盖模型猜测。
-
-## 7. API
+## 3. 总体结构
 
 ```text
-GET    /api/v1/v014/bootstrap
-POST   /api/v1/v014/character-routes
-GET    /api/v1/v014/saves
-POST   /api/v1/v014/saves
-GET    /api/v1/v014/saves/{saveId}
-DELETE /api/v1/v014/saves/{saveId}
-POST   /api/v1/v014/saves/{saveId}/turns
-POST   /api/v1/v014/saves/{saveId}/corrections
-DELETE /api/v1/v014/saves/{saveId}/items/{itemId}?revision={revision}
-DELETE /api/v1/v014/saves/{saveId}/characters/{characterId}?revision={revision}
-GET    /api/v1/v014/generation-settings
-PUT    /api/v1/v014/generation-settings
-PUT    /api/v1/v014/generation-settings/providers/{provider}/credential
-DELETE /api/v1/v014/generation-settings/providers/{provider}/credential
+H5
+  → /api/v1/story/*
+  → StoryController
+  → StoryGameService
+      ├─ StorySaveQueryService
+      ├─ StoryEntityService
+      ├─ StoryCorrectionService
+      └─ LegacyForkService
+  → StoryEngineRegistry
+      ├─ LightNarrativeEngine
+      └─ LegacyArchiveAdapter（只读）
+  → PromptContextAssembler
+  → ModelGateway / LangChain4j Adapter
+  → StoryStateReducer
+  → StorySaveRepository / StoryTurnRepository / StoryEntityRepository
+  → story_* 通用表
 ```
 
-行囊与人物整理直接修改命卷 JSON 中的 `inPossession` / `tracked`，使用乐观锁并写入修正审计；不调用模型、不新增回合、不推进世界时间。旧 JSON 没有这两个字段时由记录构造器兼容推导，因此不增加 SQL 迁移。
+管理台通过统一运营查询服务读取同一套数据，不直接在页面层拼接 V0.13、V0.14 SQL。
 
-账号继续使用 `/api/v1/auth/*`；`/api/v1/ai/*` 仅保留旧版兼容，V0.14 使用供应商级生成设置接口。错误沿用统一玩家问题协议，不向 H5 暴露 Java、数据库、平台模型、模型原始响应或密钥。
+## 4. 使用的设计模式
 
-管理台新增 `/api/admin/v014/overview` 独立统计新命卷，并由 `/api/admin/generation-providers` 维护供应商级平台密钥、玩家自备开放范围和平台当前模型；真实路由仍保留在内部用量日志中。
+- **策略模式**：`StoryEngine` 隔离不同玩法引擎；
+- **注册表模式**：`StoryEngineRegistry` 按命卷保存的引擎编码和版本查找实现；
+- **适配器/防腐层**：V0.13、V0.14 读取器转换旧模型，不让旧字段污染新领域；
+- **外观模式**：`StoryGameService` 向 Controller 提供统一命卷操作；
+- **仓储模式**：Repository 隔离 SQL 与业务逻辑；
+- **责任链模式**：`StateMigrator` 按结构版本逐级升级状态；
+- **绞杀者模式**：新接口逐步替代旧接口，稳定后再停止旧路径；
+- **快照 + 追加日志**：保存当前权威状态和不可变回合，不采用完整事件溯源。
 
-## 8. 发布顺序
+## 5. 目标代码结构
 
-1. 备份 RDS，并执行 `docs/migrations/V0.14__light_story.sql`。
-2. 部署后端并验证健康检查、新表和模型配置。
-3. 部署管理台，检查 V0.14 观察页。
-4. 部署 H5，先对白名单账号开放。
-5. 用平台密钥分别完成创角、两次行动、显式时间、实体增减、修正和封存。
-6. 管理台将 `current_game_version` 切换为 V0.14；验证后关闭白名单。
+```text
+com.wenxian.game.story
+├── api
+│   └── StoryController
+├── application
+│   ├── StoryGameService
+│   ├── StorySaveQueryService
+│   ├── StoryEntityService
+│   ├── StoryCorrectionService
+│   └── LegacyForkService
+├── engine
+│   ├── StoryEngine
+│   ├── StoryEngineRegistry
+│   ├── LightNarrativeEngine
+│   └── LegacyArchiveEngine
+├── agent
+│   ├── StoryAgent
+│   ├── PromptContextAssembler
+│   ├── ModelGateway
+│   └── AgentOutputParser
+├── domain
+│   ├── StoryState
+│   ├── StoryEntity
+│   ├── StoryMemory
+│   ├── StoryTurn
+│   └── StoryPatch
+├── reducer
+│   └── StoryStateReducer
+├── persistence
+│   ├── StorySaveRepository
+│   ├── StoryTurnRepository
+│   ├── StoryEntityRepository
+│   └── StoryMemoryRepository
+├── legacy
+│   ├── V013ArchiveReader
+│   └── V014MigrationReader
+└── migration
+    ├── StateMigrator
+    ├── V014SaveMigrator
+    └── V013ForkMigrator
+```
 
-迁移只建新表，不复制或删除 V0.13 游戏数据。回滚 H5/后端时，新表保留，不能在回滚脚本中清空。
+迁移完成前，新 Repository 可以临时委托现有 `V014SaveStore`，但公开 API 和应用服务不再带产品版本名。
+
+## 6. 版本模型
+
+| 字段 | 示例 | 变化时机 |
+|---|---|---|
+| `release_version` | `V0.15` | 每次产品发布 |
+| `engine_code` | `LIGHT_NARRATIVE` | 采用另一套根本玩法 |
+| `engine_version` | `2` | 同一玩法规则发生重大变化 |
+| `state_schema_version` | `3` | 当前状态 JSON 字段发生变化 |
+| `prompt_version` | `story-20260808-01` | Prompt 或上下文策略变化 |
+
+如果 V0.15 只调整 H5、Prompt 或模型，数据表和引擎版本不变。增加状态字段只升级 `state_schema_version`。重大但仍兼容的玩法调整升级 `engine_version`。只有玩法根本不同才增加新的 `engine_code`。
+
+## 7. 权威数据划分
+
+- `story_save.state_json`：主角、世界时间、当前位置、当前处境等核心快照；
+- `story_entity`：当前物品、能力、重要人物、势力和地点事实；
+- `story_memory`：跨回合需要长期保留的关键记忆；
+- `story_turn`：不可变的玩家行动、剧情、补丁和模型用量；
+- `story_conversation`：可重建的滚动摘要，不是事实来源；
+- `story_state_correction`：玩家修正前后审计；
+- `story_save_migration`：迁移来源、结果、哈希和错误；
+- `story_engine_catalog`：允许创建、继续和迁移的引擎目录。
+
+核心快照不再无限保存完整人物、物品、能力和时间线数组。API 读取命卷时由核心快照与当前实体组合成玩家视图。
+
+## 8. 单回合流水线
+
+```text
+H5 生成 requestId 并提交 action + expectedRevision
+  → 验证登录、白名单、命卷归属和额度
+  → 同账号已有生成时立即返回，不在 Java 锁后排队
+  → 按 requestId 检查幂等结果
+  → 读取核心快照、相关实体、关键记忆和滚动摘要
+  → StoryEngineRegistry 选择故事引擎
+  → PromptContextAssembler 组装本轮相关上下文
+  → ModelGateway 调用平台或玩家模型
+  → AgentOutputParser 解析统一 StoryPatch
+  → StoryStateReducer 校验引用并应用变化
+  → 单事务写入快照、回合、实体、记忆、摘要和额度
+  → 返回最新 revision 与能力列表
+```
+
+网络中断后，H5 使用相同 `requestId` 重试；如果服务端已经提交，直接返回已保存结果，不能生成第二回合。
+
+## 9. Java、Agent 与 H5 边界
+
+Java 负责：
+
+- 账号、命卷归属、状态机、槽位和访问能力；
+- requestId 幂等、并发门闩、乐观锁和事务；
+- 实体稳定 ID、软删除、引用完整性和审计；
+- 显式时长的结构化解析、世界时间存储；
+- 模型路由、额度、密钥加密、错误协议和用量记录。
+
+Agent 负责：
+
+- 理解自由行动；
+- 生成完整剧情单元；
+- 根据已有事实判断局部得失、人物反应和合理代价；
+- 提出核心状态、实体、记忆和推荐行动的结构化补丁。
+
+H5 负责：
+
+- 展示命卷和能力；
+- 生成并复用 requestId；
+- 防止输入时误触；
+- 网络失败后读取服务器最新 revision；
+- 只根据 `capabilities` 控制按钮，不判断产品版本。
+
+Java 不维护精密战力、统一物价或关键词裁决。Agent 不能直接访问数据库、修改账号额度或指定任意模型地址。
+
+## 10. 稳定 API 契约
+
+```text
+GET    /api/v1/story/bootstrap
+GET    /api/v1/story/saves
+POST   /api/v1/story/saves
+GET    /api/v1/story/saves/{saveId}
+DELETE /api/v1/story/saves/{saveId}
+POST   /api/v1/story/saves/{saveId}/turns
+POST   /api/v1/story/saves/{saveId}/corrections
+DELETE /api/v1/story/saves/{saveId}/entities/{entityId}
+POST   /api/v1/story/saves/{saveId}/fork
+
+GET    /api/v1/generation/settings
+PUT    /api/v1/generation/settings
+PUT    /api/v1/generation/providers/{provider}/credential
+DELETE /api/v1/generation/providers/{provider}/credential
+```
+
+命卷摘要必须返回：
+
+```json
+{
+  "saveId": "save-001",
+  "mode": "PLAYABLE",
+  "engineCode": "LIGHT_NARRATIVE",
+  "engineVersion": 1,
+  "stateSchemaVersion": 1,
+  "revision": 138,
+  "turnNumber": 136,
+  "capabilities": ["READ", "PLAY", "ARCHIVE", "CORRECT", "REMOVE_ENTITY"]
+}
+```
+
+V0.13 只读档案通过同一摘要返回 `mode=ARCHIVE`，并提供 `READ`、`FORK` 能力。H5 不读取 `source_edition` 决定交互。
+
+API 路径中的 `v1` 是接口契约主版本，只有出现无法兼容的请求/响应格式时才升级到 `v2`，与产品 V0.15 无关。
+
+### 创建命卷
+
+```json
+POST /api/v1/story/saves
+{
+  "worldCode": "XUANXU",
+  "playerName": "陆沉",
+  "race": "人族",
+  "gender": "男",
+  "origin": "山村少年",
+  "opening": "雨夜来到青岐城外",
+  "storyPreference": "自由探索"
+}
+```
+
+引擎编码和引擎版本由服务端当前目录决定，H5 不允许自行指定未开放引擎。
+
+### 推进回合
+
+```json
+POST /api/v1/story/saves/{saveId}/turns
+{
+  "requestId": "turn-7f81...",
+  "expectedRevision": 138,
+  "action": "先回客栈查看青纹令"
+}
+```
+
+成功响应返回完整当前视图、最新 `revision`、回合号和 capabilities。`requestId` 已提交时返回同一结果；同账号另一轮仍在生成时返回可重试的 `TURN_IN_PROGRESS`，不得在服务端排队执行。
+
+### 承接旧世
+
+```json
+POST /api/v1/story/saves/{archiveId}/fork
+{
+  "requestId": "fork-4a62...",
+  "confirmation": "承接旧世"
+}
+```
+
+响应返回新命卷 ID、迁移摘要和仍然可读的原档案 ID。承接失败不得创建半份新命卷。
+
+### 错误协议
+
+```json
+{
+  "code": "TURN_IN_PROGRESS",
+  "category": "STATE",
+  "title": "上一轮仍在推演",
+  "message": "请等待上一轮完成后同步命卷。",
+  "suggestions": ["等待片刻后刷新"],
+  "retryable": true,
+  "turnConsumed": false,
+  "stateChanged": false,
+  "referenceId": "WX-..."
+}
+```
+
+业务拒绝、模型失败、密钥失效、状态冲突和系统故障都使用同一协议，并明确是否消耗回合、是否改变存档。
+
+## 11. Agent 输出契约
+
+统一输出 `StoryPatch`：场景标题、正文、实际经过时间、核心状态变化、实体补丁、关键记忆、推荐行动和滚动摘要。
+
+实体补丁操作只允许：
+
+- `CREATE`：创建正式实体，由服务端分配稳定 ID；
+- `UPDATE`：引用已提供的实体 ID 更新现状；
+- `HIDE`：移出当前行囊或关注，不删除历史；
+- `RESTORE`：明确剧情重新获得或重新关注后恢复。
+
+无法绑定现有实体时，解析器不得随机覆盖另一条记录。结构不完整时允许一次纯格式修复；修复仍失败则整轮不写入、不扣额度。
+
+## 12. 存档结构迁移
+
+```java
+/** 将同一故事引擎的一版状态安全升级到下一版。 */
+public interface StateMigrator {
+    String engineCode();
+    int fromVersion();
+    int toVersion();
+    JsonNode migrate(JsonNode source);
+}
+```
+
+旧状态必须逐级迁移，例如 `V1 → V2 → V3`，不能跳过中间版本。正式发布前后台批量迁移，读取时迁移只作为遗漏兜底。每次迁移记录原始哈希、新哈希、状态和错误，失败不得覆盖原状态。
+
+## 13. V0.13 与 V0.14 兼容
+
+### V0.14 完整迁移
+
+- `v014_game_save` → `story_save`；
+- `v014_game_turn` → `story_turn`；
+- `state_json.inventory/abilities/characters` → `story_entity`；
+- `state_json.memories` → `story_memory`；
+- `v014_conversation` → `story_conversation`；
+- `v014_state_correction` → `story_state_correction`；
+- `v014_user_model_preference` → `user_model_preference`。
+
+迁移后新回合只写通用表，旧表保留只读。
+
+### V0.13 旧世承接
+
+V0.13 原表不直接变为当前可写命卷。适配器统一展示旧档；玩家发起承接时复制姓名、性别、种族、出身、最后可靠境界和地点、重要能力、持有物品、重要人物以及关键经历摘要。旧体力、追查、旧裁决、异常货币和临时路人不迁移。原档案永远保留。
+
+## 14. 管理台目标
+
+“V0.14 观察”改为“命卷运营”，提供：
+
+- 活跃命卷、今日回合、成功率、平均延迟和重试率；
+- 输入、输出、缓存命中与未命中 Token；
+- 按产品发布、引擎、引擎版本、Prompt、模型、密钥来源和世界筛选；
+- 迁移总量、成功、失败、哈希异常和单命卷重试；
+- 旧世承接数量与失败原因；
+- 统一问题编号、命卷和玩家查询。
+
+管理台平台模型配置改用中性配置名，不再使用 `v014_platform_provider`。
+
+## 15. 实施阶段
+
+1. **基线与设计**：冻结普通功能，记录生产构建，完成架构、数据字典和迁移映射；
+2. **统一外壳**：新增 Story API、应用服务和领域接口，底层仍委托 V0.14 存储；
+3. **H5 切换**：使用稳定 API 和 capabilities，旧档入口仍可使用；
+4. **通用数据**：新增 `story_*` 表，后台迁移 V0.14 并核对；
+5. **短暂切换**：写入冻结、同步增量、切换通用表、真实模型冒烟；
+6. **管理台改造**：统一统计和迁移中心；
+7. **旧世承接**：接入 V0.13 只读档案与复制转换；
+8. **收尾**：停用版本化 API，旧表保留只读，不立即删除。
+
+每个阶段必须独立可测试、可提交、可回滚，禁止将全部步骤合成一次发布。
+
+## 16. 发布与回滚
+
+数据库变更遵循 Expand → Migrate → Switch → Observe → Contract：
+
+1. 先新增结构和兼容代码；
+2. 后台复制、校验并记录迁移；
+3. 最终切换前短暂限制写入并同步增量；
+4. 灰度账号完成真实模型冒烟；
+5. 观察成功率、重复回合、Token、延迟和错误；
+6. 稳定一个发布周期后再停止旧路径。
+
+回滚时切回旧接口和旧表；新表保留排查，不把新数据反向覆盖旧表。任何迁移前必须有 RDS 备份和逐表数量核对。
+
+## 17. 验收标准
+
+- 不再新增以产品版本命名的业务类、稳定 API 和表；
+- H5 不再使用 V0.13/V0.14 条件决定主流程；
+- V0.14 命卷与回合完整迁移，数量和关键哈希一致；
+- V0.13 在统一列表可读，并能复制承接但不覆盖旧档；
+- 网络重试不会重复推进；
+- 物品、能力和人物获得、变化、隐藏长期一致；
+- V0.15 普通发布不需要新增游戏表；
+- 状态结构升级有逐级迁移测试；
+- 管理台可按发布、引擎、Prompt 和模型观察效果。
