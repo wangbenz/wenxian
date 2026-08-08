@@ -138,7 +138,7 @@ public class V014MigrationPreviewService {
                 issues.add(error("TURN_TIME_INVALID", "第 " + turn.turnNumber() + " 回的世界时间发生倒退"));
             }
             JsonNode choices = parseJson(turn.choicesJson(), "TURN_CHOICES_INVALID", turn.turnNumber(), issues);
-            JsonNode patch = normalizeTurnPatch(turn.statePatchJson(), turn.turnNumber(), issues);
+            JsonNode patch = normalizeTurnPatch(turn, issues);
             ObjectNode target = mapper.createObjectNode();
             target.put("id", turn.id());
             target.put("requestId", fallback(turn.requestId(), "legacy-request-" + turn.turnNumber()));
@@ -310,15 +310,25 @@ public class V014MigrationPreviewService {
         }
     }
 
-    private JsonNode normalizeTurnPatch(String value, int turn, List<MigrationIssue> issues) {
-        LegacyV014JsonNormalizer.Result result = legacyJson.normalize(value);
+    private JsonNode normalizeTurnPatch(SourceTurn turn, List<MigrationIssue> issues) {
+        LegacyV014JsonNormalizer.Result result = legacyJson.normalize(turn.statePatchJson());
         if (!result.valid()) {
-            issues.add(error("TURN_PATCH_INVALID", "第 " + turn + " 回的旧状态补丁无法确定性恢复："
-                    + compact(result.error())));
-            return mapper.createObjectNode();
+            ObjectNode quarantine = mapper.createObjectNode();
+            ObjectNode metadata = quarantine.putObject("_legacyMigration");
+            metadata.put("status", "QUARANTINED");
+            metadata.put("sourceEngine", "V014");
+            metadata.put("sourceTable", "v014_game_turn");
+            metadata.put("sourceTurnId", turn.id());
+            metadata.put("sourceTurnNumber", turn.turnNumber());
+            metadata.put("sourcePayloadSha256", hashText(turn.statePatchJson()));
+            metadata.put("reasonCode", "AMBIGUOUS_JSON");
+            issues.add(warning("TURN_PATCH_QUARANTINED", "第 " + turn.turnNumber()
+                    + " 回的旧状态补丁无法确定性恢复，已保留原文定位和哈希；当前权威命卷不受影响"));
+            return quarantine;
         }
         if (result.repaired()) {
-            issues.add(warning("TURN_PATCH_REPAIRED", "第 " + turn + " 回的旧状态补丁已完成确定性格式修复："
+            issues.add(warning("TURN_PATCH_REPAIRED", "第 " + turn.turnNumber()
+                    + " 回的旧状态补丁已完成确定性格式修复："
                     + String.join(",", result.repairCodes())));
         }
         return result.value();
