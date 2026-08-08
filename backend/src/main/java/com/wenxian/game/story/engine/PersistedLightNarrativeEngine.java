@@ -230,6 +230,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                 STATE_SCHEMA_VERSION, "NATIVE", release, null, null, coreState(state), 0,
                 release, release, now));
         appendNewMemories(saveId, state);
+        conversations.initialize(saveId, opening, 0);
         return saves.findOwned(user.userId(), saveId)
                 .orElseThrow(() -> new IllegalStateException("统一命卷创建后无法回读：" + saveId));
     }

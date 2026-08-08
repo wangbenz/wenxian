@@ -151,6 +151,12 @@ class PersistedLightNarrativeEngineTest {
             assertEquals(15, saves.findOwned(USER.userId(), created.saveId()).orElseThrow().slotNo());
             assertEquals(2, saves.countActive(USER.userId()));
             assertEquals("楚星河", created.state().protagonist().name());
+            assertEquals("你在山门晨钟中醒来。", jdbc.queryForObject(
+                    "select rolling_summary from story_conversation where save_id=?", String.class,
+                    created.saveId()));
+            assertEquals(0, jdbc.queryForObject(
+                    "select summarized_through_turn from story_conversation where save_id=?", Integer.class,
+                    created.saveId()));
             GameApiException error = assertThrows(GameApiException.class, () -> engine.create(USER, request));
             assertEquals("ACTIVE_SAVE_LIMIT_REACHED", error.code());
         } finally {

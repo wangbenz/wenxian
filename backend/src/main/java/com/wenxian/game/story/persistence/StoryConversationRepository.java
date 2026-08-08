@@ -20,7 +20,21 @@ public class StoryConversationRepository {
 
     public String summary(String saveId) {
         return jdbc.query("select rolling_summary from story_conversation where save_id=?",
-                (row, index) -> row.getString(1), saveId).stream().findFirst().orElse("");
+                (row, index) -> row.getString(1), saveId).stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("统一命卷缺少上下文摘要记录"));
+    }
+
+    /**
+     * 在新命卷事务内初始化滚动摘要。调用方必须先写入 story_save，重复初始化会由主键约束拒绝，
+     * 从而避免同一命卷出现两套摘要状态。
+     */
+    public void initialize(String saveId, String initialSummary, int summarizedThroughTurn) {
+        jdbc.update("""
+                insert into story_conversation(
+                    save_id,rolling_summary,summarized_through_turn,summary_schema_version,updated_at
+                ) values (?,?,?,?,?)
+                """, saveId, initialSummary == null ? "" : initialSummary, summarizedThroughTurn, 1,
+                Timestamp.from(Instant.now()));
     }
 
     public void updateSummary(String saveId, String summary, int summarizedThroughTurn) {
