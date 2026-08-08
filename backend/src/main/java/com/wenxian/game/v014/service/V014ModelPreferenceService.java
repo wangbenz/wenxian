@@ -190,6 +190,16 @@ public class V014ModelPreferenceService {
         return settings(userId);
     }
 
+    /** 将被供应商拒绝的玩家密钥标为失效，后续请求不得继续使用该密钥。 */
+    @Transactional
+    public void markCredentialInvalid(String userId, String provider, String errorCode) {
+        jdbc.update("""
+                update user_ai_provider_credential
+                set status='INVALID', last_error_code=?, updated_at=?
+                where user_id=? and provider_code=?
+                """, errorCode, Timestamp.from(Instant.now()), userId, normalize(provider));
+    }
+
     /** Internal compatibility view. Never expose this object on a player-facing platform-mode endpoint. */
     public ModelPreference get(String userId) {
         ModelPreference preference = stored(userId);

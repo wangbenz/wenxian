@@ -13,6 +13,7 @@ import com.wenxian.game.v014.persistence.V014TurnStore;
 import com.wenxian.game.v014.service.V014GameService;
 import com.wenxian.game.v014.service.V014ModelPreferenceService;
 import com.wenxian.game.v014.service.V014StateReducer;
+import dev.langchain4j.exception.AuthenticationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
@@ -31,6 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -43,7 +45,7 @@ class V014ExpectedRevisionEntryTest {
         EmbeddedDatabase database = database();
         try {
             V014SaveStore saves = saveStore(database);
-            V014GameService game = game(saves);
+            V014GameService game = game(database, saves);
 
             GameApiException error = assertThrows(GameApiException.class,
                     () -> game.takeTurn(USER, "story-save-test", "继续前行", "request-12345678", 0));
@@ -60,7 +62,7 @@ class V014ExpectedRevisionEntryTest {
         EmbeddedDatabase database = database();
         try {
             V014SaveStore saves = saveStore(database);
-            V014GameService game = game(saves);
+            V014GameService game = game(database, saves);
 
             GameApiException error = assertThrows(GameApiException.class,
                     () -> game.correct(USER, "story-save-test", "当前位置：青岐城", 0));
@@ -73,7 +75,7 @@ class V014ExpectedRevisionEntryTest {
     }
 
     @Test
-    void concurrentTurnsWithSameRevisionOnlyAdvanceOnce() throws Exception {
+    void concurrentTurnIsRejectedImmediatelyAndCompletedRequestCanBeReplayed() throws Exception {
         EmbeddedDatabase database = database();
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
@@ -91,16 +93,42 @@ class V014ExpectedRevisionEntryTest {
             Future<?> second = executor.submit(() -> game.takeTurn(USER, "story-save-test",
                     "转身离开", "request-second-123", 1));
 
+            ExecutionException busy = assertThrows(ExecutionException.class,
+                    () -> second.get(5, TimeUnit.SECONDS));
+            assertEquals("V014_TURN_IN_PROGRESS", ((GameApiException) busy.getCause()).code());
+
             releaseGeneration.countDown();
             first.get(5, TimeUnit.SECONDS);
-            ExecutionException conflict = assertThrows(ExecutionException.class,
-                    () -> second.get(5, TimeUnit.SECONDS));
-
-            assertEquals("STATE_CONFLICT", ((GameApiException) conflict.getCause()).code());
             assertEquals(2, saves.requireOwned(USER.userId(), "story-save-test").revision());
+            assertEquals(1, jdbc.queryForObject("select count(*) from v014_game_turn", Integer.class));
+
+            var replayed = game.takeTurn(USER, "story-save-test",
+                    "进入山门", "request-first-1234", 1);
+            assertEquals(2, replayed.revision());
             assertEquals(1, jdbc.queryForObject("select count(*) from v014_game_turn", Integer.class));
         } finally {
             releaseAll(executor);
+            database.shutdown();
+        }
+    }
+
+    @Test
+    void rejectedPersonalCredentialIsMarkedInvalidWithoutChangingTheSave() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            V014SaveStore saves = saveStore(database);
+            AtomicBoolean invalidated = new AtomicBoolean();
+            V014GameService game = personalCredentialGame(database, jdbc, saves, invalidated);
+
+            GameApiException error = assertThrows(GameApiException.class,
+                    () -> game.takeTurn(USER, "story-save-test", "继续前行", "request-auth-1234", 1));
+
+            assertEquals("PERSONAL_KEY_REJECTED", error.code());
+            assertEquals(true, invalidated.get());
+            assertEquals(1, saves.requireOwned(USER.userId(), "story-save-test").revision());
+            assertEquals(0, jdbc.queryForObject("select count(*) from v014_game_turn", Integer.class));
+        } finally {
             database.shutdown();
         }
     }
@@ -122,8 +150,10 @@ class V014ExpectedRevisionEntryTest {
         return saves;
     }
 
-    private V014GameService game(V014SaveStore saves) {
-        return new V014GameService(saves, null, null, null, null, null,
+    private V014GameService game(EmbeddedDatabase database, V014SaveStore saves) {
+        V014TurnStore turns = new V014TurnStore(new JdbcTemplate(database),
+                new ObjectMapper().findAndRegisterModules());
+        return new V014GameService(saves, turns, null, null, null, null,
                 null, null, null, "https://example.invalid");
     }
 
@@ -157,6 +187,39 @@ class V014ExpectedRevisionEntryTest {
             public ResolvedRoute resolve(String userId, String ignoredLegacyBaseUrl) {
                 return new ResolvedRoute("https://example.invalid", "test-key", "DEEPSEEK",
                         "OPENAI_COMPATIBLE", "test-model", "PUBLIC", false);
+            }
+        };
+        PlayerAiService playerAi = new PlayerAiService(jdbc, null, RestClient.builder(),
+                "https://example.invalid", "test-key") {
+            @Override public void assertPublicQuota(String userId, Route route) {}
+            @Override public void recordSuccessfulInvocation(String userId, Route route) {}
+        };
+        return new V014GameService(saves, turns, null, agent, new V014StateReducer(), models,
+                null, playerAi, new TransactionTemplate(new DataSourceTransactionManager(database)),
+                "https://example.invalid");
+    }
+
+    private V014GameService personalCredentialGame(EmbeddedDatabase database, JdbcTemplate jdbc,
+                                                    V014SaveStore saves, AtomicBoolean invalidated) {
+        V014TurnStore turns = new V014TurnStore(jdbc, new ObjectMapper().findAndRegisterModules());
+        V014StoryAgent agent = new V014StoryAgent(null, null, new ObjectMapper(), null) {
+            @Override
+            public Generated generate(String userId, V014State current, String summary,
+                                      List<V014TurnStore.RecentTurn> recent, String action,
+                                      V014ModelPreferenceService.ResolvedRoute route) {
+                throw new RuntimeException(new AuthenticationException("invalid key"));
+            }
+        };
+        V014ModelPreferenceService models = new V014ModelPreferenceService(jdbc, null) {
+            @Override
+            public ResolvedRoute resolve(String userId, String ignoredLegacyBaseUrl) {
+                return new ResolvedRoute("https://example.invalid", "bad-key", "DEEPSEEK",
+                        "OPENAI_COMPATIBLE", "test-model", "USER", true);
+            }
+
+            @Override
+            public void markCredentialInvalid(String userId, String provider, String errorCode) {
+                invalidated.set(true);
             }
         };
         PlayerAiService playerAi = new PlayerAiService(jdbc, null, RestClient.builder(),

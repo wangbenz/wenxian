@@ -18,6 +18,7 @@ import com.wenxian.game.v014.model.V014State.Protagonist;
 import com.wenxian.game.v014.persistence.V014SaveStore;
 import com.wenxian.game.v014.persistence.V014TurnStore;
 import com.wenxian.game.v014.service.V014ModelPreferenceService.ResolvedRoute;
+import dev.langchain4j.exception.AuthenticationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -51,6 +54,7 @@ public class V014GameService {
     private final TransactionTemplate transactions;
     private final String baseUrl;
     private final Map<String, Object> accountLocks = new ConcurrentHashMap<>();
+    private final Map<String, AtomicBoolean> turnsInProgress = new ConcurrentHashMap<>();
 
     public V014GameService(V014SaveStore saves, V014TurnStore turns, V014WorldCatalog worlds,
                            V014StoryAgent agent, V014StateReducer reducer,
@@ -113,9 +117,11 @@ public class V014GameService {
     }
 
     public SaveResponse takeTurn(UserIdentity user, String saveId, String action, String suppliedRequestId) {
-        synchronized (accountLock(user.userId())) {
-            return takeTurnLocked(user, saveId, action, suppliedRequestId);
-        }
+        return withTurnGate(user.userId(), () -> {
+            synchronized (accountLock(user.userId())) {
+                return takeTurnLocked(user, saveId, action, suppliedRequestId, null);
+            }
+        });
     }
 
     /**
@@ -124,13 +130,15 @@ public class V014GameService {
      */
     public SaveResponse takeTurn(UserIdentity user, String saveId, String action,
                                  String suppliedRequestId, long expectedRevision) {
-        synchronized (accountLock(user.userId())) {
-            assertRevision(user, saveId, expectedRevision);
-            return takeTurnLocked(user, saveId, action, suppliedRequestId);
-        }
+        return withTurnGate(user.userId(), () -> {
+            synchronized (accountLock(user.userId())) {
+                return takeTurnLocked(user, saveId, action, suppliedRequestId, expectedRevision);
+            }
+        });
     }
 
-    private SaveResponse takeTurnLocked(UserIdentity user, String saveId, String action, String suppliedRequestId) {
+    private SaveResponse takeTurnLocked(UserIdentity user, String saveId, String action,
+                                        String suppliedRequestId, Long expectedRevision) {
         V014SaveStore.StoredSave saved = saves.requireOwned(user.userId(), saveId);
         if (!"ACTIVE".equals(saved.status())) {
             throw GameApiException.of(HttpStatus.CONFLICT, "V014_SAVE_NOT_ACTIVE", "STATE",
@@ -139,11 +147,29 @@ public class V014GameService {
         String requestId = suppliedRequestId == null || suppliedRequestId.isBlank()
                 ? "v014-request-" + UUID.randomUUID() : suppliedRequestId.strip();
         if (turns.requestExists(saveId, requestId)) return get(user, saveId);
+        if (expectedRevision != null && saved.revision() != expectedRevision) {
+            throw GameApiException.of(HttpStatus.CONFLICT, "STATE_CONFLICT", "STATE",
+                    "命卷已经在别处发生变化", "已阻止覆盖较新的记录，请刷新后再操作。",
+                    List.of("刷新当前命卷后继续"));
+        }
         ResolvedRoute route = models.resolve(user.userId(), baseUrl);
         PlayerAiService.Route quotaRoute = quotaRoute(route);
         playerAi.assertPublicQuota(user.userId(), quotaRoute);
-        V014StoryAgent.Generated generated = agent.generate(user.userId(), saved.state(), turns.summary(saveId),
-                turns.recent(saveId, 2), action, route);
+        V014StoryAgent.Generated generated;
+        try {
+            generated = agent.generate(user.userId(), saved.state(), turns.summary(saveId),
+                    turns.recent(saveId, 2), action, route);
+        } catch (RuntimeException error) {
+            if (route.hasCustomCredential() && causedByAuthentication(error)) {
+                models.markCredentialInvalid(user.userId(), route.provider(), "AUTHENTICATION_FAILED");
+                throw new GameApiException(HttpStatus.CONFLICT, "PERSONAL_KEY_REJECTED", "CREDENTIAL",
+                        "自己的推演密钥已失效",
+                        "推演服务拒绝了当前密钥，本次未消耗回合或修改命卷。",
+                        List.of("前往设置重新验证密钥", "确认密钥仍有额度且未被停用"), false,
+                        false, false, Map.of(), "personal credential rejected by provider", error);
+            }
+            throw error;
+        }
         V014StateReducer.Applied applied = reducer.apply(saved.state(), action, generated.envelope());
         Long revision = transactions.execute(status -> {
             long next = saves.update(saveId, saved.revision(), applied.state());
@@ -376,6 +402,32 @@ public class V014GameService {
 
     private Object accountLock(String userId) {
         return accountLocks.computeIfAbsent(userId, ignored -> new Object());
+    }
+
+    /** 同一进程内每个账号只允许一个回合进入生成阶段，重复提交立即返回可重试错误。 */
+    private SaveResponse withTurnGate(String userId, Supplier<SaveResponse> action) {
+        AtomicBoolean gate = turnsInProgress.computeIfAbsent(userId, ignored -> new AtomicBoolean());
+        if (!gate.compareAndSet(false, true)) {
+            throw new GameApiException(HttpStatus.CONFLICT, "V014_TURN_IN_PROGRESS", "STATE",
+                    "上一轮仍在推演", "请等待上一轮完成；刷新或重新进入后，可以读取已经写入的结果。",
+                    List.of("等待片刻后刷新命卷", "不要连续重复提交行动"), true,
+                    false, false, Map.of(), "duplicate turn rejected while generation is in progress", null);
+        }
+        try {
+            return action.get();
+        } finally {
+            turnsInProgress.remove(userId, gate);
+        }
+    }
+
+    private boolean causedByAuthentication(Throwable error) {
+        Throwable cursor = error;
+        int depth = 0;
+        while (cursor != null && depth++ < 8) {
+            if (cursor instanceof AuthenticationException) return true;
+            cursor = cursor.getCause();
+        }
+        return false;
     }
 
     private PlayerAiService.Route quotaRoute(ResolvedRoute route) {
