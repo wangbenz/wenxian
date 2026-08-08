@@ -275,17 +275,17 @@ export type SaveSummary = {
 
 export type SaveList = { maxActiveSaves: number; saves: SaveSummary[] };
 
-export type V014Choice = { id: string; title: string; description: string };
-export type V014World = {
+export type StoryChoice = { id: string; title: string; description: string };
+export type StoryWorld = {
   code: string; name: string; source: string; premise: string;
   cultivationStyle: string; openingRegion: string;
 };
-export type V014State = {
+export type StoryState = {
   schemaVersion: number;
   saveId: string;
   turnNumber: number;
   status: string;
-  world: V014World;
+  world: StoryWorld;
   protagonist: {
     name: string; race: string; gender: string; origin: string;
     realm: string; lifeGoal: string; storyTone: string;
@@ -295,31 +295,31 @@ export type V014State = {
   condition: string;
   sceneTitle: string;
   narrative: string;
-  choices: V014Choice[];
+  choices: StoryChoice[];
   inventory: Array<{ id: string; name: string; type: string; description: string; status: string; source: string; quantity: number; inPossession?: boolean }>;
   abilities: Array<{ id: string; name: string; type: string; description: string; status: string; source: string }>;
   characters: Array<{ id: string; name: string; tier: string; identity: string; relationship: string; status: string; lastKnownLocation: string; tracked?: boolean }>;
   memories: Array<{ id: string; title: string; summary: string; worldTimeMinutes: number; importance: string }>;
 };
-export type V014SaveResponse = {
-  state: V014State;
+export type StorySaveResponse = {
+  state: StoryState;
   revision: number;
   generationMode: "PLATFORM" | "PERSONAL";
   personalProvider: string | null;
   personalModel: string | null;
 };
-export type V014SaveSummary = {
+export type StorySaveSummary = {
   id: string; slotNo: number; worldName: string; playerName: string; race: string;
   realm: string; turnNumber: number; status: string; updatedAt: string;
 };
-export type V014Bootstrap = {
+export type StoryBootstrap = {
   version: string;
   maxActiveSaves: number;
   worlds: Array<{ code: string; name: string; premise: string; cultivationStyle: string; openingRegion: string; custom: boolean; available: boolean; availabilityNote: string }>;
   races: string[];
   origins: string[];
 };
-export type V014GenerationSettings = {
+export type StoryGenerationSettings = {
   mode: "PLATFORM" | "PERSONAL";
   platform: { turnLimit: number; usedTurns: number; remainingTurns: number; available: boolean };
   personalProviders: Array<{
@@ -334,17 +334,95 @@ export type V014GenerationSettings = {
   selectedPersonalProvider: string | null;
   selectedPersonalModel: string | null;
 };
-export type V014CreateSave = {
+export type StoryCreateSave = {
   worldCode: string; customWorld?: string; playerName: string; race: string; gender: string;
   origin: string; opening?: string; storyTone?: string;
 };
-export type V014CharacterRoute = {
+export type StoryCharacterRoute = {
   id: string; title: string; origin: string; opening: string; preference: string;
 };
-export type V014CharacterRouteRequest = {
+export type StoryCharacterRouteRequest = {
   worldCode: string; customWorld?: string; playerName: string; race: string; gender: string;
   roleSeed?: string; preferenceSeed?: string;
 };
+
+type StoryBootstrapContract = {
+  releaseVersion: string;
+  maxActiveSaves: number;
+  defaultEngine: { code: string; version: number; stateSchemaVersion: number };
+  worlds: StoryBootstrap["worlds"];
+  races: string[];
+  origins: string[];
+};
+
+type StoryStateContract = Omit<StoryState, "schemaVersion" | "protagonist"> & {
+  protagonist: Omit<StoryState["protagonist"], "storyTone"> & { storyPreference: string };
+};
+
+type StorySaveContract = {
+  saveId: string;
+  mode: "PLAYABLE" | "ARCHIVE";
+  engineCode: string;
+  engineVersion: number;
+  stateSchemaVersion: number;
+  revision: number;
+  turnNumber: number;
+  capabilities: string[];
+  state: StoryStateContract;
+  generationMode: "PLATFORM" | "PERSONAL";
+  personalProvider: string | null;
+  personalModel: string | null;
+};
+
+type StorySaveSummaryContract = {
+  saveId: string; slotNo: number; mode: "PLAYABLE" | "ARCHIVE";
+  engineCode: string; engineVersion: number; stateSchemaVersion: number;
+  revision: number; turnNumber: number; capabilities: string[];
+  worldName: string; playerName: string; race: string; realm: string;
+  status: string; updatedAt: string;
+};
+
+/** 兼容期只在 API 边界转换结构，页面不再读取产品版本决定请求路径。 */
+function legacyBootstrapView(source: StoryBootstrapContract): StoryBootstrap {
+  return {
+    version: source.releaseVersion,
+    maxActiveSaves: source.maxActiveSaves,
+    worlds: source.worlds,
+    races: source.races,
+    origins: source.origins,
+  };
+}
+
+function legacySaveView(source: StorySaveContract): StorySaveResponse {
+  return {
+    state: {
+      ...source.state,
+      schemaVersion: source.stateSchemaVersion,
+      protagonist: {
+        ...source.state.protagonist,
+        storyTone: source.state.protagonist.storyPreference,
+      },
+    },
+    revision: source.revision,
+    generationMode: source.generationMode,
+    personalProvider: source.personalProvider,
+    personalModel: source.personalModel,
+  };
+}
+
+function legacySaveSummary(source: StorySaveSummaryContract): StorySaveSummary {
+  return {
+    id: source.saveId,
+    slotNo: source.slotNo,
+    worldName: source.worldName,
+    playerName: source.playerName,
+    race: source.race,
+    realm: source.realm,
+    turnNumber: source.turnNumber,
+    status: source.status,
+    updatedAt: source.updatedAt,
+  };
+}
 
 export class ApiError extends Error {
   status: number;
@@ -508,35 +586,33 @@ export const gameApi = {
   abandonSave: (saveId: string, playerName: string) => request<void>(`/api/v1/saves/${encodeURIComponent(saveId)}/abandon`, {
     method: "POST", body: JSON.stringify({ playerName }),
   }),
-  v014Bootstrap: () => request<V014Bootstrap>("/api/v1/v014/bootstrap"),
-  v014CharacterRoutes: (draft: V014CharacterRouteRequest) => request<{ routes: V014CharacterRoute[] }>("/api/v1/v014/character-routes", {
+  storyBootstrap: () => request<StoryBootstrapContract>("/api/v1/story/bootstrap").then(legacyBootstrapView),
+  storyCharacterRoutes: (draft: StoryCharacterRouteRequest) => request<{ routes: StoryCharacterRoute[] }>("/api/v1/story/character-routes", {
     method: "POST", body: JSON.stringify(draft),
   }),
-  v014Saves: () => request<V014SaveSummary[]>("/api/v1/v014/saves"),
-  v014Save: (saveId: string) => request<V014SaveResponse>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}`),
-  v014CreateSave: (draft: V014CreateSave) => request<V014SaveResponse>("/api/v1/v014/saves", {
-    method: "POST", body: JSON.stringify(draft),
-  }),
-  v014Turn: (saveId: string, action: string) => request<V014SaveResponse>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}/turns`, {
+  storySaves: () => request<StorySaveSummaryContract[]>("/api/v1/story/saves").then((rows) => rows.map(legacySaveSummary)),
+  storySave: (saveId: string) => request<StorySaveContract>(`/api/v1/story/saves/${encodeURIComponent(saveId)}`).then(legacySaveView),
+  storyCreateSave: (draft: StoryCreateSave) => request<StorySaveContract>("/api/v1/story/saves", {
+    method: "POST", body: JSON.stringify({ ...draft, storyPreference: draft.storyTone, storyTone: undefined }),
+  }).then(legacySaveView),
+  storyTurn: (saveId: string, action: string, expectedRevision: number) => request<StorySaveContract>(`/api/v1/story/saves/${encodeURIComponent(saveId)}/turns`, {
     method: "POST",
-    body: JSON.stringify({ action, requestId: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `turn-${Date.now()}` }),
-  }),
-  v014Correct: (saveId: string, instruction: string) => request<V014SaveResponse>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}/corrections`, {
-    method: "POST", body: JSON.stringify({ instruction }),
-  }),
-  v014RemoveItem: (saveId: string, itemId: string, revision: number) => request<V014SaveResponse>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}/items/${encodeURIComponent(itemId)}?revision=${revision}`, {
+    body: JSON.stringify({ action, expectedRevision,
+      requestId: typeof window.crypto?.randomUUID === "function" ? window.crypto.randomUUID() : `turn-${Date.now()}` }),
+  }).then(legacySaveView),
+  storyCorrect: (saveId: string, instruction: string, expectedRevision: number) => request<StorySaveContract>(`/api/v1/story/saves/${encodeURIComponent(saveId)}/corrections`, {
+    method: "POST", body: JSON.stringify({ instruction, expectedRevision }),
+  }).then(legacySaveView),
+  storyRemoveEntity: (saveId: string, entityId: string, revision: number) => request<StorySaveContract>(`/api/v1/story/saves/${encodeURIComponent(saveId)}/entities/${encodeURIComponent(entityId)}?revision=${revision}`, {
     method: "DELETE",
-  }),
-  v014UntrackCharacter: (saveId: string, characterId: string, revision: number) => request<V014SaveResponse>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}/characters/${encodeURIComponent(characterId)}?revision=${revision}`, {
-    method: "DELETE",
-  }),
-  v014Archive: (saveId: string) => request<void>(`/api/v1/v014/saves/${encodeURIComponent(saveId)}`, { method: "DELETE" }),
-  v014GenerationSettings: () => request<V014GenerationSettings>("/api/v1/v014/generation-settings"),
-  v014SaveGenerationSettings: (settings: { mode: "PLATFORM" | "PERSONAL"; provider?: string; model?: string }) => request<V014GenerationSettings>("/api/v1/v014/generation-settings", {
+  }).then(legacySaveView),
+  storyArchive: (saveId: string) => request<void>(`/api/v1/story/saves/${encodeURIComponent(saveId)}`, { method: "DELETE" }),
+  generationSettings: () => request<StoryGenerationSettings>("/api/v1/generation/settings"),
+  saveGenerationSettings: (settings: { mode: "PLATFORM" | "PERSONAL"; provider?: string; model?: string }) => request<StoryGenerationSettings>("/api/v1/generation/settings", {
     method: "PUT", body: JSON.stringify(settings),
   }),
-  v014SaveProviderCredential: (provider: string, model: string, apiKey: string) => request<V014GenerationSettings>(`/api/v1/v014/generation-settings/providers/${encodeURIComponent(provider)}/credential`, {
+  saveProviderCredential: (provider: string, model: string, apiKey: string) => request<StoryGenerationSettings>(`/api/v1/generation/providers/${encodeURIComponent(provider)}/credential`, {
     method: "PUT", body: JSON.stringify({ model, apiKey }),
   }),
-  v014DeleteProviderCredential: (provider: string) => request<V014GenerationSettings>(`/api/v1/v014/generation-settings/providers/${encodeURIComponent(provider)}/credential`, { method: "DELETE" }),
+  deleteProviderCredential: (provider: string) => request<StoryGenerationSettings>(`/api/v1/generation/providers/${encodeURIComponent(provider)}/credential`, { method: "DELETE" }),
 };

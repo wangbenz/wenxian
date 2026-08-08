@@ -29,10 +29,10 @@ import {
   type ReleaseNote,
   type SaveSummary,
   type SyncMode,
-  type V014Bootstrap,
-  type V014CharacterRoute,
-  type V014GenerationSettings,
-  type V014SaveResponse,
+  type StoryBootstrap,
+  type StoryCharacterRoute,
+  type StoryGenerationSettings,
+  type StorySaveResponse,
 } from "./game-api";
 
 type TabId = "adventure" | "character" | "chronicle" | "world";
@@ -70,9 +70,9 @@ const DEFAULT_DRAFT: CharacterDraft = {
 };
 
 const RACE_NAMES: Record<string, string> = { HUMAN: "人族", DEMON: "妖族", SPIRIT: "灵族" };
-const V014_RACE_CODES: Record<string, CharacterDraft["race"]> = { 人族: "HUMAN", 妖族: "DEMON", 灵族: "SPIRIT" };
-const V014_RACE_NAMES: Record<string, string> = { HUMAN: "人族", DEMON: "妖族", SPIRIT: "灵族" };
-const V014_GENDER_NAMES: Record<string, string> = { MALE: "男", FEMALE: "女", UNSPECIFIED: "不设定" };
+const STORY_RACE_CODES: Record<string, CharacterDraft["race"]> = { 人族: "HUMAN", 妖族: "DEMON", 灵族: "SPIRIT" };
+const STORY_RACE_NAMES: Record<string, string> = { HUMAN: "人族", DEMON: "妖族", SPIRIT: "灵族" };
+const STORY_GENDER_NAMES: Record<string, string> = { MALE: "男", FEMALE: "女", UNSPECIFIED: "不设定" };
 
 function versionAtLeast(value: string | undefined, target: number) {
   const match = value?.match(/V?(\d+)\.(\d+)/i);
@@ -86,7 +86,7 @@ function navigateEdition(edition?: "v013") {
   window.location.assign(url.toString());
 }
 
-function v014BootstrapView(source: V014Bootstrap): BootstrapResponse {
+function storyBootstrapView(source: StoryBootstrap): BootstrapResponse {
   const first = source.worlds.find((world) => !world.custom) ?? source.worlds[0];
   return {
     gameName: "问仙录", version: source.version,
@@ -94,10 +94,10 @@ function v014BootstrapView(source: V014Bootstrap): BootstrapResponse {
       id: first?.code ?? "XUANXU", title: first?.name ?? "问仙诸界", era: "一卷一世界",
       summary: first?.premise ?? "每一方世界，都有一种关于仙的答案。",
       cultivationLaw: first?.cultivationStyle ?? "修行自有来处与代价。", dangerRule: "世界不会围绕主角停转。",
-      regions: source.worlds.filter((world) => !world.custom).map((world) => world.name), factions: [], generatedBy: "V0.14",
+      regions: source.worlds.filter((world) => !world.custom).map((world) => world.name), factions: [], generatedBy: "轻叙事引擎",
     },
-    races: source.races.filter((race) => V014_RACE_CODES[race]).map((race) => ({
-      code: V014_RACE_CODES[race] as "HUMAN" | "DEMON" | "SPIRIT", name: race,
+    races: source.races.filter((race) => STORY_RACE_CODES[race]).map((race) => ({
+      code: STORY_RACE_CODES[race] as "HUMAN" | "DEMON" | "SPIRIT", name: race,
       description: race === "人族" ? "寿数有限，传承与选择塑造一生。" : race === "妖族" ? "血脉与本相相伴，也受天地与族群影响。" : "由灵物、山川或执念生出灵智。",
       strengths: ["出身自由"], weaknesses: ["命数未知"], lifespan: "由世界与出身决定",
     })),
@@ -113,11 +113,11 @@ function v014BootstrapView(source: V014Bootstrap): BootstrapResponse {
   };
 }
 
-function v014SnapshotView(source: V014SaveResponse): ApiSnapshot {
+function storySnapshotView(source: StorySaveResponse): ApiSnapshot {
   const state = source.state;
   const minutesPerYear = 360 * 1440;
   const inYear = state.worldTimeMinutes % minutesPerYear;
-  const raceCode = V014_RACE_CODES[state.protagonist.race] || state.protagonist.race;
+  const raceCode = STORY_RACE_CODES[state.protagonist.race] || state.protagonist.race;
   const mapped: GameState = {
     phase: "playing", difficulty: "NORMAL", saveId: state.saveId, sceneId: `v014-${state.turnNumber}`,
     sceneTitle: state.sceneTitle, currentLocation: state.currentLocation,
@@ -127,7 +127,7 @@ function v014SnapshotView(source: V014SaveResponse): ApiSnapshot {
     choices: state.choices.map((choice) => ({ id: choice.id, label: choice.title, hint: choice.description })),
     world: { id: state.world.code, title: state.world.name, era: "此生命卷", summary: state.world.premise,
       cultivationLaw: state.world.cultivationStyle, dangerRule: "人物、时间与得失会沿同一份命卷继续变化。",
-      regions: [state.world.openingRegion], factions: [], generatedBy: "V0.14" },
+      regions: [state.world.openingRegion], factions: [], generatedBy: "轻叙事引擎" },
     creationProfile: null, protagonistOptions: [], talentOptions: [], talentRerolled: false,
     player: { name: state.protagonist.name, race: raceCode, gender: state.protagonist.gender, age: 16, lifespan: 75,
       identity: state.protagonist.origin, origin: state.protagonist.origin, originPremise: "",
@@ -393,26 +393,26 @@ function CharacterCreationView({
   alternatives: string[];
   isBusy: boolean;
   error: UiProblem | null;
-  routeOptions: V014CharacterRoute[];
+  routeOptions: StoryCharacterRoute[];
   selectedRouteId: string;
   onDraft: (patch: Partial<CharacterDraft>) => void;
   onGenerateName: () => void;
   onGenerateRoutes: () => void;
-  onSelectRoute: (route: V014CharacterRoute) => void;
+  onSelectRoute: (route: StoryCharacterRoute) => void;
   onCreate: () => void;
   onCancelRestart?: () => void;
   onLogout: () => void;
   onLegacyArchive?: () => void;
 }) {
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const isV014 = Boolean(bootstrap.worldOptions);
+  const isStoryMode = Boolean(bootstrap.worldOptions);
 
   const requestFates = () => {
     if (!draft.playerName.trim()) {
       nameInputRef.current?.focus();
       nameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-    if (isV014 && !draft.originPremise.trim()) onGenerateRoutes();
+    if (isStoryMode && !draft.originPremise.trim()) onGenerateRoutes();
     else onCreate();
   };
 
@@ -493,7 +493,7 @@ function CharacterCreationView({
           )}
         </fieldset>
 
-        {!isV014 && <><div className="two-column-fields single-column-fields">
+        {!isStoryMode && <><div className="two-column-fields single-column-fields">
           <fieldset className="choice-fieldset identity-step">
             <legend><span>四</span> 此生所求</legend>
             <div className="goal-grid">
@@ -518,7 +518,7 @@ function CharacterCreationView({
           <p className="difficulty-note">难度在本世开启后不会中途改变；重开命卷时可以重新选择。</p>
         </fieldset></>}
 
-        {isV014 && <fieldset className="choice-fieldset identity-step character-route-step">
+        {isStoryMode && <fieldset className="choice-fieldset identity-step character-route-step">
           <legend><span>四</span> 角色路线</legend>
           <p className="route-intro">系统会结合所选世界、种族、性别与姓名，推演三种不同的入世方式。路线只是开端，不会限制之后的自由行动。</p>
           <button className="route-generate-button" disabled={isBusy || !draft.race || !draft.gender || !draft.playerName.trim()} onClick={onGenerateRoutes} type="button"><ReloadIcon />{routeOptions.length ? "重新推演三条路线" : "推演三条角色路线"}</button>
@@ -526,7 +526,7 @@ function CharacterCreationView({
         </fieldset>}
 
         <label className="preference-field origin-premise-field">
-          <span>{isV014 ? "角色设定" : "角色根源"} <small>{isV014 ? "选择路线后仍可修改" : "必须遵守 · 可留空"}</small></span>
+          <span>{isStoryMode ? "角色设定" : "角色根源"} <small>{isStoryMode ? "选择路线后仍可修改" : "必须遵守 · 可留空"}</small></span>
           <textarea
             maxLength={160}
             onChange={(event) => onDraft({ originPremise: event.currentTarget.value })}
@@ -538,11 +538,11 @@ function CharacterCreationView({
         </label>
 
         <label className="preference-field">
-          <span>{isV014 ? "游玩偏好" : "命格偏好"} <small>可留空</small></span>
+          <span>{isStoryMode ? "游玩偏好" : "命格偏好"} <small>可留空</small></span>
           <textarea
             maxLength={160}
             onChange={(event) => onDraft({ preference: event.currentTarget.value })}
-            placeholder={isV014 ? "例如：喜欢探索奇遇与人物关系，希望少一些机械受难。" : "例如：低起点、宗门线、重谋略；命格只会在既定世界中展开。"}
+            placeholder={isStoryMode ? "例如：喜欢探索奇遇与人物关系，希望少一些机械受难。" : "例如：低起点、宗门线、重谋略；命格只会在既定世界中展开。"}
             rows={3}
             value={draft.preference}
           />
@@ -550,7 +550,7 @@ function CharacterCreationView({
 
         {error && <ProblemNotice compact problem={error} />}
         <button className="primary-entry-button" disabled={isBusy} onClick={requestFates} type="button">
-          {isBusy ? "天机正在落笔…" : isV014 ? draft.originPremise.trim() ? "开启此生命卷" : "先推演角色路线" : "生成三种命格"}<ArrowRightIcon />
+          {isBusy ? "天机正在落笔…" : isStoryMode ? draft.originPremise.trim() ? "开启此生命卷" : "先推演角色路线" : "生成三种命格"}<ArrowRightIcon />
         </button>
         {onCancelRestart && <button className="text-button" disabled={isBusy} onClick={onCancelRestart} type="button">返回原来的命卷</button>}
         <button className="text-button" disabled={isBusy} onClick={onLogout} type="button">退出当前邮箱</button>
@@ -634,7 +634,7 @@ function AdventureView({ game, choices, resolution, aiSettings, isBusy, offline,
     <div className="adventure-view">
       <section className="scene-heading" aria-labelledby="scene-title"><span className="leaf-mark" aria-hidden="true">〆</span><div><p className="eyebrow">当前场景</p><h1 id="scene-title">{game.sceneTitle}</h1><small className="scene-time"><ClockIcon />{formatWorldTime(game.worldYear, game.day, game.minute)}</small></div></section>
       <div className="ornament-line" aria-hidden="true"><span /></div>
-      {readOnly && <section className="legacy-readonly-notice" role="status"><strong>旧版命卷 · 只读档案</strong><p>这段经历已经封存，可继续查阅剧情、角色、纪事与世界记录，但不能再行动、重开或修改。</p><button onClick={() => navigateEdition()} type="button">返回 V0.14</button></section>}
+      {readOnly && <section className="legacy-readonly-notice" role="status"><strong>旧版命卷 · 只读档案</strong><p>这段经历已经封存，可继续查阅剧情、角色、纪事与世界记录，但不能再行动、重开或修改。</p><button onClick={() => navigateEdition()} type="button">返回当前命卷</button></section>}
       <section className="narrative" aria-label="剧情">{game.narrative.map((paragraph, index) => <p data-beat={index > 0 && index % 3 === 0 ? "new" : undefined} key={`${index}-${paragraph}`}>{paragraph}</p>)}</section>
       {game.signals.length > 0 && <section className="signal-strip" aria-label="局势变化">{game.signals.map((signal, index) => <span className={index % 2 ? "signal-danger" : "signal-safe"} key={`${index}-${signal}`}>{signal}</span>)}</section>}
       {resolution && <section className="action-resolution" data-result={resolution.result} role="status">
@@ -680,7 +680,7 @@ function CharacterView({ game, isBusy, onCleanup }: { game: GameState; isBusy: b
   const mortalMoney = formatMortalMoney(copperWen);
   const spiritMoney = formatSpiritMoney(game.wallet);
   const hasStructuredWallet = game.wallet !== undefined || game.economyVersion !== undefined;
-  const isLightStorySave = game.world.generatedBy === "V0.14";
+  const isLightStorySave = game.world.generatedBy === "轻叙事引擎";
   return (
     <div className="record-view">
       <div className="page-title-row"><div><p className="eyebrow">CHARACTER RECORD</p><h1>角色</h1></div><div className="record-title-actions"><span className="turn-badge">第 {game.turn} 回</span>{isLightStorySave && onCleanup && <button className="record-manage-button" disabled={isBusy} onClick={() => setOrganizing((current) => !current)} type="button">{organizing ? "完成整理" : "整理记录"}</button>}</div></div>
@@ -841,14 +841,14 @@ function SaveCards({ saves, currentSaveId, maxActiveSaves, isBusy, readOnly = fa
 }
 
 function SaveSelectionView({ saves, maxActiveSaves, isBusy, readOnly = false, showLegacyArchive = false, onOpen, onCreate, onAbandon, onLogout }: { saves: SaveSummary[]; maxActiveSaves: number; isBusy: boolean; readOnly?: boolean; showLegacyArchive?: boolean; onOpen: (save: SaveSummary) => void; onCreate: () => void; onAbandon: (save: SaveSummary) => void; onLogout: () => void }) {
-  return <div className="record-view save-selection-view"><div className="page-title-row"><div><p className="eyebrow">YOUR DESTINY SCROLLS</p><h1>{readOnly ? "旧版命卷档案" : "选择命卷"}</h1></div><ReaderIcon className="title-icon" /></div>{readOnly ? <section className="legacy-readonly-notice"><strong>V0.13 已停止续写</strong><p>旧角色与经历完整保留供查阅，不会迁入或覆盖 V0.14 命卷。</p><button onClick={() => navigateEdition()} type="button">返回 V0.14</button></section> : <p className="save-selection-copy">同一账号可以保留 {maxActiveSaves} 名仍在世的角色。每份命卷拥有独立的经历、人物关系与天机上下文。</p>}<SaveCards isBusy={isBusy} maxActiveSaves={maxActiveSaves} onAbandon={onAbandon} onCreate={onCreate} onOpen={onOpen} readOnly={readOnly} saves={saves} />{showLegacyArchive && <button className="legacy-archive-link" onClick={() => navigateEdition("v013")} type="button"><ReaderIcon />查看 V0.13 旧版命卷档案</button>}<button className="reset-button save-logout" onClick={onLogout} type="button">退出邮箱</button></div>;
+  return <div className="record-view save-selection-view"><div className="page-title-row"><div><p className="eyebrow">YOUR DESTINY SCROLLS</p><h1>{readOnly ? "旧版命卷档案" : "选择命卷"}</h1></div><ReaderIcon className="title-icon" /></div>{readOnly ? <section className="legacy-readonly-notice"><strong>V0.13 已停止续写</strong><p>旧角色与经历完整保留供查阅，不会迁入或覆盖当前命卷。</p><button onClick={() => navigateEdition()} type="button">返回当前命卷</button></section> : <p className="save-selection-copy">同一账号可以保留 {maxActiveSaves} 名仍在世的角色。每份命卷拥有独立的经历、人物关系与天机上下文。</p>}<SaveCards isBusy={isBusy} maxActiveSaves={maxActiveSaves} onAbandon={onAbandon} onCreate={onCreate} onOpen={onOpen} readOnly={readOnly} saves={saves} />{showLegacyArchive && <button className="legacy-archive-link" onClick={() => navigateEdition("v013")} type="button"><ReaderIcon />查看 V0.13 旧版命卷档案</button>}<button className="reset-button save-logout" onClick={onLogout} type="button">退出邮箱</button></div>;
 }
 
 function LegacyArchiveUnavailableView({ onLogout }: { onLogout: () => void }) {
-  return <div className="record-view legacy-archive-empty"><div className="page-title-row"><div><p className="eyebrow">ARCHIVED LEGACY SCROLL</p><h1>旧版命卷已封存</h1></div><ReaderIcon className="title-icon" /></div><section className="legacy-readonly-notice"><strong>这份旧命卷尚未正式入世</strong><p>V0.13 的未完成创角、命格或天赋选择不再继续生成。已有正式角色仍可在旧版档案中查阅。</p></section><button className="primary-entry-button" onClick={() => navigateEdition()} type="button">返回 V0.14 开启新命卷<ArrowRightIcon /></button><button className="text-button" onClick={onLogout} type="button">退出当前邮箱</button></div>;
+  return <div className="record-view legacy-archive-empty"><div className="page-title-row"><div><p className="eyebrow">ARCHIVED LEGACY SCROLL</p><h1>旧版命卷已封存</h1></div><ReaderIcon className="title-icon" /></div><section className="legacy-readonly-notice"><strong>这份旧命卷尚未正式入世</strong><p>V0.13 的未完成创角、命格或天赋选择不再继续生成。已有正式角色仍可在旧版档案中查阅。</p></section><button className="primary-entry-button" onClick={() => navigateEdition()} type="button">返回当前版本开启新命卷<ArrowRightIcon /></button><button className="text-button" onClick={onLogout} type="button">退出当前邮箱</button></div>;
 }
 
-function GenerationAccessCard({ settings, generation, isBusy, onOpen }: { settings: AiSettings; generation: V014GenerationSettings | null; isBusy: boolean; onOpen: () => void }) {
+function GenerationAccessCard({ settings, generation, isBusy, onOpen }: { settings: AiSettings; generation: StoryGenerationSettings | null; isBusy: boolean; onOpen: () => void }) {
   const personal = generation?.mode === "PERSONAL";
   const provider = generation?.personalProviders.find((item) => item.code === generation.selectedPersonalProvider);
   const personalReady = personal && provider?.credentialConfigured && provider.credentialStatus === "ACTIVE";
@@ -890,7 +890,7 @@ function LegacyAiCredentialDialog({ settings, error, isBusy, onCancel, onSave, o
   return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog credential-dialog" role="dialog"><div className="ink-dialog-seal">钥</div><p className="eyebrow">PRIVATE GENERATION KEY</p><h2>自己的推演密钥</h2><p>密钥会在服务器加密保存，只用于续写你的游戏故事；页面不会再次展示完整内容。</p>{insecureRemote && <p className="credential-warning">当前连接未启用 HTTPS，为避免密钥在传输中暴露，暂不允许保存。请改用安全地址。</p>}{error && <ProblemNotice compact problem={error} />}<label className="credential-field">DeepSeek API Key<input autoComplete="off" disabled={isBusy || insecureRemote} placeholder={settings.credentialConfigured ? `当前尾号 ${settings.maskedSuffix ?? "****"}，输入新密钥可替换` : "sk-…"} type="password" value={apiKey} onChange={(event) => setApiKey(event.currentTarget.value)} />{keyTooShort && <small>密钥长度不足，请粘贴完整的 API Key。</small>}</label><div className="ink-dialog-actions credential-actions"><button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">返回</button>{settings.credentialConfigured && <button className="credential-delete" disabled={isBusy} onClick={onDelete} type="button">移除密钥</button>}<button className="ink-dialog-confirm" disabled={isBusy || insecureRemote || apiKey.trim().length < 20} onClick={() => onSave(apiKey.trim())} type="button">{isBusy ? "正在验证…" : "验证并保存"}</button></div></section></div>;
 }
 
-function GenerationSettingsDialog({ settings, error, isBusy, onCancel, onUsePlatform, onSave, onActivate, onDelete }: { settings: V014GenerationSettings; error: UiProblem | null; isBusy: boolean; onCancel: () => void; onUsePlatform: () => void; onSave: (provider: string, model: string, key: string) => void; onActivate: (provider: string, model: string) => void; onDelete: (provider: string) => void }) {
+function GenerationSettingsDialog({ settings, error, isBusy, onCancel, onUsePlatform, onSave, onActivate, onDelete }: { settings: StoryGenerationSettings; error: UiProblem | null; isBusy: boolean; onCancel: () => void; onUsePlatform: () => void; onSave: (provider: string, model: string, key: string) => void; onActivate: (provider: string, model: string) => void; onDelete: (provider: string) => void }) {
   const fallbackProvider = settings.personalProviders[0]?.code ?? "";
   const [providerCode, setProviderCode] = useState(settings.selectedPersonalProvider ?? fallbackProvider);
   const provider = settings.personalProviders.find((item) => item.code === providerCode) ?? settings.personalProviders[0];
@@ -962,14 +962,14 @@ function RecordCleanupDialog({ target, isBusy, onCancel, onConfirm }: { target: 
   </section></div>;
 }
 
-function QuickSettingsPanel({ theme, fontSize, generation, aiSettings, email, passwordConfigured, isBusy, legacyReadOnly = false, showLegacyArchive = false, onClose, onTheme, onFontSize, onPlatform, onAiSettings, onPasswordSettings, onSaves, onReset, onLogout, onDeleteAccount }: { theme: ThemeMode; fontSize: FontSizeMode; generation: V014GenerationSettings | null; aiSettings: AiSettings | null; email: string; passwordConfigured: boolean; isBusy: boolean; legacyReadOnly?: boolean; showLegacyArchive?: boolean; onClose: () => void; onTheme: (value: ThemeMode) => void; onFontSize: (value: FontSizeMode) => void; onPlatform: () => void; onAiSettings: () => void; onPasswordSettings: () => void; onSaves: () => void; onReset: () => void; onLogout: () => void; onDeleteAccount: () => void }) {
+function QuickSettingsPanel({ theme, fontSize, generation, aiSettings, email, passwordConfigured, isBusy, legacyReadOnly = false, showLegacyArchive = false, onClose, onTheme, onFontSize, onPlatform, onAiSettings, onPasswordSettings, onSaves, onReset, onLogout, onDeleteAccount }: { theme: ThemeMode; fontSize: FontSizeMode; generation: StoryGenerationSettings | null; aiSettings: AiSettings | null; email: string; passwordConfigured: boolean; isBusy: boolean; legacyReadOnly?: boolean; showLegacyArchive?: boolean; onClose: () => void; onTheme: (value: ThemeMode) => void; onFontSize: (value: FontSizeMode) => void; onPlatform: () => void; onAiSettings: () => void; onPasswordSettings: () => void; onSaves: () => void; onReset: () => void; onLogout: () => void; onDeleteAccount: () => void }) {
   const personalProvider = generation?.personalProviders.find((item) => item.code === generation.selectedPersonalProvider);
   const personalModel = personalProvider?.models.find((item) => item.code === generation?.selectedPersonalModel);
   const personalReady = generation?.mode === "PERSONAL" && personalProvider?.credentialConfigured && personalProvider.credentialStatus === "ACTIVE";
   return <div className="quick-settings-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}><aside aria-modal="true" className="quick-settings-panel" role="dialog"><header><div><p className="eyebrow">READING & ACCOUNT</p><h2>设置</h2></div><button aria-label="关闭设置" onClick={onClose} type="button"><Cross2Icon /></button></header>
     <section><h3>阅读外观</h3><p>只改变当前设备的阅读效果，不会影响命卷。</p><div className="theme-switch">{([['system','跟随系统'],['paper','宣纸'],['night','月夜']] as Array<[ThemeMode,string]>).map(([id,label]) => <button aria-pressed={theme === id} data-selected={theme === id} key={id} onClick={() => onTheme(id)} type="button">{label}</button>)}</div><div className="font-size-setting"><div><strong>字体大小</strong><span>调整剧情、选项与档案正文。</span></div><div className="theme-switch">{([['compact','小字'],['standard','标准'],['large','大字']] as Array<[FontSizeMode,string]>).map(([id,label]) => <button aria-pressed={fontSize === id} data-selected={fontSize === id} key={id} onClick={() => onFontSize(id)} type="button">{label}</button>)}</div></div></section>
     <section><h3>剧情生成</h3>{generation ? <><p>{generation.mode === "PERSONAL" ? personalReady ? `正在使用自己的${personalProvider ? ` ${personalProvider.name}` : ""}密钥${personalModel ? ` · ${personalModel.name}` : ""}。` : "自己的推演密钥当前不可用；行动会暂停，不会自动消耗平台回合。" : `正在使用平台推演，还可行动 ${generation.platform.remainingTurns} 回。平台使用的供应商和模型由游戏统一维护。`}</p><div className="theme-switch"><button aria-pressed={generation.mode === "PLATFORM"} data-selected={generation.mode === "PLATFORM"} disabled={isBusy} onClick={onPlatform} type="button">平台推演</button><button aria-pressed={generation.mode === "PERSONAL"} data-selected={generation.mode === "PERSONAL"} disabled={isBusy || generation.personalProviders.length === 0} onClick={onAiSettings} type="button">自己的密钥</button></div></> : <><p>{!aiSettings ? "生成设置暂未同步。" : aiSettings.usingCustomApi ? `正在使用自己的密钥，尾号 ${aiSettings.maskedSuffix ?? "已隐藏"}。` : `正在使用平台推演，还可行动 ${aiSettings.remainingTurns} 回。`}</p><button className="secondary-setting-button" disabled={!aiSettings?.customApiEnabled} onClick={onAiSettings} type="button">{aiSettings?.credentialConfigured ? "管理自己的密钥" : "接入自己的密钥"}</button></>}</section>
-    <section><h3>账号与命卷</h3><p>{email || "当前账号"}<br />{passwordConfigured ? "登录密码已设置。" : "请为旧账号设置登录密码。"}</p><div className="settings-action-grid"><button onClick={onPasswordSettings} type="button">{passwordConfigured ? "修改密码" : "设置密码"}</button><button onClick={onSaves} type="button">{legacyReadOnly ? "旧版命卷" : "我的命卷"}</button>{showLegacyArchive && <button className="settings-wide-action" onClick={() => navigateEdition("v013")} type="button"><ReaderIcon />V0.13 旧版命卷档案</button>}{legacyReadOnly && <button className="settings-wide-action" onClick={() => navigateEdition()} type="button"><ArrowRightIcon />返回 V0.14</button>}</div></section>
+    <section><h3>账号与命卷</h3><p>{email || "当前账号"}<br />{passwordConfigured ? "登录密码已设置。" : "请为旧账号设置登录密码。"}</p><div className="settings-action-grid"><button onClick={onPasswordSettings} type="button">{passwordConfigured ? "修改密码" : "设置密码"}</button><button onClick={onSaves} type="button">{legacyReadOnly ? "旧版命卷" : "我的命卷"}</button>{showLegacyArchive && <button className="settings-wide-action" onClick={() => navigateEdition("v013")} type="button"><ReaderIcon />V0.13 旧版命卷档案</button>}{legacyReadOnly && <button className="settings-wide-action" onClick={() => navigateEdition()} type="button"><ArrowRightIcon />返回当前命卷</button>}</div></section>
     <section className="settings-danger-zone"><h3>命卷管理</h3><p>{legacyReadOnly ? "旧版命卷只读封存；退出账号不会删除档案。" : "重开只影响当前角色；退出账号不会删除存档。"}</p><div className="settings-action-grid">{!legacyReadOnly && <button onClick={onReset} type="button"><ReloadIcon />重开此世</button>}<button onClick={onLogout} type="button">退出账号</button></div>{!legacyReadOnly && <button className="delete-account-button" onClick={onDeleteAccount} type="button">注销账号与全部命卷</button>}</section>
   </aside></div>;
 }
@@ -982,13 +982,13 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
   const [snapshot, setSnapshot] = useState<ApiSnapshot | null>(null);
   const [saves, setSaves] = useState<SaveSummary[]>([]);
   const [maxActiveSaves, setMaxActiveSaves] = useState(2);
-  const v014MaxActiveSavesRef = useRef(2);
+  const storyMaxActiveSavesRef = useRef(2);
   const [abandonTarget, setAbandonTarget] = useState<SaveSummary | null>(null);
   const [draft, setDraft] = useState("");
   const [characterDraft, setCharacterDraft] = useState<CharacterDraft>(DEFAULT_DRAFT);
   const [nameAlternatives, setNameAlternatives] = useState<string[]>([]);
   const [generatedName, setGeneratedName] = useState("");
-  const [characterRoutes, setCharacterRoutes] = useState<V014CharacterRoute[]>([]);
+  const [characterRoutes, setCharacterRoutes] = useState<StoryCharacterRoute[]>([]);
   const [selectedCharacterRouteId, setSelectedCharacterRouteId] = useState("");
   const [selectedFate, setSelectedFate] = useState("");
   const [selectedTalent, setSelectedTalent] = useState("");
@@ -1015,7 +1015,7 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
   const [turnLimitNotice, setTurnLimitNotice] = useState<TurnLimitNotice | null>(null);
   const [maintenanceNotice, setMaintenanceNotice] = useState<MaintenanceNotice | null>(null);
   const [showQuickSettings, setShowQuickSettings] = useState(false);
-  const [generationSettings, setGenerationSettings] = useState<V014GenerationSettings | null>(null);
+  const [generationSettings, setGenerationSettings] = useState<StoryGenerationSettings | null>(null);
   const [cleanupTarget, setCleanupTarget] = useState<CleanupTarget | null>(null);
 
   const game = snapshot?.state ?? null;
@@ -1032,10 +1032,10 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
 
   const loadBootstrap = async () => {
     if (v014) {
-      const source = await gameApi.v014Bootstrap();
-      v014MaxActiveSavesRef.current = source.maxActiveSaves;
+      const source = await gameApi.storyBootstrap();
+      storyMaxActiveSavesRef.current = source.maxActiveSaves;
       setMaxActiveSaves(source.maxActiveSaves);
-      const next = v014BootstrapView(source);
+      const next = storyBootstrapView(source);
       setBootstrap(next);
       return next;
     }
@@ -1048,10 +1048,10 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
 
   const refreshSaves = async () => {
     if (v014) {
-      const rows = await gameApi.v014Saves();
-      const list = { maxActiveSaves: v014MaxActiveSavesRef.current, saves: rows.filter((save) => save.status === "ACTIVE").map((save) => ({
+      const rows = await gameApi.storySaves();
+      const list = { maxActiveSaves: storyMaxActiveSavesRef.current, saves: rows.filter((save) => save.status === "ACTIVE").map((save) => ({
         saveId: save.id, slotNo: save.slotNo, phase: "playing" as const, playerName: save.playerName,
-        race: V014_RACE_CODES[save.race] || save.race, realm: save.realm, currentLocation: save.worldName,
+        race: STORY_RACE_CODES[save.race] || save.race, realm: save.realm, currentLocation: save.worldName,
         sceneTitle: save.worldName, turn: save.turnNumber, updatedAt: save.updatedAt,
       })) };
       setSaves(list.saves); setMaxActiveSaves(list.maxActiveSaves); return list;
@@ -1062,7 +1062,7 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
     return list;
   };
 
-  const loadSave = async (saveId: string) => v014 ? v014SnapshotView(await gameApi.v014Save(saveId)) : gameApi.getSave(saveId);
+  const loadSave = async (saveId: string) => v014 ? storySnapshotView(await gameApi.storySave(saveId)) : gameApi.getSave(saveId);
 
   const enterAuthenticatedFlow = async (nextAuth: AuthResponse) => {
     setAuth(nextAuth);
@@ -1072,7 +1072,7 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
     setReleaseNotes(notes);
     setPendingRelease(pending);
     setAiSettings(nextAiSettings);
-    if (v014) setGenerationSettings(await gameApi.v014GenerationSettings());
+    if (v014) setGenerationSettings(await gameApi.generationSettings());
     if (!nextAuth.passwordConfigured) setShowPasswordSettings(true);
     const saveList = await refreshSaves();
     if (saveList.saves.length > 1) {
@@ -1254,7 +1254,7 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
           supportGroup: typeof caught.details.supportGroup === "string" ? caught.details.supportGroup : "",
         });
         gameApi.aiSettings().then(setAiSettings).catch(() => undefined);
-        if (v014) gameApi.v014GenerationSettings().then(setGenerationSettings).catch(() => undefined);
+        if (v014) gameApi.generationSettings().then(setGenerationSettings).catch(() => undefined);
         return;
       }
       if (caught instanceof ApiError && caught.code === "GAME_MAINTENANCE") {
@@ -1333,12 +1333,12 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
     }
     const validation = await gameApi.validateName(characterDraft.playerName);
     if (!validation.valid) throw new ApiError(validation.message, 400);
-    const response = await gameApi.v014CharacterRoutes({
+    const response = await gameApi.storyCharacterRoutes({
       worldCode: characterDraft.worldCode || "XUANXU",
       customWorld: characterDraft.customWorld,
       playerName: validation.normalizedName,
-      race: V014_RACE_NAMES[characterDraft.race] ?? characterDraft.race,
-      gender: V014_GENDER_NAMES[characterDraft.gender] ?? characterDraft.gender,
+      race: STORY_RACE_NAMES[characterDraft.race] ?? characterDraft.race,
+      gender: STORY_GENDER_NAMES[characterDraft.gender] ?? characterDraft.gender,
       roleSeed: characterDraft.originPremise.trim() || undefined,
       preferenceSeed: characterDraft.preference.trim() || undefined,
     });
@@ -1348,7 +1348,7 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
     setToast("三条角色路线已经落定，可以选择或继续自定义");
   });
 
-  const selectCharacterRoute = (route: V014CharacterRoute) => {
+  const selectCharacterRoute = (route: StoryCharacterRoute) => {
     setSelectedCharacterRouteId(route.id);
     setCharacterDraft((current) => ({
       ...current,
@@ -1372,12 +1372,12 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
     const request = { ...characterDraft, playerName: validation.normalizedName };
     let created: ApiSnapshot;
     if (v014) {
-      if (restartTargetId) await gameApi.v014Archive(restartTargetId);
+      if (restartTargetId) await gameApi.storyArchive(restartTargetId);
       const selectedRoute = characterRoutes.find((route) => route.id === selectedCharacterRouteId);
-      created = v014SnapshotView(await gameApi.v014CreateSave({
+      created = storySnapshotView(await gameApi.storyCreateSave({
         worldCode: request.worldCode || "XUANXU", customWorld: request.customWorld,
-        playerName: request.playerName, race: V014_RACE_NAMES[request.race] ?? request.race,
-        gender: V014_GENDER_NAMES[request.gender] ?? request.gender,
+        playerName: request.playerName, race: STORY_RACE_NAMES[request.race] ?? request.race,
+        gender: STORY_GENDER_NAMES[request.gender] ?? request.gender,
         origin: request.originPremise.trim(), opening: selectedRoute?.opening,
         storyTone: request.preference.trim() || "自由探索，不预设唯一道路",
       }));
@@ -1431,14 +1431,14 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     setIsComposerFocused(false);
     const next = v014
-      ? v014SnapshotView(await gameApi.v014Turn(game.saveId, inputType === "CHOICE"
+      ? storySnapshotView(await gameApi.storyTurn(game.saveId, inputType === "CHOICE"
         ? (() => { const selected = choices.find((choice) => choice.id === payload.choiceId); return selected ? `${selected.label}：${selected.hint}` : "观察当前局势"; })()
-        : (payload.content ?? "观察当前局势")))
+        : (payload.content ?? "观察当前局势"), snapshot.revision))
       : await gameApi.turn(game.saveId, snapshot.revision, inputType, payload);
     storeSnapshot(next);
     await refreshSaves();
     gameApi.aiSettings().then(setAiSettings).catch(() => undefined);
-    if (v014) gameApi.v014GenerationSettings().then(setGenerationSettings).catch(() => undefined);
+    if (v014) gameApi.generationSettings().then(setGenerationSettings).catch(() => undefined);
     setDraft("");
     setTab("adventure");
     setSyncMode("server");
@@ -1448,10 +1448,8 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
   const confirmCleanup = () => runBusy(async () => {
     if (!v014 || !game || !snapshot || !cleanupTarget) return;
     const target = cleanupTarget;
-    const response = target.kind === "item"
-      ? await gameApi.v014RemoveItem(game.saveId, target.id, snapshot.revision)
-      : await gameApi.v014UntrackCharacter(game.saveId, target.id, snapshot.revision);
-    storeSnapshot(v014SnapshotView(response));
+    const response = await gameApi.storyRemoveEntity(game.saveId, target.id, snapshot.revision);
+    storeSnapshot(storySnapshotView(response));
     setCleanupTarget(null);
     setToast(target.kind === "item" ? "物品已移出当前行囊，旧事仍保留" : "人物已移出当前关注，旧事仍保留");
   });
@@ -1509,7 +1507,7 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
   const abandonSave = () => runBusy(async () => {
     if (!abandonTarget) return;
     const targetId = abandonTarget.saveId;
-    if (v014) await gameApi.v014Archive(targetId); else await gameApi.abandonSave(targetId, abandonTarget.playerName);
+    if (v014) await gameApi.storyArchive(targetId); else await gameApi.abandonSave(targetId, abandonTarget.playerName);
     setAbandonTarget(null);
     if (snapshot?.state.saveId === targetId) {
       setSnapshot(null);
@@ -1561,25 +1559,25 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
   });
 
   const saveProviderCredential = (provider: string, model: string, apiKey: string) => runBusy(async () => {
-    setGenerationSettings(await gameApi.v014SaveProviderCredential(provider, model, apiKey));
+    setGenerationSettings(await gameApi.saveProviderCredential(provider, model, apiKey));
     setShowAiSettings(false);
     setToast("自己的推演密钥已验证并启用");
   });
 
   const activateProviderCredential = (provider: string, model: string) => runBusy(async () => {
-    setGenerationSettings(await gameApi.v014SaveGenerationSettings({ mode: "PERSONAL", provider, model }));
+    setGenerationSettings(await gameApi.saveGenerationSettings({ mode: "PERSONAL", provider, model }));
     setShowAiSettings(false);
     setToast("已切换为自己的推演密钥");
   });
 
   const usePlatformGeneration = () => runBusy(async () => {
-    setGenerationSettings(await gameApi.v014SaveGenerationSettings({ mode: "PLATFORM" }));
+    setGenerationSettings(await gameApi.saveGenerationSettings({ mode: "PLATFORM" }));
     setShowAiSettings(false);
     setToast("已切换为平台推演");
   });
 
   const deleteProviderCredential = (provider: string) => runBusy(async () => {
-    setGenerationSettings(await gameApi.v014DeleteProviderCredential(provider));
+    setGenerationSettings(await gameApi.deleteProviderCredential(provider));
     setShowAiSettings(false);
     setToast("密钥已移除，现使用平台推演");
   });

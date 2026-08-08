@@ -1,6 +1,6 @@
 # 《问仙录》统一命卷平台架构
 
-> 状态：已确认的目标架构，尚未完成代码与数据迁移
+> 状态：统一 API 外壳已在本地实现，通用数据迁移尚未开始
 > 最近更新：2026-08-08
 
 ## 1. 决策背景
@@ -16,6 +16,15 @@ V0.13 与 V0.14 为了快速验证不同玩法，分别形成了独立接口、S
 | 管理台 | `5050e3e` |
 
 生产环境以实际部署构建为准；本地未提交 Hotfix 不属于上述基线，不得混入架构迁移提交。
+
+当前本地落地进度：
+
+- 已新增 `StoryController`、`StoryApplicationService`、`StoryEngineRegistry` 与稳定命卷 DTO；
+- 已新增 V0.14 防腐适配器，旧表仍是权威写入来源；
+- 已新增 `/api/v1/generation/*`，平台模式继续隐藏具体供应商和模型；
+- H5 当前玩法请求已改走稳定 Story/Generation API，页面视图仍保留少量 `v014` 兼容命名；
+- `story_*` 通用表、V0.13 只读适配、管理台统一查询和旧 API 停用尚未开始；
+- 上述本地改造尚未部署，不改变当前生产流量。
 
 本架构采用“统一命卷平台 + 可插拔故事引擎 + 历史档案适配器”。产品版本只用于发布和统计，不再决定业务类、接口或物理表名。
 
@@ -36,7 +45,7 @@ V0.13 与 V0.14 为了快速验证不同玩法，分别形成了独立接口、S
 H5
   → /api/v1/story/*
   → StoryController
-  → StoryGameService
+  → StoryApplicationService
       ├─ StorySaveQueryService
       ├─ StoryEntityService
       ├─ StoryCorrectionService
@@ -71,7 +80,7 @@ com.wenxian.game.story
 ├── api
 │   └── StoryController
 ├── application
-│   ├── StoryGameService
+│   ├── StoryApplicationService
 │   ├── StorySaveQueryService
 │   ├── StoryEntityService
 │   ├── StoryCorrectionService

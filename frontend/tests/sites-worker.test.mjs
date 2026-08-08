@@ -130,14 +130,14 @@ test("uses the server-managed active save limit", async () => {
   assert.equal(prototype.includes("const list = { maxActiveSaves: 2"), false);
 });
 
-test("keeps V0.14 record cleanup soft and outside the turn composer", async () => {
+test("keeps story record cleanup soft and outside the turn composer", async () => {
   const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
   const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
 
   assert.equal(prototype.includes("整理记录"), true);
   assert.equal(prototype.includes("不调用推演 · 不消耗回合 · 不推进时间"), true);
-  assert.equal(api.includes("v014RemoveItem"), true);
-  assert.equal(api.includes("v014UntrackCharacter"), true);
+  assert.equal(api.includes("storyRemoveEntity"), true);
+  assert.equal(api.includes("/api/v1/story/saves/"), true);
 });
 
 test("keeps adjudication rewrites separate from normal story choices", async () => {
@@ -158,7 +158,7 @@ test("separates authoritative origin from soft story preferences", async () => {
   assert.equal(api.includes("originPremise: string"), true);
 });
 
-test("uses dynamic V0.14 character routes and keeps custom worlds locked", async () => {
+test("uses dynamic story character routes and keeps custom worlds locked", async () => {
   const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
   const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
 
@@ -166,8 +166,17 @@ test("uses dynamic V0.14 character routes and keeps custom worlds locked", async
   assert.equal(prototype.includes("路线只是开端，不会限制之后的自由行动"), true);
   assert.equal(prototype.includes("world.available === false"), true);
   assert.equal(prototype.includes("后续开放"), true);
-  assert.equal(prototype.includes("{!isV014 && <>"), true);
-  assert.equal(api.includes('"/api/v1/v014/character-routes"'), true);
+  assert.equal(prototype.includes("{!isStoryMode && <>"), true);
+  assert.equal(api.includes('"/api/v1/story/character-routes"'), true);
+});
+
+test("routes current gameplay through version-neutral story and generation APIs", async () => {
+  const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
+
+  assert.equal(api.includes("/api/v1/v014"), false);
+  assert.equal(api.includes('"/api/v1/story/bootstrap"'), true);
+  assert.equal(api.includes('"/api/v1/generation/settings"'), true);
+  assert.equal(api.includes("expectedRevision"), true);
 });
 
 test("keeps restart safe and exposes the account key before entering the world", async () => {
