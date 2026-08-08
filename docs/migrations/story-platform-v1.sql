@@ -140,7 +140,7 @@ create table if not exists story_save_migration (
     target_save_id varchar(80) comment '成功后生成的统一命卷ID',
     source_schema_version integer not null comment '原始状态结构版本',
     target_schema_version integer not null comment '目标状态结构版本',
-    status varchar(24) not null comment '迁移状态：PENDING、RUNNING、SUCCESS、FAILED或HASH_MISMATCH',
+    status varchar(24) not null comment '迁移状态：RUNNING、READY、SUCCESS、FAILED或HASH_MISMATCH',
     before_hash varchar(128) not null comment '迁移前关键数据哈希',
     after_hash varchar(128) comment '迁移后关键数据哈希',
     error_message varchar(1000) comment '脱敏后的失败原因',

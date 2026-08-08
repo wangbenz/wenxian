@@ -44,13 +44,15 @@ public class StorySaveRepository {
 
     public Optional<StoredSave> findOwned(String userId, String saveId) {
         return jdbc.query("""
-                select * from story_save where id=? and user_id=?
+                select * from story_save
+                where id=? and user_id=? and status not in ('MIGRATING','MIGRATION_FAILED')
                 """, (row, index) -> map(row), saveId, userId).stream().findFirst();
     }
 
     public List<StoredSave> listOwned(String userId) {
         return jdbc.query("""
-                select * from story_save where user_id=?
+                select * from story_save
+                where user_id=? and status not in ('MIGRATING','MIGRATION_FAILED')
                 order by status='ACTIVE' desc, updated_at desc
                 """, (row, index) -> map(row), userId);
     }

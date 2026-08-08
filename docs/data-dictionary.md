@@ -214,10 +214,13 @@
 | `source_engine/source_save_id` | 原始来源与命卷 ID |
 | `target_engine/target_save_id` | 目标引擎与统一命卷 ID |
 | `source_schema_version/target_schema_version` | 前后结构版本 |
-| `status` | `PENDING/RUNNING/SUCCESS/FAILED/HASH_MISMATCH` |
+| `status` | `RUNNING/READY/SUCCESS/FAILED/HASH_MISMATCH`；`READY` 表示候选已落库校验、但尚未激活 |
 | `before_hash/after_hash` | 迁移前后关键数据哈希 |
 | `error_message` | 失败原因，必须脱敏 |
 | `started_at/completed_at` | 开始与完成时间 |
+
+迁移分为两步：准备阶段将目标命卷保持为 `MIGRATING`，只有源数据哈希和目标回读哈希
+都通过复核后才能显式激活。`HASH_MISMATCH` 候选不进入玩家可玩列表。
 
 ## 11. `story_engine_catalog`：引擎目录
 

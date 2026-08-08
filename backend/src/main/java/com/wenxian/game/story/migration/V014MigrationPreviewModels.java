@@ -23,10 +23,9 @@ public final class V014MigrationPreviewModels {
     /** 单项迁移检查结果，code 供管理台筛选，message 供人工理解。 */
     public record MigrationIssue(String severity, String code, String message) {}
 
-    /** 统一实体表的候选记录；firstTurnInferred 表示首次出现回合来自保守推定。 */
+    /** 统一实体表的候选记录，字段与目标表中可持久化事实一一对应。 */
     public record TargetEntity(
             String id,
-            String sourceEntityId,
             String type,
             String name,
             String status,
@@ -34,31 +33,65 @@ public final class V014MigrationPreviewModels {
             String summary,
             JsonNode attributes,
             int firstTurn,
-            int lastChangedTurn,
-            boolean firstTurnInferred
+            int lastChangedTurn
     ) {}
 
-    /** 统一记忆表的候选记录；occurredTurnInferred 表示发生回合由世界时间近似匹配。 */
+    /** 统一记忆表的候选记录，推定精度通过迁移问题另行报告。 */
     public record TargetMemory(
             String id,
-            String sourceMemoryId,
             String type,
             String importance,
             String title,
             String summary,
             int occurredTurn,
             long worldTime,
-            String status,
-            boolean occurredTurnInferred
+            String status
     ) {}
 
-    /** 预演生成的目标快照，只包含实际迁移时将被拆分写入的核心状态、实体、记忆和摘要。 */
+    /** 旧回合转换后的不可变目标回合，包含正式落库需要的全部字段。 */
+    public record TargetTurn(
+            String id,
+            String requestId,
+            int turnNumber,
+            String playerAction,
+            String narrative,
+            JsonNode choices,
+            JsonNode statePatch,
+            long worldTimeBefore,
+            long worldTimeAfter,
+            String engineCode,
+            int engineVersion,
+            String promptVersion,
+            String provider,
+            String model,
+            String credentialSource,
+            int promptTokens,
+            int completionTokens,
+            int cacheHitTokens,
+            int cacheMissTokens,
+            long latencyMs,
+            String releaseVersion,
+            Instant createdAt
+    ) {}
+
+    /** 旧玩家修正转换后的目标审计记录。 */
+    public record TargetCorrection(
+            String id,
+            String userId,
+            String instruction,
+            String correctionType,
+            JsonNode before,
+            JsonNode after,
+            Instant createdAt
+    ) {}
+
+    /** 预演生成的完整目标快照，也是正式迁移唯一允许写入的候选数据。 */
     public record TargetSnapshot(
             JsonNode coreState,
             List<TargetEntity> entities,
             List<TargetMemory> memories,
-            List<String> turnHashes,
-            List<String> correctionHashes,
+            List<TargetTurn> turns,
+            List<TargetCorrection> corrections,
             String rollingSummary,
             int summarizedThroughTurn
     ) {}

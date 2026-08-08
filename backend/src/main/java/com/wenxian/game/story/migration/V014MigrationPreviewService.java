@@ -8,9 +8,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.story.migration.V014MigrationPreviewModels.MigrationIssue;
 import com.wenxian.game.story.migration.V014MigrationPreviewModels.PreviewReport;
 import com.wenxian.game.story.migration.V014MigrationPreviewModels.PreviewStatus;
+import com.wenxian.game.story.migration.V014MigrationPreviewModels.TargetCorrection;
 import com.wenxian.game.story.migration.V014MigrationPreviewModels.TargetEntity;
 import com.wenxian.game.story.migration.V014MigrationPreviewModels.TargetMemory;
 import com.wenxian.game.story.migration.V014MigrationPreviewModels.TargetSnapshot;
+import com.wenxian.game.story.migration.V014MigrationPreviewModels.TargetTurn;
 import com.wenxian.game.story.migration.V014MigrationSourceReader.SourceCorrection;
 import com.wenxian.game.story.migration.V014MigrationSourceReader.SourceSave;
 import com.wenxian.game.story.migration.V014MigrationSourceReader.SourceSaveHeader;
@@ -23,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,11 +46,13 @@ public class V014MigrationPreviewService {
     private final V014MigrationSourceReader sources;
     private final ObjectMapper mapper;
     private final LegacyV014JsonNormalizer legacyJson;
+    private final StoryMigrationSnapshotHasher snapshotHasher;
 
     public V014MigrationPreviewService(V014MigrationSourceReader sources, ObjectMapper mapper) {
         this.sources = sources;
         this.mapper = mapper;
         this.legacyJson = new LegacyV014JsonNormalizer(mapper);
+        this.snapshotHasher = new StoryMigrationSnapshotHasher(mapper);
     }
 
     /** 读取并预演一份命卷；报告中的 target 仍是内存对象，不代表数据库已有对应记录。 */
@@ -67,23 +72,25 @@ public class V014MigrationPreviewService {
         }
 
         validateHeaderAndState(source, state, issues);
-        List<String> targetTurnHashes = previewTurns(source.turns(), issues);
-        List<String> targetCorrectionHashes = previewCorrections(source.corrections(), issues);
-        List<TargetEntity> entities = mapEntities(targetSaveId, state, issues);
-        List<TargetMemory> memories = mapMemories(targetSaveId, state, source.turns(), issues);
+        List<TargetTurn> targetTurns = previewTurns(source.turns(), issues);
+        List<TargetCorrection> targetCorrections = previewCorrections(source.corrections(), issues);
+        List<TargetEntity> entities = mapEntities(targetSaveId, state, issues).stream()
+                .sorted(Comparator.comparing(TargetEntity::id)).toList();
+        List<TargetMemory> memories = mapMemories(targetSaveId, state, source.turns(), issues).stream()
+                .sorted(Comparator.comparing(TargetMemory::id)).toList();
         ObjectNode coreState = coreState(targetSaveId, state);
         String rollingSummary = source.conversation() == null ? "" : safe(source.conversation().rollingSummary());
         int summarizedThrough = source.conversation() == null ? 0 : source.conversation().summarizedThroughTurn();
-        TargetSnapshot target = new TargetSnapshot(coreState, entities, memories, targetTurnHashes,
-                targetCorrectionHashes, rollingSummary, summarizedThrough);
-        String afterHash = hash(mapper.valueToTree(target));
+        TargetSnapshot target = new TargetSnapshot(coreState, entities, memories, targetTurns,
+                targetCorrections, rollingSummary, summarizedThrough);
+        String afterHash = snapshotHasher.hash(target);
         PreviewStatus status = status(issues);
 
         Map<String, Integer> entityCounts = new LinkedHashMap<>();
         for (TargetEntity entity : entities) entityCounts.merge(entity.type(), 1, Integer::sum);
         return new PreviewReport(status, header.id(), targetSaveId, header.userId(), header.slotNo(),
                 header.status(), header.stateSchemaVersion(), TARGET_SCHEMA_VERSION, header.revision(),
-                state.turnNumber(), source.turns().size(), targetTurnHashes.size(), Map.copyOf(entityCounts),
+                state.turnNumber(), source.turns().size(), targetTurns.size(), Map.copyOf(entityCounts),
                 memories.size(), source.conversation() != null, source.corrections().size(), beforeHash, afterHash,
                 header.createdAt(), header.updatedAt(), List.copyOf(issues), target);
     }
@@ -124,8 +131,8 @@ public class V014MigrationPreviewService {
         }
     }
 
-    private List<String> previewTurns(List<SourceTurn> turns, List<MigrationIssue> issues) {
-        List<String> hashes = new ArrayList<>();
+    private List<TargetTurn> previewTurns(List<SourceTurn> turns, List<MigrationIssue> issues) {
+        List<TargetTurn> targets = new ArrayList<>();
         int expected = 1;
         long previousTime = 0;
         for (SourceTurn turn : turns) {
@@ -139,51 +146,29 @@ public class V014MigrationPreviewService {
             }
             JsonNode choices = parseJson(turn.choicesJson(), "TURN_CHOICES_INVALID", turn.turnNumber(), issues);
             JsonNode patch = normalizeTurnPatch(turn, issues);
-            ObjectNode target = mapper.createObjectNode();
-            target.put("id", turn.id());
-            target.put("requestId", fallback(turn.requestId(), "legacy-request-" + turn.turnNumber()));
-            target.put("turnNumber", turn.turnNumber());
-            target.put("playerAction", safe(turn.playerAction()));
-            target.put("narrative", safe(turn.narrative()));
-            target.set("choices", choices);
-            target.set("statePatch", patch);
-            target.put("worldTimeBefore", turn.worldTimeBefore());
-            target.put("worldTimeAfter", turn.worldTimeAfter());
-            target.put("engineCode", TARGET_ENGINE);
-            target.put("engineVersion", TARGET_ENGINE_VERSION);
-            target.put("promptVersion", "legacy-v014");
-            target.put("provider", safe(turn.provider()));
-            target.put("model", safe(turn.model()));
-            target.put("credentialSource", safe(turn.credentialSource()));
-            target.put("promptTokens", turn.promptTokens());
-            target.put("completionTokens", turn.completionTokens());
-            target.put("cacheHitTokens", 0);
-            target.put("cacheMissTokens", 0);
-            target.put("latencyMs", turn.latencyMs());
-            target.put("releaseVersion", "V0.14");
-            hashes.add(hash(target));
+            targets.add(new TargetTurn(turn.id(),
+                    fallback(turn.requestId(), "legacy-request-" + turn.turnNumber()), turn.turnNumber(),
+                    safe(turn.playerAction()), safe(turn.narrative()), choices, patch,
+                    turn.worldTimeBefore(), turn.worldTimeAfter(), TARGET_ENGINE, TARGET_ENGINE_VERSION,
+                    "legacy-v014", safe(turn.provider()), safe(turn.model()), safe(turn.credentialSource()),
+                    turn.promptTokens(), turn.completionTokens(), 0, 0, turn.latencyMs(), "V0.14",
+                    turn.createdAt()));
             previousTime = Math.max(previousTime, turn.worldTimeAfter());
             expected++;
         }
-        return List.copyOf(hashes);
+        return List.copyOf(targets);
     }
 
-    private List<String> previewCorrections(List<SourceCorrection> corrections, List<MigrationIssue> issues) {
-        List<String> hashes = new ArrayList<>();
+    private List<TargetCorrection> previewCorrections(List<SourceCorrection> corrections,
+                                                      List<MigrationIssue> issues) {
+        List<TargetCorrection> targets = new ArrayList<>();
         for (SourceCorrection correction : corrections) {
             JsonNode before = parseJson(correction.beforeJson(), "CORRECTION_BEFORE_INVALID", 0, issues);
             JsonNode after = parseJson(correction.afterJson(), "CORRECTION_AFTER_INVALID", 0, issues);
-            ObjectNode target = mapper.createObjectNode();
-            target.put("id", correction.id());
-            target.put("userId", correction.userId());
-            target.put("instruction", safe(correction.instruction()));
-            target.put("correctionType", "OTHER");
-            target.set("before", before);
-            target.set("after", after);
-            target.put("createdAt", correction.createdAt().toString());
-            hashes.add(hash(target));
+            targets.add(new TargetCorrection(correction.id(), correction.userId(), safe(correction.instruction()),
+                    "OTHER", before, after, correction.createdAt()));
         }
-        return List.copyOf(hashes);
+        return List.copyOf(targets);
     }
 
     private List<TargetEntity> mapEntities(String targetSaveId, V014State state,
@@ -197,20 +182,20 @@ public class V014MigrationPreviewService {
             attributes.put("source", safe(item.source()));
             attributes.put("quantity", Math.max(item.quantity(), 0));
             attributes.put("inPossession", Boolean.TRUE.equals(item.inPossession()));
-            entities.add(new TargetEntity(entityId(targetSaveId, "ITEM", item.id(), index++), item.id(),
+            entities.add(new TargetEntity(entityId(targetSaveId, "ITEM", item.id(), index++),
                     "ITEM", fallbackName(item.name(), "未命名物品", issues), fallback(item.status(), "UNKNOWN"),
                     Boolean.TRUE.equals(item.inPossession()) && item.quantity() > 0,
-                    fallback(item.description(), item.name()), attributes, 0, state.turnNumber(), true));
+                    fallback(item.description(), item.name()), attributes, 0, state.turnNumber()));
         }
         for (V014State.Ability ability : state.abilities()) {
             ObjectNode attributes = mapper.createObjectNode();
             attributes.put("sourceEntityId", safe(ability.id()));
             attributes.put("abilityType", safe(ability.type()));
             attributes.put("source", safe(ability.source()));
-            entities.add(new TargetEntity(entityId(targetSaveId, "ABILITY", ability.id(), index++), ability.id(),
+            entities.add(new TargetEntity(entityId(targetSaveId, "ABILITY", ability.id(), index++),
                     "ABILITY", fallbackName(ability.name(), "未命名能力", issues),
                     fallback(ability.status(), "UNKNOWN"), !terminal(ability.status()),
-                    fallback(ability.description(), ability.name()), attributes, 0, state.turnNumber(), true));
+                    fallback(ability.description(), ability.name()), attributes, 0, state.turnNumber()));
         }
         for (V014State.Character character : state.characters()) {
             ObjectNode attributes = mapper.createObjectNode();
@@ -222,9 +207,9 @@ public class V014MigrationPreviewService {
             String summary = String.join("；", nonBlank(character.identity(), character.relationship(),
                     character.lastKnownLocation()));
             entities.add(new TargetEntity(entityId(targetSaveId, "CHARACTER", character.id(), index++),
-                    character.id(), "CHARACTER", fallbackName(character.name(), "未命名人物", issues),
+                    "CHARACTER", fallbackName(character.name(), "未命名人物", issues),
                     fallback(character.status(), "UNKNOWN"), Boolean.TRUE.equals(character.tracked()),
-                    fallback(summary, character.name()), attributes, 0, state.turnNumber(), true));
+                    fallback(summary, character.name()), attributes, 0, state.turnNumber()));
         }
         if (!entities.isEmpty()) {
             issues.add(warning("ENTITY_FIRST_TURN_INFERRED", "旧快照未记录实体首次出现回合，候选值统一记为 0"));
@@ -241,10 +226,10 @@ public class V014MigrationPreviewService {
             int occurredTurn = inferTurn(memory.worldTimeMinutes(), turns);
             boolean approximate = turns.stream().noneMatch(turn -> turn.worldTimeAfter() == memory.worldTimeMinutes());
             inferred |= approximate;
-            memories.add(new TargetMemory(memoryId(targetSaveId, memory.id(), index++), memory.id(), "EVENT",
+            memories.add(new TargetMemory(memoryId(targetSaveId, memory.id(), index++), "EVENT",
                     normalizeImportance(memory.importance()), fallback(memory.title(), "未命名经历"),
                     fallback(memory.summary(), memory.title()), occurredTurn,
-                    Math.max(memory.worldTimeMinutes(), 0), "ACTIVE", approximate));
+                    Math.max(memory.worldTimeMinutes(), 0), "ACTIVE"));
         }
         if (inferred) {
             issues.add(warning("MEMORY_TURN_INFERRED", "部分记忆没有原始发生回合，已按世界时间匹配最近回合"));

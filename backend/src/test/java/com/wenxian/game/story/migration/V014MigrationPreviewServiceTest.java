@@ -51,10 +51,9 @@ class V014MigrationPreviewServiceTest {
             assertFalse(first.target().coreState().has("memories"));
             assertEquals("陆沉", first.target().coreState().path("protagonist").path("name").asText());
             assertEquals(3, first.target().entities().size());
-            assertEquals(2, first.target().turnHashes().size());
-            assertEquals(1, first.target().correctionHashes().size());
+            assertEquals(2, first.target().turns().size());
+            assertEquals(1, first.target().corrections().size());
             assertEquals(2, first.target().memories().getFirst().occurredTurn());
-            assertFalse(first.target().memories().getFirst().occurredTurnInferred());
             assertEquals(first.beforeHash(), second.beforeHash());
             assertEquals(first.afterHash(), second.afterHash());
             assertEquals(before, tableCounts(jdbc), "只读预演不得增删任何旧表或统一表记录");
