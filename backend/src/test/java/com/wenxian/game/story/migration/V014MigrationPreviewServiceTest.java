@@ -107,6 +107,27 @@ class V014MigrationPreviewServiceTest {
         }
     }
 
+    @Test
+    void deterministicLegacyPatchRepairIsReportedWithoutBlockingTheSave() throws Exception {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            V014State state = state("v014-save-repairable-patch");
+            insertSave(jdbc, state.saveId(), mapper.writeValueAsString(state), 14, 2);
+            insertTurn(jdbc, state.saveId(), 1, 0, 60, "[]", "{\"summary\":\"第一行\n第二行\"}");
+
+            var report = service(jdbc).preview(state.saveId());
+
+            assertEquals(PreviewStatus.WARNING, report.status());
+            assertTrue(report.issues().stream().anyMatch(issue -> "TURN_PATCH_REPAIRED".equals(issue.code())));
+            assertFalse(report.issues().stream().anyMatch(issue -> "TURN_PATCH_INVALID".equals(issue.code())));
+            assertEquals(1, report.targetTurnCount());
+            assertNotNull(report.afterHash());
+        } finally {
+            database.shutdown();
+        }
+    }
+
     private V014MigrationPreviewService service(JdbcTemplate jdbc) {
         return new V014MigrationPreviewService(new V014MigrationSourceReader(jdbc), mapper);
     }

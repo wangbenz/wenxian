@@ -42,10 +42,12 @@ public class V014MigrationPreviewService {
 
     private final V014MigrationSourceReader sources;
     private final ObjectMapper mapper;
+    private final LegacyV014JsonNormalizer legacyJson;
 
     public V014MigrationPreviewService(V014MigrationSourceReader sources, ObjectMapper mapper) {
         this.sources = sources;
         this.mapper = mapper;
+        this.legacyJson = new LegacyV014JsonNormalizer(mapper);
     }
 
     /** 读取并预演一份命卷；报告中的 target 仍是内存对象，不代表数据库已有对应记录。 */
@@ -136,7 +138,7 @@ public class V014MigrationPreviewService {
                 issues.add(error("TURN_TIME_INVALID", "第 " + turn.turnNumber() + " 回的世界时间发生倒退"));
             }
             JsonNode choices = parseJson(turn.choicesJson(), "TURN_CHOICES_INVALID", turn.turnNumber(), issues);
-            JsonNode patch = parseJson(turn.statePatchJson(), "TURN_PATCH_INVALID", turn.turnNumber(), issues);
+            JsonNode patch = normalizeTurnPatch(turn.statePatchJson(), turn.turnNumber(), issues);
             ObjectNode target = mapper.createObjectNode();
             target.put("id", turn.id());
             target.put("requestId", fallback(turn.requestId(), "legacy-request-" + turn.turnNumber()));
@@ -306,6 +308,20 @@ public class V014MigrationPreviewService {
             issues.add(error(code, context + "的 JSON 无法解析：" + compact(error.getOriginalMessage())));
             return mapper.createObjectNode();
         }
+    }
+
+    private JsonNode normalizeTurnPatch(String value, int turn, List<MigrationIssue> issues) {
+        LegacyV014JsonNormalizer.Result result = legacyJson.normalize(value);
+        if (!result.valid()) {
+            issues.add(error("TURN_PATCH_INVALID", "第 " + turn + " 回的旧状态补丁无法确定性恢复："
+                    + compact(result.error())));
+            return mapper.createObjectNode();
+        }
+        if (result.repaired()) {
+            issues.add(warning("TURN_PATCH_REPAIRED", "第 " + turn + " 回的旧状态补丁已完成确定性格式修复："
+                    + String.join(",", result.repairCodes())));
+        }
+        return result.value();
     }
 
     private int inferTurn(long worldTime, List<SourceTurn> turns) {
