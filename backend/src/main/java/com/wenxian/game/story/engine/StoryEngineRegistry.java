@@ -10,9 +10,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 故事引擎注册表，按引擎编码或命卷标识选择唯一实现。
+ * 故事引擎注册表，按运行时路由编码或命卷标识选择唯一实现。
  *
- * <p>注册冲突会在应用启动时直接失败；找不到命卷引擎时返回稳定的玩家错误，禁止静默落到错误引擎。</p>
+ * <p>同一玩法在迁移期可以同时注册旧表适配器和通用表实现，但 routeCode 必须唯一。
+ * 找不到命卷引擎时返回稳定的玩家错误，禁止静默落到错误引擎。</p>
  */
 @Component
 public class StoryEngineRegistry {
@@ -20,12 +21,12 @@ public class StoryEngineRegistry {
     private final StoryEngine defaultEngine;
 
     public StoryEngineRegistry(List<StoryEngine> registered,
-                               @Value("${wenxian.story.default-engine:LIGHT_NARRATIVE}") String defaultCode) {
+                               @Value("${wenxian.story.default-route:LIGHT_NARRATIVE_V014}") String defaultCode) {
         Map<String, StoryEngine> indexed = new LinkedHashMap<>();
         for (StoryEngine engine : registered) {
-            String code = engine.descriptor().code();
+            String code = engine.routeCode();
             if (indexed.putIfAbsent(code, engine) != null) {
-                throw new IllegalStateException("故事引擎编码重复：" + code);
+                throw new IllegalStateException("故事引擎路由编码重复：" + code);
             }
         }
         this.engines = Map.copyOf(indexed);

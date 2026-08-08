@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.wenxian.game.story.migration.V014MigrationBatchModels.MigrationTaskItem;
 
@@ -42,6 +44,20 @@ public class StoryMigrationRepository {
                 """, (row, index) -> new MigrationRecord(row.getString("id"), row.getString("source_save_id"),
                 row.getString("target_save_id"), row.getString("status"), row.getString("before_hash"),
                 row.getString("after_hash"), row.getString("error_message")), sourceSaveId).stream().findFirst();
+    }
+
+    /**
+     * 查询指定账号已经切换到通用表的 V0.14 源命卷。兼容适配器用它隐藏旧表副本，
+     * 防止稳定命卷列表同时出现迁移前后两份角色。
+     */
+    public Set<String> activatedSourceIdsForUser(String userId) {
+        return jdbc.queryForList("""
+                select migration.source_save_id
+                from story_save_migration migration
+                join v014_game_save source_save on source_save.id=migration.source_save_id
+                where migration.source_engine='V014' and migration.status='SUCCESS'
+                  and source_save.user_id=?
+                """, String.class, userId).stream().collect(Collectors.toUnmodifiableSet());
     }
 
     /** 按状态汇总 V0.14 迁移任务，未知状态也会原样展示，避免管理台把异常数据吞掉。 */

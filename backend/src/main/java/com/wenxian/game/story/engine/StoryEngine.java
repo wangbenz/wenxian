@@ -20,6 +20,14 @@ import java.util.List;
  * 任何失败都必须在底层事务提交前抛出，避免返回半份命卷。</p>
  */
 public interface StoryEngine {
+    /**
+     * 运行时注册编码。同一故事玩法在迁移期可以同时存在旧表适配器和通用表实现，
+     * 因此该编码必须唯一，但不等同于玩家存档中的 engineCode。
+     */
+    default String routeCode() {
+        return descriptor().code();
+    }
+
     EngineDescriptor descriptor();
 
     boolean supports(String saveId);

@@ -5,6 +5,7 @@ import com.wenxian.game.auth.AuthService.UserIdentity;
 import com.wenxian.game.service.ActiveSavePolicyService;
 import com.wenxian.game.service.GameVersionService;
 import com.wenxian.game.story.engine.StoryEngine;
+import com.wenxian.game.story.migration.StoryMigrationRepository;
 import com.wenxian.game.story.model.StoryApiModels.Ability;
 import com.wenxian.game.story.model.StoryApiModels.BootstrapResponse;
 import com.wenxian.game.story.model.StoryApiModels.Character;
@@ -30,9 +31,11 @@ import com.wenxian.game.v014.service.V014CharacterRouteService;
 import com.wenxian.game.v014.service.V014GameService;
 import com.wenxian.game.v014.service.V014WorldCatalog;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -44,6 +47,7 @@ import java.util.function.Supplier;
 @Component
 public class V014StoryEngineAdapter implements StoryEngine {
     public static final String ENGINE_CODE = "LIGHT_NARRATIVE";
+    public static final String ROUTE_CODE = "LIGHT_NARRATIVE_V014";
     private static final int ENGINE_VERSION = 1;
     private static final int STATE_SCHEMA_VERSION = 14;
     private static final String SAVE_PREFIX = "v014-save-";
@@ -53,15 +57,27 @@ public class V014StoryEngineAdapter implements StoryEngine {
     private final V014CharacterRouteService characterRoutes;
     private final GameVersionService version;
     private final ActiveSavePolicyService savePolicy;
+    private final StoryMigrationRepository migrations;
+    private final boolean persistedRuntimeEnabled;
 
     public V014StoryEngineAdapter(V014GameService game, V014WorldCatalog worlds,
                                   V014CharacterRouteService characterRoutes,
-                                  GameVersionService version, ActiveSavePolicyService savePolicy) {
+                                  GameVersionService version, ActiveSavePolicyService savePolicy,
+                                  StoryMigrationRepository migrations,
+                                  @Value("${wenxian.story.persisted-runtime-enabled:false}")
+                                  boolean persistedRuntimeEnabled) {
         this.game = game;
         this.worlds = worlds;
         this.characterRoutes = characterRoutes;
         this.version = version;
         this.savePolicy = savePolicy;
+        this.migrations = migrations;
+        this.persistedRuntimeEnabled = persistedRuntimeEnabled;
+    }
+
+    @Override
+    public String routeCode() {
+        return ROUTE_CODE;
     }
 
     @Override
@@ -109,13 +125,17 @@ public class V014StoryEngineAdapter implements StoryEngine {
 
     @Override
     public List<SaveSummary> list(UserIdentity user) {
-        return stable(() -> game.list(user).stream().map(summary -> {
-            SaveResponse full = get(user, summary.id());
-            return new SaveSummary(summary.id(), summary.slotNo(), full.mode(), ENGINE_CODE, ENGINE_VERSION,
-                    full.stateSchemaVersion(), full.revision(), summary.turnNumber(), full.capabilities(),
-                    summary.worldName(), summary.playerName(), summary.race(), summary.realm(),
-                    summary.status(), summary.updatedAt());
-        }).toList());
+        return stable(() -> {
+            Set<String> activated = persistedRuntimeEnabled
+                    ? migrations.activatedSourceIdsForUser(user.userId()) : Set.of();
+            return game.list(user).stream().filter(summary -> !activated.contains(summary.id())).map(summary -> {
+                SaveResponse full = get(user, summary.id());
+                return new SaveSummary(summary.id(), summary.slotNo(), full.mode(), ENGINE_CODE, ENGINE_VERSION,
+                        full.stateSchemaVersion(), full.revision(), summary.turnNumber(), full.capabilities(),
+                        summary.worldName(), summary.playerName(), summary.race(), summary.realm(),
+                        summary.status(), summary.updatedAt());
+            }).toList();
+        });
     }
 
     @Override

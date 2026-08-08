@@ -57,6 +57,17 @@ public class StorySaveRepository {
                 """, (row, index) -> map(row), userId);
     }
 
+    /** 将可玩命卷封存并递增 revision；已封存或不属于该账号时拒绝静默成功。 */
+    public void archive(String userId, String saveId) {
+        int changed = jdbc.update("""
+                update story_save set status='ARCHIVED',revision=revision+1,updated_at=?
+                where id=? and user_id=? and status='ACTIVE'
+                """, Timestamp.from(Instant.now()), saveId, userId);
+        if (changed != 1) {
+            throw new OptimisticLockingFailureException("统一命卷不存在、已封存或归属不符");
+        }
+    }
+
     /**
      * 使用 revision 更新核心快照。返回新的 revision；若命卷已变化则抛出冲突，
      * 调用方必须重新读取，不能覆盖或自动套用旧补丁。

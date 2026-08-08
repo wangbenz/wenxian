@@ -39,7 +39,7 @@ class StoryEngineRegistryTest {
                         new FakeEngine("LIGHT_NARRATIVE", "a-"),
                         new FakeEngine("LIGHT_NARRATIVE", "b-")), "LIGHT_NARRATIVE"));
 
-        assertEquals("故事引擎编码重复：LIGHT_NARRATIVE", error.getMessage());
+        assertEquals("故事引擎路由编码重复：LIGHT_NARRATIVE", error.getMessage());
     }
 
     @Test

@@ -65,7 +65,7 @@ class V014StoryEngineAdapterTest {
     }
 
     private V014StoryEngineAdapter adapter(V014GameService game) {
-        return new V014StoryEngineAdapter(game, null, null, null, null);
+        return new V014StoryEngineAdapter(game, null, null, null, null, null, false);
     }
 
     private V014ApiModels.SaveResponse legacyResponse(long revision) {

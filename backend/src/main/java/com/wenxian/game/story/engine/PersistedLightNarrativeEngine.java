@@ -1,0 +1,632 @@
+package com.wenxian.game.story.engine;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.wenxian.game.api.GameApiException;
+import com.wenxian.game.auth.AuthService.UserIdentity;
+import com.wenxian.game.config.RuntimeAiConfigService;
+import com.wenxian.game.service.GameVersionService;
+import com.wenxian.game.service.PlayerAiService;
+import com.wenxian.game.story.model.StoryApiModels.Ability;
+import com.wenxian.game.story.model.StoryApiModels.BootstrapResponse;
+import com.wenxian.game.story.model.StoryApiModels.CharacterRouteRequest;
+import com.wenxian.game.story.model.StoryApiModels.CharacterRouteResponse;
+import com.wenxian.game.story.model.StoryApiModels.Choice;
+import com.wenxian.game.story.model.StoryApiModels.CorrectionRequest;
+import com.wenxian.game.story.model.StoryApiModels.CreateSaveRequest;
+import com.wenxian.game.story.model.StoryApiModels.EngineDescriptor;
+import com.wenxian.game.story.model.StoryApiModels.Item;
+import com.wenxian.game.story.model.StoryApiModels.Memory;
+import com.wenxian.game.story.model.StoryApiModels.Protagonist;
+import com.wenxian.game.story.model.StoryApiModels.SaveResponse;
+import com.wenxian.game.story.model.StoryApiModels.SaveSummary;
+import com.wenxian.game.story.model.StoryApiModels.StoryState;
+import com.wenxian.game.story.model.StoryApiModels.TurnRequest;
+import com.wenxian.game.story.model.StoryApiModels.WorldProfile;
+import com.wenxian.game.story.persistence.StoryConversationRepository;
+import com.wenxian.game.story.persistence.StoryCorrectionRepository;
+import com.wenxian.game.story.persistence.StoryEntityRepository;
+import com.wenxian.game.story.persistence.StoryMemoryRepository;
+import com.wenxian.game.story.persistence.StoryMemoryRepository.StoredMemory;
+import com.wenxian.game.story.persistence.StoryPersistenceModels.Entity;
+import com.wenxian.game.story.persistence.StoryPersistenceModels.NewTurn;
+import com.wenxian.game.story.persistence.StoryPersistenceModels.StoredSave;
+import com.wenxian.game.story.persistence.StorySaveRepository;
+import com.wenxian.game.story.persistence.StoryTurnRepository;
+import com.wenxian.game.v014.ai.V014StoryAgent;
+import com.wenxian.game.v014.model.V014ApiModels.ModelPreference;
+import com.wenxian.game.v014.model.V014State;
+import com.wenxian.game.v014.persistence.V014TurnStore.RecentTurn;
+import com.wenxian.game.v014.service.V014ModelPreferenceService;
+import com.wenxian.game.v014.service.V014ModelPreferenceService.ResolvedRoute;
+import com.wenxian.game.v014.service.V014StateReducer;
+import dev.langchain4j.exception.AuthenticationException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * 基于 story_* 通用表的轻叙事运行时。
+ *
+ * <p>该引擎是迁移后的权威读写边界：命卷快照、实体、记忆、回合、摘要和额度必须在同一事务中提交。
+ * 迁移期暂时复用已经验证的 V0.14 Agent 与状态归并器，但不再写入 V0.14 表。运行开关默认关闭，
+ * 只有灰度验证显式开启后才识别 story-* 命卷；失败不会回退写旧表。</p>
+ */
+@Component
+public class PersistedLightNarrativeEngine implements StoryEngine {
+    public static final String ROUTE_CODE = "LIGHT_NARRATIVE_STORY";
+    private static final String ENGINE_CODE = "LIGHT_NARRATIVE";
+    private static final int ENGINE_VERSION = 1;
+    private static final int STATE_SCHEMA_VERSION = 1;
+    private static final String SAVE_PREFIX = "story-";
+    private static final String PROMPT_VERSION = "story-runtime-v1";
+    private static final String FIELD_VALUE_END = "([^；;\\n]{1,%d})";
+    private static final Pattern LOCATION = correctionField("(?:当前)?(?:地点|位置)", 60);
+    private static final Pattern REALM = correctionField("(?:当前)?(?:境界|修为)", 40);
+    private static final Pattern CONDITION = correctionField("(?:当前)?(?:状态|伤势)", 80);
+    private static final Pattern ITEM_STATUS = Pattern.compile(
+            "(?:物品)?[《「]?([^》」]{1,40})[》」]?(?:已经|应当)?(消耗|卖出|赠予|遗失|存放)");
+
+    private final StorySaveRepository saves;
+    private final StoryTurnRepository turns;
+    private final StoryEntityRepository entities;
+    private final StoryMemoryRepository memories;
+    private final StoryConversationRepository conversations;
+    private final StoryCorrectionRepository corrections;
+    private final V014StoryAgent agent;
+    private final V014StateReducer reducer;
+    private final V014ModelPreferenceService models;
+    private final PlayerAiService playerAi;
+    private final GameVersionService releases;
+    private final TransactionTemplate transactions;
+    private final ObjectMapper mapper;
+    private final boolean enabled;
+    private final String legacyBaseUrl;
+    private final Map<String, Object> accountLocks = new ConcurrentHashMap<>();
+    private final Map<String, AtomicBoolean> turnsInProgress = new ConcurrentHashMap<>();
+
+    public PersistedLightNarrativeEngine(
+            StorySaveRepository saves,
+            StoryTurnRepository turns,
+            StoryEntityRepository entities,
+            StoryMemoryRepository memories,
+            StoryConversationRepository conversations,
+            StoryCorrectionRepository corrections,
+            V014StoryAgent agent,
+            V014StateReducer reducer,
+            V014ModelPreferenceService models,
+            PlayerAiService playerAi,
+            GameVersionService releases,
+            TransactionTemplate transactions,
+            ObjectMapper mapper,
+            @Value("${wenxian.story.persisted-runtime-enabled:false}") boolean enabled,
+            @Value("${deepseek.base-url:https://api.deepseek.com}") String legacyBaseUrl) {
+        this.saves = saves;
+        this.turns = turns;
+        this.entities = entities;
+        this.memories = memories;
+        this.conversations = conversations;
+        this.corrections = corrections;
+        this.agent = agent;
+        this.reducer = reducer;
+        this.models = models;
+        this.playerAi = playerAi;
+        this.releases = releases;
+        this.transactions = transactions;
+        this.mapper = mapper;
+        this.enabled = enabled;
+        this.legacyBaseUrl = legacyBaseUrl;
+    }
+
+    @Override
+    public String routeCode() {
+        return ROUTE_CODE;
+    }
+
+    @Override
+    public EngineDescriptor descriptor() {
+        return new EngineDescriptor(ENGINE_CODE, ENGINE_VERSION, STATE_SCHEMA_VERSION);
+    }
+
+    @Override
+    public boolean supports(String saveId) {
+        return enabled && saveId != null && saveId.startsWith(SAVE_PREFIX);
+    }
+
+    @Override
+    public BootstrapResponse bootstrap() {
+        throw creationNotEnabled();
+    }
+
+    @Override
+    public CharacterRouteResponse characterRoutes(UserIdentity user, CharacterRouteRequest request) {
+        throw creationNotEnabled();
+    }
+
+    @Override
+    public SaveResponse create(UserIdentity user, CreateSaveRequest request) {
+        throw creationNotEnabled();
+    }
+
+    @Override
+    public List<SaveSummary> list(UserIdentity user) {
+        if (!enabled) return List.of();
+        return saves.listOwned(user.userId()).stream()
+                .filter(this::belongsToThisEngine)
+                .map(saved -> {
+                    V014State state = readState(saved);
+                    return new SaveSummary(saved.id(), saved.slotNo(), mode(saved.status()), ENGINE_CODE,
+                            saved.engineVersion(), saved.stateSchemaVersion(), saved.revision(), saved.turnNumber(),
+                            capabilities(saved.status()), state.world().name(), state.protagonist().name(),
+                            state.protagonist().race(), state.protagonist().realm(), saved.status(), saved.updatedAt());
+                }).toList();
+    }
+
+    @Override
+    public SaveResponse get(UserIdentity user, String saveId) {
+        StoredSave saved = requireOwned(user, saveId);
+        return response(user.userId(), saved, readState(saved));
+    }
+
+    @Override
+    public SaveResponse takeTurn(UserIdentity user, String saveId, TurnRequest request) {
+        return withTurnGate(user.userId(), () -> {
+            synchronized (accountLock(user.userId())) {
+                return takeTurnLocked(user, saveId, request);
+            }
+        });
+    }
+
+    private SaveResponse takeTurnLocked(UserIdentity user, String saveId, TurnRequest request) {
+        StoredSave saved = requireOwned(user, saveId);
+        assertActive(saved);
+        if (turns.findByRequestId(saveId, request.requestId()).isPresent()) return get(user, saveId);
+        assertRevision(saved, request.expectedRevision());
+        V014State before = readState(saved);
+        ResolvedRoute route = models.resolve(user.userId(), legacyBaseUrl);
+        PlayerAiService.Route quotaRoute = quotaRoute(route);
+        playerAi.assertPublicQuota(user.userId(), quotaRoute);
+
+        V014StoryAgent.Generated generated;
+        try {
+            List<RecentTurn> recent = turns.recent(saveId, 2).stream()
+                    .map(turn -> new RecentTurn(turn.turnNumber(), turn.playerAction(), turn.narrative()))
+                    .toList();
+            generated = agent.generate(user.userId(), before, conversations.summary(saveId), recent,
+                    request.action(), route);
+        } catch (RuntimeException error) {
+            if (route.hasCustomCredential() && causedByAuthentication(error)) {
+                models.markCredentialInvalid(user.userId(), route.provider(), "AUTHENTICATION_FAILED");
+                throw new GameApiException(HttpStatus.CONFLICT, "PERSONAL_KEY_REJECTED", "CREDENTIAL",
+                        "自己的推演密钥已失效", "推演服务拒绝了当前密钥，本次未消耗回合或修改命卷。",
+                        List.of("前往设置重新验证密钥", "确认密钥仍有额度且未被停用"), false,
+                        false, false, Map.of(), "personal credential rejected by provider", error);
+            }
+            throw error;
+        }
+
+        V014StateReducer.Applied applied = reducer.apply(before, request.action(), generated.envelope());
+        Long revision = transactions.execute(status -> {
+            JsonNode core = coreState(applied.state());
+            long next = saves.updateState(user.userId(), saveId, saved.revision(), core,
+                    STATE_SCHEMA_VERSION, applied.state().turnNumber(), applied.state().world().code(),
+                    saved.status(), releases.current());
+            synchronizeEntities(saveId, applied.state());
+            appendNewMemories(saveId, applied.state());
+            turns.insert(new NewTurn("story-turn-" + UUID.randomUUID(), saveId, request.requestId(),
+                    applied.state().turnNumber(), request.action(), applied.state().narrative(),
+                    mapper.valueToTree(applied.state().choices()), readJson(generated.rawPatchJson()),
+                    before.worldTimeMinutes(), applied.state().worldTimeMinutes(), ENGINE_CODE, ENGINE_VERSION,
+                    PROMPT_VERSION, route.provider(), route.model(), route.credentialSource(),
+                    generated.result().inputTokens(), generated.result().outputTokens(), 0, 0,
+                    generated.result().latencyMs(), releases.current(), Instant.now()));
+            if (!applied.rollingSummary().isBlank()) {
+                conversations.updateSummary(saveId, applied.rollingSummary(), applied.state().turnNumber());
+            }
+            playerAi.recordSuccessfulInvocation(user.userId(), quotaRoute);
+            return next;
+        });
+        StoredSave updated = new StoredSave(saved.id(), saved.userId(), saved.slotNo(), saved.status(),
+                applied.state().world().code(), saved.engineCode(), saved.engineVersion(), STATE_SCHEMA_VERSION,
+                saved.sourceType(), saved.sourceEdition(), saved.sourceSaveId(), saved.parentSaveId(),
+                coreState(applied.state()), revision == null ? saved.revision() + 1 : revision,
+                applied.state().turnNumber(), saved.createdRelease(), releases.current(), saved.createdAt(), Instant.now());
+        return response(user.userId(), updated, applied.state(), route);
+    }
+
+    @Override
+    public SaveResponse correct(UserIdentity user, String saveId, CorrectionRequest request) {
+        synchronized (accountLock(user.userId())) {
+            StoredSave saved = requireActive(user, saveId, request.expectedRevision());
+            V014State before = readState(saved);
+            V014State after = corrected(before, request.instruction().strip());
+            Long revision = transactions.execute(status -> {
+                long next = saves.updateState(user.userId(), saveId, saved.revision(), coreState(after),
+                        STATE_SCHEMA_VERSION, after.turnNumber(), after.world().code(), saved.status(), releases.current());
+                synchronizeEntities(saveId, after);
+                corrections.insert(user.userId(), saveId, request.instruction().strip(), "OTHER",
+                        mapper.valueToTree(before), mapper.valueToTree(after));
+                return next;
+            });
+            StoredSave updated = withRevision(saved, revision == null ? saved.revision() + 1 : revision,
+                    coreState(after), after.turnNumber());
+            return response(user.userId(), updated, after);
+        }
+    }
+
+    @Override
+    public void archive(UserIdentity user, String saveId) {
+        synchronized (accountLock(user.userId())) {
+            requireOwned(user, saveId);
+            try {
+                saves.archive(user.userId(), saveId);
+            } catch (OptimisticLockingFailureException error) {
+                throw GameApiException.of(HttpStatus.CONFLICT, "SAVE_NOT_ACTIVE", "STATE",
+                        "这份命卷已经封存", "封存记录只能阅读，不能重复封存。", List.of("返回我的命卷"));
+            }
+        }
+    }
+
+    @Override
+    public SaveResponse removeEntity(UserIdentity user, String saveId, String entityId, long expectedRevision) {
+        synchronized (accountLock(user.userId())) {
+            StoredSave saved = requireActive(user, saveId, expectedRevision);
+            Entity target = entities.listVisible(saveId).stream().filter(entity -> entity.id().equals(entityId))
+                    .findFirst().orElseThrow(() -> GameApiException.of(HttpStatus.NOT_FOUND,
+                            "STORY_ENTITY_NOT_FOUND", "STATE", "当前记录中没有这个内容",
+                            "它可能已经被整理，或命卷刚刚在其他页面发生了变化。",
+                            List.of("刷新角色页后再查看")));
+            if (!List.of("ITEM", "CHARACTER").contains(target.type())) {
+                throw GameApiException.of(HttpStatus.BAD_REQUEST, "STORY_ENTITY_CANNOT_REMOVE", "STATE",
+                        "这项记录不能从当前页面移除", "只有行囊物品和关注人物可以由玩家主动整理。",
+                        List.of("返回角色页"));
+            }
+            Long revision = transactions.execute(status -> {
+                long next = saves.updateState(user.userId(), saveId, saved.revision(), saved.state(),
+                        saved.stateSchemaVersion(), saved.turnNumber(), saved.worldCode(), saved.status(), releases.current());
+                int changed = entities.hide(saveId, entityId, saved.turnNumber(),
+                        "ITEM".equals(target.type()) ? "已由玩家移出行囊" : "已由玩家停止关注");
+                if (changed != 1) throw new OptimisticLockingFailureException("实体已经发生变化");
+                corrections.insert(user.userId(), saveId, "整理当前记录：" + target.name(), target.type(),
+                        mapper.valueToTree(target), mapper.createObjectNode().put("visible", false));
+                return next;
+            });
+            StoredSave updated = withRevision(saved, revision == null ? saved.revision() + 1 : revision,
+                    saved.state(), saved.turnNumber());
+            return response(user.userId(), updated, readState(updated));
+        }
+    }
+
+    private StoredSave requireOwned(UserIdentity user, String saveId) {
+        StoredSave saved = saves.findOwned(user.userId(), saveId)
+                .orElseThrow(() -> GameApiException.of(HttpStatus.NOT_FOUND, "STORY_SAVE_NOT_FOUND", "STATE",
+                        "没有找到这份命卷", "命卷可能已经封存到其他档案，或不属于当前账号。",
+                        List.of("刷新我的命卷")));
+        if (!belongsToThisEngine(saved)) {
+            throw GameApiException.of(HttpStatus.CONFLICT, "STORY_ENGINE_MISMATCH", "STATE",
+                    "这份命卷暂时无法读取", "命卷记录的故事引擎与当前运行时不一致。",
+                    List.of("联系管理员并提供命卷编号"));
+        }
+        return saved;
+    }
+
+    private StoredSave requireActive(UserIdentity user, String saveId, long expectedRevision) {
+        StoredSave saved = requireOwned(user, saveId);
+        assertActive(saved);
+        assertRevision(saved, expectedRevision);
+        return saved;
+    }
+
+    private void assertActive(StoredSave saved) {
+        if (!"ACTIVE".equals(saved.status())) {
+            throw GameApiException.of(HttpStatus.CONFLICT, "SAVE_NOT_ACTIVE", "STATE",
+                    "这份命卷已经封存", "封存命卷只能阅读，不能继续改变。", List.of("选择其他命卷"));
+        }
+    }
+
+    private void assertRevision(StoredSave saved, long expectedRevision) {
+        if (saved.revision() != expectedRevision) {
+            throw GameApiException.of(HttpStatus.CONFLICT, "STATE_CONFLICT", "STATE",
+                    "命卷已经在别处发生变化", "已阻止覆盖较新的记录，请刷新命卷后再操作。",
+                    List.of("刷新当前命卷后继续"));
+        }
+    }
+
+    private boolean belongsToThisEngine(StoredSave save) {
+        return ENGINE_CODE.equals(save.engineCode()) && save.engineVersion() == ENGINE_VERSION;
+    }
+
+    private V014State readState(StoredSave saved) {
+        V014State core;
+        try {
+            core = mapper.treeToValue(saved.state(), V014State.class);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("统一命卷核心状态无法读取：" + saved.id(), error);
+        }
+        List<V014State.Item> inventory = new ArrayList<>();
+        List<V014State.Ability> abilities = new ArrayList<>();
+        List<V014State.Character> characters = new ArrayList<>();
+        for (Entity entity : entities.listVisible(saved.id())) {
+            JsonNode attributes = entity.attributes();
+            switch (entity.type()) {
+                case "ITEM" -> inventory.add(new V014State.Item(entity.id(), entity.name(),
+                        attributes.path("itemType").asText("物品"), entity.summary(), entity.status(),
+                        attributes.path("source").asText("故事所得"),
+                        Math.max(0, attributes.path("quantity").asInt(1)),
+                        attributes.path("inPossession").asBoolean(true)));
+                case "ABILITY" -> abilities.add(new V014State.Ability(entity.id(), entity.name(),
+                        attributes.path("abilityType").asText("能力"), entity.summary(), entity.status(),
+                        attributes.path("source").asText("故事所得")));
+                case "CHARACTER" -> characters.add(new V014State.Character(entity.id(), entity.name(),
+                        attributes.path("tier").asText("KNOWN"),
+                        attributes.path("identity").asText("身份未明"),
+                        attributes.path("relationship").asText("初次相识"), entity.status(),
+                        attributes.path("lastKnownLocation").asText("未知"), true));
+                default -> { /* 势力和地点尚不属于当前轻叙事角色页，保留在实体表但不塞入旧状态模型。 */ }
+            }
+        }
+        List<V014State.Memory> stateMemories = memories.recentActive(saved.id(), 80).stream()
+                .map(memory -> new V014State.Memory(memory.id(), memory.title(), memory.summary(),
+                        memory.worldTime(), memory.importance())).toList();
+        return new V014State(14, saved.id(), saved.turnNumber(), saved.status(), core.world(), core.protagonist(),
+                core.worldTimeMinutes(), core.currentLocation(), core.condition(), core.sceneTitle(), core.narrative(),
+                core.choices(), inventory, abilities, characters, stateMemories);
+    }
+
+    private ObjectNode coreState(V014State state) {
+        ObjectNode core = mapper.createObjectNode();
+        core.put("schemaVersion", STATE_SCHEMA_VERSION);
+        core.put("saveId", state.saveId());
+        core.put("turnNumber", state.turnNumber());
+        core.put("status", state.status());
+        core.set("world", mapper.valueToTree(state.world()));
+        core.set("protagonist", mapper.valueToTree(state.protagonist()));
+        core.put("worldTimeMinutes", state.worldTimeMinutes());
+        core.put("currentLocation", state.currentLocation());
+        core.put("condition", state.condition());
+        core.put("sceneTitle", state.sceneTitle());
+        core.put("narrative", state.narrative());
+        core.set("choices", mapper.valueToTree(state.choices()));
+        return core;
+    }
+
+    private void synchronizeEntities(String saveId, V014State state) {
+        Map<String, Entity> existing = new HashMap<>();
+        entities.listVisible(saveId).forEach(entity -> existing.put(entity.id(), entity));
+        for (V014State.Item item : state.inventory()) {
+            ObjectNode attributes = mapper.createObjectNode();
+            attributes.put("itemType", item.type());
+            attributes.put("source", item.source());
+            attributes.put("quantity", Math.max(0, item.quantity()));
+            attributes.put("inPossession", Boolean.TRUE.equals(item.inPossession()));
+            upsertEntity(existing, new Entity(item.id(), saveId, "ITEM", item.name(), item.status(),
+                    Boolean.TRUE.equals(item.inPossession()) && item.quantity() > 0, item.description(), attributes,
+                    firstTurn(existing, item.id(), state.turnNumber()), state.turnNumber(), Instant.now(), Instant.now()));
+        }
+        for (V014State.Ability ability : state.abilities()) {
+            ObjectNode attributes = mapper.createObjectNode();
+            attributes.put("abilityType", ability.type());
+            attributes.put("source", ability.source());
+            boolean visible = !terminalAbility(ability.status());
+            upsertEntity(existing, new Entity(ability.id(), saveId, "ABILITY", ability.name(), ability.status(),
+                    visible, ability.description(), attributes, firstTurn(existing, ability.id(), state.turnNumber()),
+                    state.turnNumber(), Instant.now(), Instant.now()));
+        }
+        for (V014State.Character character : state.characters()) {
+            ObjectNode attributes = mapper.createObjectNode();
+            attributes.put("tier", character.tier());
+            attributes.put("identity", character.identity());
+            attributes.put("relationship", character.relationship());
+            attributes.put("lastKnownLocation", character.lastKnownLocation());
+            String summary = String.join("；", character.identity(), character.relationship(),
+                    character.lastKnownLocation());
+            upsertEntity(existing, new Entity(character.id(), saveId, "CHARACTER", character.name(),
+                    character.status(), Boolean.TRUE.equals(character.tracked()), summary, attributes,
+                    firstTurn(existing, character.id(), state.turnNumber()), state.turnNumber(),
+                    Instant.now(), Instant.now()));
+        }
+    }
+
+    private void upsertEntity(Map<String, Entity> existing, Entity value) {
+        if (existing.containsKey(value.id())) {
+            if (entities.update(value) != 1) throw new OptimisticLockingFailureException("统一实体已经发生变化");
+        } else {
+            entities.insert(value);
+        }
+    }
+
+    private int firstTurn(Map<String, Entity> existing, String id, int fallback) {
+        Entity value = existing.get(id);
+        return value == null ? fallback : value.firstTurn();
+    }
+
+    private void appendNewMemories(String saveId, V014State state) {
+        for (V014State.Memory memory : state.memories()) {
+            if (!memories.exists(saveId, memory.id())) {
+                memories.insert(saveId, new StoredMemory(memory.id(), memory.title(), memory.summary(),
+                        state.turnNumber(), memory.worldTimeMinutes(), normalizeImportance(memory.importance())));
+            }
+        }
+    }
+
+    private SaveResponse response(String userId, StoredSave saved, V014State state) {
+        ModelPreference preference = models.get(userId);
+        boolean personal = "USER".equals(preference.credentialSource());
+        return new SaveResponse(saved.id(), mode(saved.status()), ENGINE_CODE, saved.engineVersion(),
+                saved.stateSchemaVersion(), saved.revision(), saved.turnNumber(), capabilities(saved.status()),
+                mapState(saved, state), personal ? "PERSONAL" : "PLATFORM",
+                personal ? preference.provider() : null, personal ? preference.model() : null);
+    }
+
+    private SaveResponse response(String userId, StoredSave saved, V014State state, ResolvedRoute route) {
+        boolean personal = "USER".equals(route.credentialSource());
+        return new SaveResponse(saved.id(), mode(saved.status()), ENGINE_CODE, saved.engineVersion(),
+                saved.stateSchemaVersion(), saved.revision(), saved.turnNumber(), capabilities(saved.status()),
+                mapState(saved, state), personal ? "PERSONAL" : "PLATFORM",
+                personal ? route.provider() : null, personal ? route.model() : null);
+    }
+
+    private StoryState mapState(StoredSave saved, V014State state) {
+        return new StoryState(saved.id(), saved.turnNumber(), saved.status(),
+                new WorldProfile(state.world().code(), state.world().name(), state.world().source(),
+                        state.world().premise(), state.world().cultivationStyle(), state.world().openingRegion()),
+                new Protagonist(state.protagonist().name(), state.protagonist().race(),
+                        state.protagonist().gender(), state.protagonist().origin(), state.protagonist().realm(),
+                        state.protagonist().lifeGoal(), state.protagonist().storyTone()),
+                state.worldTimeMinutes(), state.currentLocation(), state.condition(), state.sceneTitle(),
+                state.narrative(), state.choices().stream()
+                        .map(value -> new Choice(value.id(), value.title(), value.description())).toList(),
+                state.inventory().stream().map(value -> new Item(value.id(), value.name(), value.type(),
+                        value.description(), value.status(), value.source(), value.quantity(),
+                        Boolean.TRUE.equals(value.inPossession()))).toList(),
+                state.abilities().stream().map(value -> new Ability(value.id(), value.name(), value.type(),
+                        value.description(), value.status(), value.source())).toList(),
+                state.characters().stream().map(value -> new com.wenxian.game.story.model.StoryApiModels.Character(
+                        value.id(), value.name(), value.tier(), value.identity(), value.relationship(), value.status(),
+                        value.lastKnownLocation(), Boolean.TRUE.equals(value.tracked()))).toList(),
+                state.memories().stream().map(value -> new Memory(value.id(), value.title(), value.summary(),
+                        value.worldTimeMinutes(), value.importance())).toList());
+    }
+
+    private V014State corrected(V014State before, String instruction) {
+        String location = match(LOCATION, instruction, before.currentLocation());
+        String condition = match(CONDITION, instruction, before.condition());
+        String realm = match(REALM, instruction, before.protagonist().realm());
+        List<V014State.Item> inventory = new ArrayList<>(before.inventory());
+        Matcher item = ITEM_STATUS.matcher(instruction);
+        boolean changed = !location.equals(before.currentLocation()) || !condition.equals(before.condition())
+                || !realm.equals(before.protagonist().realm());
+        if (item.find()) {
+            String name = item.group(1).strip();
+            String status = switch (item.group(2)) {
+                case "卖出" -> "SOLD";
+                case "赠予" -> "GIFTED";
+                case "遗失" -> "LOST";
+                case "存放" -> "STORED";
+                default -> "CONSUMED";
+            };
+            for (int index = 0; index < inventory.size(); index++) {
+                V014State.Item old = inventory.get(index);
+                if (old.name().equalsIgnoreCase(name)) {
+                    inventory.set(index, new V014State.Item(old.id(), old.name(), old.type(), old.description(),
+                            status, old.source(), old.quantity(),
+                            !List.of("SOLD", "GIFTED", "LOST", "CONSUMED").contains(status)));
+                    changed = true;
+                }
+            }
+        }
+        if (!changed) {
+            throw GameApiException.of(HttpStatus.BAD_REQUEST, "CORRECTION_NOT_UNDERSTOOD", "INPUT",
+                    "还不能确认要修正什么", "请明确写出地点、境界、状态，或哪件物品已消耗、卖出、赠予、遗失、存放。",
+                    List.of("例如：地点应为青岐城", "例如：清心丹已经消耗"));
+        }
+        V014State.Protagonist protagonist = new V014State.Protagonist(before.protagonist().name(),
+                before.protagonist().race(), before.protagonist().gender(), before.protagonist().origin(), realm,
+                before.protagonist().lifeGoal(), before.protagonist().storyTone());
+        return new V014State(14, before.saveId(), before.turnNumber(), before.status(), before.world(), protagonist,
+                before.worldTimeMinutes(), location, condition, before.sceneTitle(), before.narrative(),
+                before.choices(), inventory, before.abilities(), before.characters(), before.memories());
+    }
+
+    private StoredSave withRevision(StoredSave saved, long revision, JsonNode state, int turnNumber) {
+        return new StoredSave(saved.id(), saved.userId(), saved.slotNo(), saved.status(), saved.worldCode(),
+                saved.engineCode(), saved.engineVersion(), saved.stateSchemaVersion(), saved.sourceType(),
+                saved.sourceEdition(), saved.sourceSaveId(), saved.parentSaveId(), state, revision, turnNumber,
+                saved.createdRelease(), releases.current(), saved.createdAt(), Instant.now());
+    }
+
+    private String mode(String status) {
+        return "ACTIVE".equals(status) ? "PLAYABLE" : "ARCHIVE";
+    }
+
+    private List<String> capabilities(String status) {
+        if (!"ACTIVE".equals(status)) return List.of("READ");
+        return List.of("READ", "PLAY", "ARCHIVE", "CORRECT", "REMOVE_ENTITY");
+    }
+
+    private IllegalStateException creationNotEnabled() {
+        return new IllegalStateException("通用表运行时尚未接管新命卷创建");
+    }
+
+    private JsonNode readJson(String value) {
+        try {
+            return mapper.readTree(value == null || value.isBlank() ? "{}" : value);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("已归一化的推演补丁无法保存", error);
+        }
+    }
+
+    private PlayerAiService.Route quotaRoute(ResolvedRoute route) {
+        return new PlayerAiService.Route(new RuntimeAiConfigService.RuntimeConfig(
+                route.provider(), route.model(), route.model(), route.apiKey()), route.credentialSource());
+    }
+
+    private boolean causedByAuthentication(Throwable error) {
+        Throwable cursor = error;
+        int depth = 0;
+        while (cursor != null && depth++ < 8) {
+            if (cursor instanceof AuthenticationException) return true;
+            cursor = cursor.getCause();
+        }
+        return false;
+    }
+
+    private SaveResponse withTurnGate(String userId, Supplier<SaveResponse> action) {
+        AtomicBoolean gate = turnsInProgress.computeIfAbsent(userId, ignored -> new AtomicBoolean());
+        if (!gate.compareAndSet(false, true)) {
+            throw new GameApiException(HttpStatus.CONFLICT, "TURN_IN_PROGRESS", "STATE",
+                    "上一轮仍在推演", "请等待上一轮完成；刷新或重新进入后，可以读取已经写入的结果。",
+                    List.of("等待片刻后刷新命卷", "不要连续重复提交行动"), true,
+                    false, false, Map.of(), "duplicate turn rejected while generation is in progress", null);
+        }
+        try {
+            return action.get();
+        } finally {
+            turnsInProgress.remove(userId, gate);
+        }
+    }
+
+    private Object accountLock(String userId) {
+        return accountLocks.computeIfAbsent(userId, ignored -> new Object());
+    }
+
+    private String match(Pattern pattern, String input, String fallback) {
+        Matcher matcher = pattern.matcher(input);
+        return matcher.find() ? matcher.group(1).strip() : fallback;
+    }
+
+    private static Pattern correctionField(String label, int maxLength) {
+        return Pattern.compile(label + "\\s*(?:(?:改为|应为|是)\\s*[:：]?|[:：])\\s*"
+                + FIELD_VALUE_END.formatted(maxLength));
+    }
+
+    private boolean terminalAbility(String value) {
+        if (value == null) return false;
+        return List.of("LOST", "REMOVED", "FORGOTTEN").contains(value.strip().toUpperCase(Locale.ROOT));
+    }
+
+    private String normalizeImportance(String value) {
+        if (value == null) return "NORMAL";
+        String normalized = value.strip().toUpperCase(Locale.ROOT);
+        if ("KEY".equals(normalized)) return "KEY";
+        if (List.of("IMPORTANT", "HIGH", "重要").contains(normalized)) return "IMPORTANT";
+        return "NORMAL";
+    }
+}
