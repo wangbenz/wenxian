@@ -10,6 +10,9 @@ import com.wenxian.game.config.RuntimeAiConfigService;
 import com.wenxian.game.service.ActiveSavePolicyService;
 import com.wenxian.game.service.GameVersionService;
 import com.wenxian.game.service.PlayerAiService;
+import com.wenxian.game.story.agent.StoryModelRoute;
+import com.wenxian.game.story.application.StoryTurnCommitService;
+import com.wenxian.game.story.application.StoryTurnPreparationService;
 import com.wenxian.game.story.model.StoryApiModels.Ability;
 import com.wenxian.game.story.model.StoryApiModels.BootstrapResponse;
 import com.wenxian.game.story.model.StoryApiModels.CharacterRouteRequest;
@@ -94,6 +97,8 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
     private final StoryMemoryRepository memories;
     private final StoryConversationRepository conversations;
     private final StoryCorrectionRepository corrections;
+    private final StoryTurnPreparationService trustedTurnPreparation;
+    private final StoryTurnCommitService trustedTurnCommit;
     private final V014StoryAgent agent;
     private final V014StateReducer reducer;
     private final V014ModelPreferenceService models;
@@ -105,6 +110,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
     private final TransactionTemplate transactions;
     private final ObjectMapper mapper;
     private final boolean enabled;
+    private final boolean trustedTurnsEnabled;
     private final String legacyBaseUrl;
     private final Map<String, Object> accountLocks = new ConcurrentHashMap<>();
     private final Map<String, AtomicBoolean> turnsInProgress = new ConcurrentHashMap<>();
@@ -116,6 +122,8 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
             StoryMemoryRepository memories,
             StoryConversationRepository conversations,
             StoryCorrectionRepository corrections,
+            StoryTurnPreparationService trustedTurnPreparation,
+            StoryTurnCommitService trustedTurnCommit,
             V014StoryAgent agent,
             V014StateReducer reducer,
             V014ModelPreferenceService models,
@@ -127,6 +135,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
             TransactionTemplate transactions,
             ObjectMapper mapper,
             @Value("${wenxian.story.persisted-runtime-enabled:false}") boolean enabled,
+            @Value("${wenxian.story.trusted-turns-enabled:false}") boolean trustedTurnsEnabled,
             @Value("${deepseek.base-url:https://api.deepseek.com}") String legacyBaseUrl) {
         this.saves = saves;
         this.turns = turns;
@@ -134,6 +143,8 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         this.memories = memories;
         this.conversations = conversations;
         this.corrections = corrections;
+        this.trustedTurnPreparation = trustedTurnPreparation;
+        this.trustedTurnCommit = trustedTurnCommit;
         this.agent = agent;
         this.reducer = reducer;
         this.models = models;
@@ -145,6 +156,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         this.transactions = transactions;
         this.mapper = mapper;
         this.enabled = enabled;
+        this.trustedTurnsEnabled = trustedTurnsEnabled;
         this.legacyBaseUrl = legacyBaseUrl;
     }
 
@@ -274,6 +286,10 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         PlayerAiService.Route quotaRoute = quotaRoute(route);
         playerAi.assertPublicQuota(user.userId(), quotaRoute);
 
+        if (trustedTurnsEnabled) {
+            return takeTrustedTurn(user, saved, request, route, quotaRoute);
+        }
+
         V014StoryAgent.Generated generated;
         try {
             List<RecentTurn> recent = turns.recent(saveId, 2).stream()
@@ -319,6 +335,43 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                 coreState(applied.state()), revision == null ? saved.revision() + 1 : revision,
                 applied.state().turnNumber(), saved.createdRelease(), releases.current(), saved.createdAt(), Instant.now());
         return response(user.userId(), updated, applied.state(), route);
+    }
+
+    private SaveResponse takeTrustedTurn(UserIdentity user, StoredSave saved, TurnRequest request,
+                                         ResolvedRoute resolvedRoute, PlayerAiService.Route quotaRoute) {
+        StoryModelRoute route = new StoryModelRoute(resolvedRoute.baseUrl(), resolvedRoute.apiKey(),
+                resolvedRoute.provider(), resolvedRoute.adapterType(), resolvedRoute.model(),
+                resolvedRoute.credentialSource());
+        StoryTurnPreparationService.Prepared prepared;
+        try {
+            prepared = trustedTurnPreparation.prepare(saved, request.action(), route);
+        } catch (RuntimeException error) {
+            if (resolvedRoute.hasCustomCredential() && causedByAuthentication(error)) {
+                models.markCredentialInvalid(user.userId(), resolvedRoute.provider(), "AUTHENTICATION_FAILED");
+                throw new GameApiException(HttpStatus.CONFLICT, "PERSONAL_KEY_REJECTED", "CREDENTIAL",
+                        "自己的推演密钥已失效", "推演服务拒绝了当前密钥，本次未消耗回合或修改命卷。",
+                        List.of("前往设置重新验证密钥", "确认密钥仍有额度且未被停用"), false,
+                        false, false, Map.of(), "personal credential rejected by provider", error);
+            }
+            if (error instanceof IllegalArgumentException) {
+                throw GameApiException.temporary("STORY_PATCH_REJECTED", "这一轮没有形成一致结果",
+                        "系统已阻止不完整或相互矛盾的变化写入命卷，本次未消耗回合。",
+                        List.of("重新尝试本轮行动", "换一种更明确的方式描述行动"),
+                        "trusted story turn proposal rejected", error);
+            }
+            throw error;
+        }
+        try {
+            trustedTurnCommit.commit(user.userId(), saved, request.requestId(), request.action(),
+                    prepared, route, quotaRoute);
+        } catch (OptimisticLockingFailureException error) {
+            throw new GameApiException(HttpStatus.CONFLICT, "STATE_CONFLICT", "STATE",
+                    "命卷已经在别处发生变化", "已阻止覆盖较新的记录，本次未消耗回合。",
+                    List.of("刷新当前命卷后继续"), true, false, false, Map.of(),
+                    "trusted story turn revision conflict", error);
+        }
+        StoredSave updated = requireOwned(user, saved.id());
+        return response(user.userId(), updated, readState(updated), resolvedRoute);
     }
 
     @Override
@@ -426,7 +479,14 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
     private V014State readState(StoredSave saved) {
         V014State core;
         try {
-            core = mapper.treeToValue(saved.state(), V014State.class);
+            JsonNode compatibleState = saved.state();
+            if (compatibleState instanceof ObjectNode object) {
+                ObjectNode copy = object.deepCopy();
+                // 可信投影属于通用 Story 内部扩展，不应泄漏给旧版 H5 状态模型反序列化。
+                copy.remove("_trustedProjection");
+                compatibleState = copy;
+            }
+            core = mapper.treeToValue(compatibleState, V014State.class);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("统一命卷核心状态无法读取：" + saved.id(), error);
         }
@@ -439,7 +499,9 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                 case "ITEM" -> inventory.add(new V014State.Item(entity.id(), entity.name(),
                         attributes.path("itemType").asText("物品"), entity.summary(), entity.status(),
                         attributes.path("source").asText("故事所得"),
-                        Math.max(0, attributes.path("quantity").asInt(1)),
+                        trustedQuantityKnown(attributes)
+                                ? Math.max(0, trustedQuantityValue(attributes)) : 0,
+                        trustedQuantityKnown(attributes),
                         attributes.path("inPossession").asBoolean(true)));
                 case "ABILITY" -> abilities.add(new V014State.Ability(entity.id(), entity.name(),
                         attributes.path("abilityType").asText("能力"), entity.summary(), entity.status(),
@@ -566,7 +628,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                         .map(value -> new Choice(value.id(), value.title(), value.description())).toList(),
                 state.inventory().stream().map(value -> new Item(value.id(), value.name(), value.type(),
                         value.description(), value.status(), value.source(), value.quantity(),
-                        Boolean.TRUE.equals(value.inPossession()))).toList(),
+                        Boolean.TRUE.equals(value.quantityKnown()), Boolean.TRUE.equals(value.inPossession()))).toList(),
                 state.abilities().stream().map(value -> new Ability(value.id(), value.name(), value.type(),
                         value.description(), value.status(), value.source())).toList(),
                 state.characters().stream().map(value -> new com.wenxian.game.story.model.StoryApiModels.Character(
@@ -704,6 +766,20 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
     private boolean terminalAbility(String value) {
         if (value == null) return false;
         return List.of("LOST", "REMOVED", "FORGOTTEN").contains(value.strip().toUpperCase(Locale.ROOT));
+    }
+
+    private boolean trustedQuantityKnown(JsonNode attributes) {
+        JsonNode quantity = attributes.path("_trusted").path("quantity");
+        if (quantity.isObject() && quantity.has("known")) return quantity.path("known").asBoolean(false);
+        return attributes.has("quantity") && attributes.path("quantity").canConvertToInt();
+    }
+
+    private int trustedQuantityValue(JsonNode attributes) {
+        JsonNode quantity = attributes.path("_trusted").path("quantity");
+        if (quantity.isObject() && quantity.path("known").asBoolean(false)) {
+            return quantity.path("value").asInt(0);
+        }
+        return attributes.path("quantity").asInt(0);
     }
 
     private String normalizeImportance(String value) {

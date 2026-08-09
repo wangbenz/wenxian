@@ -206,7 +206,7 @@ public class V014StoryEngineAdapter implements StoryEngine {
                         .map(value -> new Choice(value.id(), value.title(), value.description())).toList(),
                 state.inventory().stream().map(value -> new Item(value.id(), value.name(), value.type(),
                         value.description(), value.status(), value.source(), value.quantity(),
-                        Boolean.TRUE.equals(value.inPossession()))).toList(),
+                        Boolean.TRUE.equals(value.quantityKnown()), Boolean.TRUE.equals(value.inPossession()))).toList(),
                 state.abilities().stream().map(value -> new Ability(value.id(), value.name(), value.type(),
                         value.description(), value.status(), value.source())).toList(),
                 state.characters().stream().map(value -> new Character(value.id(), value.name(), value.tier(),

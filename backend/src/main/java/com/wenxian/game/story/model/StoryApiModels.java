@@ -140,8 +140,10 @@ public final class StoryApiModels {
 
     public record Choice(String id, String title, String description) {}
 
+    /** 数量未知时 quantity 仅为兼容占位值，H5 必须依据 quantityKnown 展示“未清点”。 */
     public record Item(String id, String name, String type, String description,
-                       String status, String source, int quantity, boolean inPossession) {}
+                       String status, String source, int quantity, boolean quantityKnown,
+                       boolean inPossession) {}
 
     public record Ability(String id, String name, String type, String description,
                           String status, String source) {}

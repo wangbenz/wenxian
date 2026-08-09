@@ -45,6 +45,10 @@ game:
   story-correction-token-secret: ${WENXIAN_STORY_CORRECTION_TOKEN_SECRET:${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}}
   story-correction-token-ttl-minutes: ${WENXIAN_STORY_CORRECTION_TOKEN_TTL_MINUTES:10}
 
+wenxian:
+  story:
+    trusted-turns-enabled: ${WENXIAN_TRUSTED_TURNS_ENABLED:false}
+
 deepseek:
   api-key: ${DEEPSEEK_API_KEY:}
   base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}

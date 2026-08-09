@@ -140,6 +140,15 @@ test("keeps story record cleanup soft and outside the turn composer", async () =
   assert.equal(api.includes("/api/v1/story/saves/"), true);
 });
 
+test("does not invent a quantity for uncounted inventory", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+  const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
+
+  assert.equal(api.includes("quantityKnown?: boolean"), true);
+  assert.equal(prototype.includes("数量未清点"), true);
+  assert.equal(prototype.includes("item.quantityKnown === false"), true);
+});
+
 test("keeps adjudication rewrites separate from normal story choices", async () => {
   const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
 

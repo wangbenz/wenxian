@@ -39,6 +39,7 @@ export type InventoryItem = {
   category: string;
   quality: string;
   quantity: number;
+  quantityKnown?: boolean;
   description: string;
   keyItem: boolean;
 };
@@ -296,7 +297,7 @@ export type StoryState = {
   sceneTitle: string;
   narrative: string;
   choices: StoryChoice[];
-  inventory: Array<{ id: string; name: string; type: string; description: string; status: string; source: string; quantity: number; inPossession?: boolean }>;
+  inventory: Array<{ id: string; name: string; type: string; description: string; status: string; source: string; quantity: number; quantityKnown?: boolean; inPossession?: boolean }>;
   abilities: Array<{ id: string; name: string; type: string; description: string; status: string; source: string }>;
   characters: Array<{ id: string; name: string; tier: string; identity: string; relationship: string; status: string; lastKnownLocation: string; tracked?: boolean }>;
   memories: Array<{ id: string; title: string; summary: string; worldTimeMinutes: number; importance: string }>;

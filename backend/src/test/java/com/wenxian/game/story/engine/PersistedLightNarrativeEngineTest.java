@@ -6,6 +6,18 @@ import com.wenxian.game.api.GameApiException;
 import com.wenxian.game.auth.AuthService.UserIdentity;
 import com.wenxian.game.service.ActiveSavePolicyService;
 import com.wenxian.game.service.GameVersionService;
+import com.wenxian.game.service.PlayerAiService;
+import com.wenxian.game.story.agent.PromptContextAssembler;
+import com.wenxian.game.story.agent.StoryTurnAgent;
+import com.wenxian.game.story.application.StoryTurnCommitService;
+import com.wenxian.game.story.application.StoryTurnPreparationService;
+import com.wenxian.game.story.domain.StoryPatch;
+import com.wenxian.game.story.domain.StoryPatch.EntityOperation;
+import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
+import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
+import com.wenxian.game.story.domain.StoryPatch.TimePassage;
+import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
+import com.wenxian.game.story.domain.StoryPatchValidator;
 import com.wenxian.game.story.persistence.StoryConversationRepository;
 import com.wenxian.game.story.persistence.StoryCorrectionRepository;
 import com.wenxian.game.story.persistence.StoryEntityRepository;
@@ -16,6 +28,8 @@ import com.wenxian.game.story.persistence.StoryPersistenceModels.NewSave;
 import com.wenxian.game.story.persistence.StoryPersistenceModels.NewTurn;
 import com.wenxian.game.story.persistence.StorySaveRepository;
 import com.wenxian.game.story.persistence.StoryTurnRepository;
+import com.wenxian.game.story.persistence.StoryProjectionPersistenceMapper;
+import com.wenxian.game.story.reducer.StoryStateReducer;
 import com.wenxian.game.story.model.StoryApiModels.TurnRequest;
 import com.wenxian.game.story.model.StoryApiModels.CorrectionRequest;
 import com.wenxian.game.story.model.StoryApiModels.CreateSaveRequest;
@@ -31,10 +45,12 @@ import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
 import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.client.RestClient;
 
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -63,6 +79,17 @@ class PersistedLightNarrativeEngineTest {
             attributes.put("inPossession", true);
             entities.insert(new Entity("entity-token", "story-v014-test", "ITEM", "青纹令", "随身携带",
                     true, "来自旧识的令牌", attributes, 0, 3, Instant.now(), Instant.now()));
+            ObjectNode unknownAttributes = mapper.createObjectNode();
+            unknownAttributes.put("itemType", "灵材");
+            unknownAttributes.put("source", "洞府所得");
+            unknownAttributes.put("inPossession", true);
+            ObjectNode trusted = mapper.createObjectNode();
+            trusted.set("quantity", mapper.valueToTree(new com.wenxian.game.story.domain.StoryPatch.QuantityValue(
+                    false, null)));
+            trusted.put("inPossession", true);
+            unknownAttributes.set("_trusted", trusted);
+            entities.insert(new Entity("entity-unknown", "story-v014-test", "ITEM", "一包散碎灵材", "未清点",
+                    true, "尚未逐件清点", unknownAttributes, 1, 3, Instant.now(), Instant.now()));
             memories.insert("story-v014-test", new StoredMemory("memory-origin", "EVENT", "此生来处", "山村少年",
                     0, 0, "KEY"));
             jdbc.update("""
@@ -79,6 +106,11 @@ class PersistedLightNarrativeEngineTest {
             assertEquals(3, result.turnNumber());
             assertEquals("陆沉", result.state().protagonist().name());
             assertEquals("青纹令", result.state().inventory().getFirst().name());
+            var unknown = result.state().inventory().stream()
+                    .filter(item -> "entity-unknown".equals(item.id())).findFirst().orElseThrow();
+            assertFalse(unknown.quantityKnown());
+            assertEquals(0, unknown.quantity());
+            assertTrue(unknown.inPossession());
             assertEquals("此生来处", result.state().memories().getFirst().title());
 
             StoryTurnRepository turns = new StoryTurnRepository(jdbc, mapper);
@@ -92,7 +124,8 @@ class PersistedLightNarrativeEngineTest {
 
             var removed = engine.removeEntity(USER, "story-v014-test", "entity-token", 1);
             assertEquals(2, removed.revision());
-            assertTrue(removed.state().inventory().isEmpty());
+            assertEquals(List.of("entity-unknown"), removed.state().inventory().stream()
+                    .map(com.wenxian.game.story.model.StoryApiModels.Item::id).toList());
 
             var corrected = engine.correct(USER, "story-v014-test",
                     new CorrectionRequest("地点应为青岐山门", 2));
@@ -164,6 +197,89 @@ class PersistedLightNarrativeEngineTest {
         }
     }
 
+    @Test
+    void trustedTurnCommitsAcceptedPatchAndKeepsUnknownQuantity() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            AtomicInteger agentCalls = new AtomicInteger();
+            StoryTurnAgent trustedAgent = (context, route) -> {
+                agentCalls.incrementAndGet();
+                assertTrue(mapper.valueToTree(context).toString().contains("item-pills"));
+                EntityPatch consume = new EntityPatch(EntityOperation.UPDATE, "item-pills", "ITEM",
+                        null, "剩余两枚", null, null, new QuantityValue(true, 2), true,
+                        null, null);
+                EntityPatch discover = new EntityPatch(EntityOperation.CREATE, null, "ITEM",
+                        "一包散碎灵材", "尚未清点", "数量仍待清点", null,
+                        new QuantityValue(false, null), true, null, null);
+                StoryPatch patch = new StoryPatch("清点行囊", "你服下一枚清心丹，又收起一包尚未清点的灵材。",
+                        new TimePassage(30, TimeResolution.COMPLETE, null), null,
+                        List.of(consume, discover), List.of(), List.of(),
+                        List.of(new StoryPatch.MemoryDraft("EVENT", "清点行囊",
+                                "你服下一枚清心丹，并得到一包数量未知的灵材。", "NORMAL", List.of())),
+                        new StoryPatch.DecisionCheckpoint(false, null),
+                        List.of(new StoryPatch.ChoiceDraft("继续查看", "辨认灵材来历。")),
+                        "你已经服下一枚清心丹，并得到未清点灵材。");
+                return new StoryTurnAgent.Generated(patch, List.of(
+                        new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                                "{}", "response-trusted", "test-model", 120, 220, 40)));
+            };
+            PlayerAiService playerAi = new PlayerAiService(jdbc, null, RestClient.builder(),
+                    "https://example.invalid", "test-master-key") {
+                @Override
+                public void assertPublicQuota(String userId, Route route) {
+                    // 此测试只验证成功回合的事务提交，不依赖运营额度配置。
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    trustedAgent, playerAi);
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+            ObjectNode itemAttributes = mapper.createObjectNode();
+            itemAttributes.put("itemType", "丹药");
+            itemAttributes.put("source", "随身行囊");
+            itemAttributes.put("quantity", 3);
+            itemAttributes.put("inPossession", true);
+            entities.insert(new Entity("item-pills", created.saveId(), "ITEM", "清心丹", "持有",
+                    true, "可清心定神", itemAttributes, 0, 0, Instant.now(), Instant.now()));
+
+            TurnRequest request = new TurnRequest("服下一枚清心丹，再收好找到的灵材。", "request-trusted", 1);
+            var result = engine.takeTurn(USER, created.saveId(), request);
+
+            assertEquals(2, result.revision());
+            assertEquals(1, result.turnNumber());
+            assertEquals(30, result.state().worldTimeMinutes());
+            var pills = result.state().inventory().stream()
+                    .filter(item -> "item-pills".equals(item.id())).findFirst().orElseThrow();
+            assertTrue(pills.quantityKnown());
+            assertEquals(2, pills.quantity());
+            var unknown = result.state().inventory().stream()
+                    .filter(item -> "一包散碎灵材".equals(item.name())).findFirst().orElseThrow();
+            assertFalse(unknown.quantityKnown());
+            assertTrue(unknown.inPossession());
+            assertEquals(1, jdbc.queryForObject("select count(*) from story_turn where save_id=?",
+                    Integer.class, created.saveId()));
+            assertEquals("trusted-story-turn-v1", jdbc.queryForObject(
+                    "select prompt_version from story_turn where save_id=?", String.class, created.saveId()));
+            String storedPatch = jdbc.queryForObject(
+                    "select state_patch_json from story_turn where save_id=?", String.class, created.saveId());
+            assertTrue(storedPatch.contains(unknown.id()), "回合必须保存 Reducer 分配后的稳定实体ID");
+            assertEquals(2, memories.recentActive(created.saveId(), 20).size());
+
+            var retry = engine.takeTurn(USER, created.saveId(), request);
+            assertEquals(1, retry.turnNumber());
+            assertEquals(1, agentCalls.get(), "相同 requestId 不得再次调用模型");
+            assertEquals(1, jdbc.queryForObject(
+                    "select coalesce(sum(used_count), 0) from user_daily_quota where user_id=?",
+                    Integer.class, USER.userId()), "成功额度必须与回合在同一事务中只记录一次");
+        } finally {
+            database.shutdown();
+        }
+    }
+
     private PersistedLightNarrativeEngine engine(EmbeddedDatabase database, StorySaveRepository saves,
                                                   StoryEntityRepository entities,
                                                   StoryMemoryRepository memories) {
@@ -176,11 +292,36 @@ class PersistedLightNarrativeEngineTest {
         JdbcTemplate jdbc = new JdbcTemplate(database);
         ActiveSavePolicyService savePolicy = new ActiveSavePolicyService(jdbc);
         return new PersistedLightNarrativeEngine(saves, new StoryTurnRepository(jdbc, mapper), entities, memories,
-                new StoryConversationRepository(jdbc), new StoryCorrectionRepository(jdbc, mapper), null,
+                new StoryConversationRepository(jdbc), new StoryCorrectionRepository(jdbc, mapper),
+                null, null, null,
                 new V014StateReducer(), new StubModels(), new V014WorldCatalog(false), null, savePolicy,
                 null, new GameVersionService(jdbc),
-                new TransactionTemplate(new DataSourceTransactionManager(database)), mapper, enabled,
+                new TransactionTemplate(new DataSourceTransactionManager(database)), mapper, enabled, false,
                 "https://example.com");
+    }
+
+    private PersistedLightNarrativeEngine trustedEngine(EmbeddedDatabase database, StorySaveRepository saves,
+                                                         StoryEntityRepository entities,
+                                                         StoryMemoryRepository memories,
+                                                         StoryTurnAgent trustedAgent,
+                                                         PlayerAiService playerAi) {
+        JdbcTemplate jdbc = new JdbcTemplate(database);
+        StoryTurnRepository turns = new StoryTurnRepository(jdbc, mapper);
+        StoryConversationRepository conversations = new StoryConversationRepository(jdbc);
+        StoryProjectionPersistenceMapper projections = new StoryProjectionPersistenceMapper(mapper);
+        StoryStateReducer trustedReducer = new StoryStateReducer(new StoryPatchValidator(),
+                prefix -> prefix + "-trusted-test");
+        StoryTurnPreparationService preparation = new StoryTurnPreparationService(entities, memories,
+                conversations, turns, projections, new PromptContextAssembler(), trustedAgent, trustedReducer);
+        GameVersionService releases = new GameVersionService(jdbc);
+        TransactionTemplate transactions = new TransactionTemplate(new DataSourceTransactionManager(database));
+        StoryTurnCommitService commit = new StoryTurnCommitService(saves, turns, entities, memories,
+                conversations, projections, releases, playerAi, transactions, mapper);
+        return new PersistedLightNarrativeEngine(saves, turns, entities, memories, conversations,
+                new StoryCorrectionRepository(jdbc, mapper), preparation, commit, null,
+                new V014StateReducer(), new StubModels(), new V014WorldCatalog(false), null,
+                new ActiveSavePolicyService(jdbc), playerAi, releases, transactions, mapper,
+                true, true, "https://example.com");
     }
 
     private EmbeddedDatabase database() {
@@ -225,6 +366,12 @@ class PersistedLightNarrativeEngineTest {
         @Override
         public ModelPreference get(String userId) {
             return new ModelPreference("DEEPSEEK", "test-model", "PUBLIC");
+        }
+
+        @Override
+        public ResolvedRoute resolve(String userId, String ignoredLegacyBaseUrl) {
+            return new ResolvedRoute("https://example.invalid", "test-secret-key", "DEEPSEEK",
+                    "OPENAI_COMPATIBLE", "test-model", "PUBLIC", false);
         }
     }
 }

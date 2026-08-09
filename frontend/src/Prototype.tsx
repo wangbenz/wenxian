@@ -141,7 +141,8 @@ function storySnapshotView(source: StorySaveResponse): ApiSnapshot {
       at: memory.worldTimeMinutes + minutesPerYear, kind: memory.importance === "KEY" ? "world" : "decision" })),
     threads: [], inventory: state.inventory.filter((item) => item.inPossession !== false).map((item) => ({
       id: item.id, definitionId: item.id, name: item.name, category: item.type, quality: item.status === "ACTIVE" ? "持有" : item.status || "仍在行囊中",
-      quantity: item.quantity, description: item.description, keyItem: false })),
+      quantity: item.quantity, quantityKnown: item.quantityKnown !== false,
+      description: item.description, keyItem: false })),
     abilities: state.abilities.filter((ability) => ability.status !== "LOST").map((ability) => ({ id: ability.id,
       definitionId: ability.id, name: ability.name, type: ability.type === "TALENT" ? "TALENT" : ability.type === "SPELL" ? "SPELL" : "TECHNIQUE",
       stage: ability.status === "MASTERED" ? "已掌握" : ability.status, mastery: 0, source: ability.source,
@@ -696,7 +697,7 @@ function CharacterView({ game, isBusy, onCleanup }: { game: GameState; isBusy: b
         <small>凡俗钱财与灵石分别记账，只有剧情中真实发生的交易才会增减。</small>
       </div></section>}
       <section className="record-section"><div className="section-label section-label-plain"><p className="eyebrow">INVENTORY</p><h2>行囊</h2><span>{inventory.length}</span></div><div className="inventory-list">
-        {inventory.map((item) => <article className="inventory-item" key={item.id}><div><h3>{item.name}<small>{item.quality} · ×{item.quantity}</small></h3><p>{item.description}</p></div>{organizing && <button disabled={isBusy} onClick={() => onCleanup?.({ kind: "item", id: item.id, name: item.name })} type="button">移出行囊</button>}</article>)}
+        {inventory.map((item) => <article className="inventory-item" key={item.id}><div><h3>{item.name}<small>{item.quality} · {item.quantityKnown === false ? "数量未清点" : `×${item.quantity}`}</small></h3><p>{item.description}</p></div>{organizing && <button disabled={isBusy} onClick={() => onCleanup?.({ kind: "item", id: item.id, name: item.name })} type="button">移出行囊</button>}</article>)}
         {inventory.length === 0 && <p className="record-empty-copy">行囊中暂时没有需要记录的物品。</p>}
       </div></section>
       <section className="record-section"><div className="section-label section-label-plain"><p className="eyebrow">RELATIONSHIPS</p><h2>已登场角色</h2><span>{game.characters.length}</span></div><div className="character-list">

@@ -44,11 +44,19 @@ public record V014State(
     public record Choice(String id, String title, String description) {}
 
     public record Item(String id, String name, String type, String description,
-                       String status, String source, int quantity, Boolean inPossession) {
+                       String status, String source, int quantity, Boolean quantityKnown,
+                       Boolean inPossession) {
         public Item {
+            if (quantityKnown == null) quantityKnown = true;
             if (inPossession == null) {
-                inPossession = quantity > 0 && !terminalItemNote(status);
+                inPossession = (!quantityKnown || quantity > 0) && !terminalItemNote(status);
             }
+        }
+
+        /** 兼容旧运行时的确定数量构造方式；旧状态在未显式标记前均视为数量已知。 */
+        public Item(String id, String name, String type, String description,
+                    String status, String source, int quantity, Boolean inPossession) {
+            this(id, name, type, description, status, source, quantity, true, inPossession);
         }
     }
 

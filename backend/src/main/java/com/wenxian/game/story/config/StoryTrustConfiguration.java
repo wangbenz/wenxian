@@ -6,6 +6,7 @@ import com.wenxian.game.story.agent.PromptContextAssembler;
 import com.wenxian.game.story.application.CorrectionProposalTokenCodec;
 import com.wenxian.game.story.application.StoryCorrectionWorkflow;
 import com.wenxian.game.story.persistence.StoryProjectionPersistenceMapper;
+import com.wenxian.game.story.reducer.StoryStateReducer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,6 +30,11 @@ public class StoryTrustConfiguration {
     @Bean
     public StoryProjectionPersistenceMapper storyProjectionPersistenceMapper(ObjectMapper mapper) {
         return new StoryProjectionPersistenceMapper(mapper);
+    }
+
+    @Bean
+    public StoryStateReducer storyStateReducer() {
+        return new StoryStateReducer();
     }
 
     @Bean
