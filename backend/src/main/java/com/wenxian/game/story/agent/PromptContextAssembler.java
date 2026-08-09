@@ -86,7 +86,8 @@ public final class PromptContextAssembler {
 
         return new StoryPromptContext(
                 new SystemContext(TRUST_INVARIANTS, cleanRules(request.engineRules())),
-                new ObjectiveContext(projection.worldTimeMinutes(), projection.coreState(), worldFacts, index, details),
+                new ObjectiveContext(projection.worldTimeMinutes(), projection.coreState(), worldFacts, index, details,
+                        request.pendingDecision()),
                 new CognitionContext(cognition),
                 new MemoryContext(memories),
                 new NarrativeContext(blank(request.rollingSummary()), request.previousTurn()),
@@ -171,8 +172,14 @@ public final class PromptContextAssembler {
             List<String> engineRules,
             ContextSelection selection,
             String rollingSummary,
-            PreviousTurn previousTurn
+            PreviousTurn previousTurn,
+            StoryPromptContext.PendingDecision pendingDecision
     ) {
+        public ContextRequest(String playerAction, List<String> engineRules, ContextSelection selection,
+                              String rollingSummary, PreviousTurn previousTurn) {
+            this(playerAction, engineRules, selection, rollingSummary, previousTurn, null);
+        }
+
         public ContextRequest {
             engineRules = engineRules == null ? List.of() : List.copyOf(engineRules);
         }

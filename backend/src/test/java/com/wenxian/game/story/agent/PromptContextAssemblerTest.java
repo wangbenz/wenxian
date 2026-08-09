@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.wenxian.game.story.agent.PromptContextAssembler.ContextRequest;
 import com.wenxian.game.story.agent.PromptContextAssembler.ContextSelection;
 import com.wenxian.game.story.agent.PromptContextAssembler.KnowledgeRef;
+import com.wenxian.game.story.agent.StoryPromptContext.PendingDecision;
 import com.wenxian.game.story.agent.StoryPromptContext.PreviousTurn;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
@@ -44,7 +45,8 @@ class PromptContextAssemblerTest {
 
         StoryPromptContext context = assembler.assemble(projection,
                 new ContextRequest("施展照影诀查看天门旧痕", List.of("保持第二人称"), selection,
-                        "你曾在山门立下承诺。", previous));
+                        "你曾在山门立下承诺。", previous,
+                        new PendingDecision("是否接受使者提出的入门条件？")));
 
         assertEquals("world-fact-ascension", context.objective().worldFacts().getFirst().id());
         assertEquals("世人尚不能证明天门是否存在",
@@ -52,6 +54,7 @@ class PromptContextAssemblerTest {
         assertEquals("师尊相信天门已经断绝", context.cognition().entries().getFirst().summary());
         assertEquals("memory-promise", context.memory().entries().getFirst().id());
         assertEquals(previous, context.narrative().previousTurn());
+        assertEquals("是否接受使者提出的入门条件？", context.objective().pendingDecision().prompt());
         assertEquals("施展照影诀查看天门旧痕", context.action().playerAction());
         assertTrue(context.system().invariants().stream().anyMatch(value -> value.contains("重大不可逆决定")));
     }

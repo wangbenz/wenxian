@@ -35,7 +35,9 @@ class ModelBackedStoryTurnAgentTest {
             assertEquals(0.7, request.temperature());
             assertTrue(request.systemPrompt().contains("第二人称“你”"));
             assertTrue(request.systemPrompt().contains("decisionCheckpoint.required=true"));
+            assertTrue(request.systemPrompt().contains("objective.pendingDecision"));
             assertTrue(request.userPrompt().contains("ability-reflection"));
+            assertTrue(request.userPrompt().contains("是否接受使者提出的入门条件"));
             assertTrue(request.userPrompt().contains("施展照影诀"));
             assertFalse(request.userPrompt().contains("test-secret-key"));
             return result(VALID_PATCH, 101, 203, 800);
@@ -143,7 +145,7 @@ class ModelBackedStoryTurnAgentTest {
                         List.of(new StoryPromptContext.EntityIndexEntry("ability-reflection", "ABILITY", "照影诀",
                                 "运转如常", true, null, null,
                                 com.wenxian.game.story.domain.StoryPatch.AbilityState.MASTERED, null)),
-                        List.of()),
+                        List.of(), new StoryPromptContext.PendingDecision("是否接受使者提出的入门条件？")),
                 new StoryPromptContext.CognitionContext(List.of()),
                 new StoryPromptContext.MemoryContext(List.of()),
                 new StoryPromptContext.NarrativeContext("你来到石门前。", null),

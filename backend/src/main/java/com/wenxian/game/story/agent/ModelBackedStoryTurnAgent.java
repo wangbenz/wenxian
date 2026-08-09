@@ -30,6 +30,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                action 是玩家本轮授权。不得用摘要、旧正文或人物观点静默覆盖 objective。
             2. 只执行 action 已授权的行动及其直接后果。来到新的重大、不可逆决定前必须停止，
                decisionCheckpoint.required=true，并把决定交还玩家；不得替玩家加入宗门、立誓、结盟、屠杀、放弃传承等。
+               objective.pendingDecision 不为空时，本轮 action 是玩家对该问题的回应；若 action 没有明确回答，必须继续返回
+               相同的 required=true 和 prompt，不能擅自清除、跳过或替玩家决定。
             3. 已有实体只能用 objective 提供的稳定 entityId 更新。不能按名字猜测，不能为了绕过死亡、掌握、数量或归属状态
                创建同名实体。没有在 objective 出现的状态，不得声称它已被系统确认。
             4. 物品数量已知时，使用、出售、赠予或获得后必须返回准确的新总量；数量未知就保持 known=false、value=null，

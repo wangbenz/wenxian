@@ -3,6 +3,7 @@ package com.wenxian.game.story.persistence;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
+import com.wenxian.game.story.domain.StoryPatch.DecisionCheckpoint;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
@@ -99,6 +100,20 @@ class StoryProjectionPersistenceMapperTest {
 
         assertThrows(IllegalStateException.class,
                 () -> mapper.load(save(baseState()), List.of(entity("item-broken", attributes)), List.of()));
+    }
+
+    @Test
+    void roundTripsAndClearsPendingMajorDecision() {
+        ObjectNode state = baseState();
+
+        mapper.writeDecisionCheckpoint(state,
+                new DecisionCheckpoint(true, "是否接受使者提出的入门条件？"));
+        assertEquals("是否接受使者提出的入门条件？",
+                mapper.loadDecisionCheckpoint(state).prompt());
+
+        mapper.writeDecisionCheckpoint(state, new DecisionCheckpoint(false, null));
+        assertFalse(state.has(StoryProjectionPersistenceMapper.TRUSTED_SCENE));
+        assertNull(mapper.loadDecisionCheckpoint(state));
     }
 
     private ObjectNode baseState() {

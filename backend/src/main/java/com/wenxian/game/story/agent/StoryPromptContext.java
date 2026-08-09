@@ -34,8 +34,15 @@ public record StoryPromptContext(
             CoreState protagonist,
             List<WorldFactView> worldFacts,
             List<EntityIndexEntry> entityIndex,
-            List<EntityDetail> relatedEntities
+            List<EntityDetail> relatedEntities,
+            PendingDecision pendingDecision
     ) {
+        public ObjectiveContext(long worldTimeMinutes, CoreState protagonist,
+                                List<WorldFactView> worldFacts, List<EntityIndexEntry> entityIndex,
+                                List<EntityDetail> relatedEntities) {
+            this(worldTimeMinutes, protagonist, worldFacts, entityIndex, relatedEntities, null);
+        }
+
         public ObjectiveContext {
             worldFacts = safe(worldFacts);
             entityIndex = safe(entityIndex);
@@ -64,6 +71,9 @@ public record StoryPromptContext(
     public record ActionContext(String playerAction) {}
 
     public record WorldFactView(String id, String statement, int revision) {}
+
+    /** 当前剧情已经停下并等待玩家亲自回答的决定；为空表示没有待确认事项。 */
+    public record PendingDecision(String prompt) {}
 
     public record EntityIndexEntry(
             String id,

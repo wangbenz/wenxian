@@ -91,6 +91,7 @@ public class StoryTurnCommitService {
                 .map(value -> new V014State.Choice("choice-" + UUID.randomUUID(),
                         value.title(), value.description())).toList();
         ObjectNode state = projections.writeState(saved.state(), after);
+        projections.writeDecisionCheckpoint(state, accepted.decisionCheckpoint());
         state.put("schemaVersion", saved.stateSchemaVersion());
         state.put("saveId", saved.id());
         state.put("turnNumber", nextTurn);

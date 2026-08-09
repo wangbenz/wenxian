@@ -202,7 +202,7 @@ public class V014StoryEngineAdapter implements StoryEngine {
                         state.protagonist().gender(), state.protagonist().origin(), state.protagonist().realm(),
                         state.protagonist().lifeGoal(), state.protagonist().storyTone()),
                 state.worldTimeMinutes(), state.currentLocation(), state.condition(), state.sceneTitle(),
-                state.narrative(), state.choices().stream()
+                state.narrative(), null, state.choices().stream()
                         .map(value -> new Choice(value.id(), value.title(), value.description())).toList(),
                 state.inventory().stream().map(value -> new Item(value.id(), value.name(), value.type(),
                         value.description(), value.status(), value.source(), value.quantity(),

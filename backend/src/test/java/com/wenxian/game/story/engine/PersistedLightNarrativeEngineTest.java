@@ -10,6 +10,7 @@ import com.wenxian.game.service.GameVersionService;
 import com.wenxian.game.service.PlayerAiService;
 import com.wenxian.game.story.agent.PromptContextAssembler;
 import com.wenxian.game.story.agent.StoryModelFailureException;
+import com.wenxian.game.story.agent.StoryPromptContext;
 import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.application.StoryTurnCommitService;
 import com.wenxian.game.story.application.StoryTurnPreparationService;
@@ -58,13 +59,15 @@ import org.springframework.web.client.RestClient;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PersistedLightNarrativeEngineTest {
     private static final UserIdentity USER = new UserIdentity("story-user", "story@test.local", true);
@@ -371,17 +374,27 @@ class PersistedLightNarrativeEngineTest {
         StoryPatch proposal = turnPatch("山门之邀",
                 "使者说明了入门条件，随后停下等待你的决定，没有替你答应。", 15,
                 List.of(), List.of(), new DecisionCheckpoint(true, "是否接受使者提出的入门条件？"));
+        StoryPatch answer = turnPatch("婉拒邀请", "你亲自婉拒了邀请，使者没有强求。", 5,
+                List.of(), List.of(), new DecisionCheckpoint(false, null));
 
-        try (TrustedRuntime runtime = trustedRuntime(proposal)) {
+        try (TrustedRuntime runtime = trustedRuntime(proposal, answer)) {
             var response = advance(runtime, "听完使者的条件", "request-decision-1");
 
             assertTrue(response.state().narrative().contains("等待你的决定"));
+            assertEquals("是否接受使者提出的入门条件？", response.state().pendingDecision().prompt());
+            assertEquals("是否接受使者提出的入门条件？",
+                    runtime.engine().get(USER, runtime.saveId()).state().pendingDecision().prompt());
             assertEquals("继续观察", response.state().choices().getFirst().title());
             String storedPatch = runtime.jdbc().queryForObject(
                     "select state_patch_json from story_turn where save_id=?", String.class, runtime.saveId());
             JsonNode checkpoint = readTree(storedPatch).path("decisionCheckpoint");
             assertTrue(checkpoint.path("required").asBoolean());
             assertEquals("是否接受使者提出的入门条件？", checkpoint.path("prompt").asText());
+
+            var resolved = advance(runtime, "我决定婉拒邀请", "request-decision-2");
+            assertEquals("是否接受使者提出的入门条件？",
+                    runtime.generatedContexts().get(1).objective().pendingDecision().prompt());
+            assertNull(resolved.state().pendingDecision(), "玩家亲自作答后必须清除旧的待决定提示");
         }
     }
 
@@ -577,7 +590,9 @@ class PersistedLightNarrativeEngineTest {
         StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
         StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
         AtomicInteger index = new AtomicInteger();
+        List<StoryPromptContext> generatedContexts = new ArrayList<>();
         StoryTurnAgent agent = (context, route) -> {
+            generatedContexts.add(context);
             int current = index.getAndIncrement();
             if (current >= patches.length) throw new AssertionError("可信回放缺少第 " + (current + 1) + " 轮提案");
             return new StoryTurnAgent.Generated(patches[current], List.of(
@@ -588,7 +603,8 @@ class PersistedLightNarrativeEngineTest {
                 agent, testPlayerAi(jdbc));
         var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
                 "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
-        return new TrustedRuntime(database, jdbc, saves, entities, memories, engine, created.saveId());
+        return new TrustedRuntime(database, jdbc, saves, entities, memories, engine, created.saveId(),
+                generatedContexts);
     }
 
     private com.wenxian.game.story.model.StoryApiModels.SaveResponse advance(
@@ -629,7 +645,8 @@ class PersistedLightNarrativeEngineTest {
             StoryEntityRepository entities,
             StoryMemoryRepository memories,
             PersistedLightNarrativeEngine engine,
-            String saveId
+            String saveId,
+            List<StoryPromptContext> generatedContexts
     ) implements AutoCloseable {
         @Override
         public void close() {

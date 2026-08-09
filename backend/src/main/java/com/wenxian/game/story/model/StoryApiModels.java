@@ -113,6 +113,7 @@ public final class StoryApiModels {
             String condition,
             String sceneTitle,
             String narrative,
+            PendingDecision pendingDecision,
             List<Choice> choices,
             List<Item> inventory,
             List<Ability> abilities,
@@ -139,6 +140,9 @@ public final class StoryApiModels {
                               String realm, String lifeGoal, String storyPreference) {}
 
     public record Choice(String id, String title, String description) {}
+
+    /** 当前正文已经停下并等待玩家亲自回答的重大决定；为空表示没有待确认事项。 */
+    public record PendingDecision(String prompt) {}
 
     /** 数量未知时 quantity 仅为兼容占位值，H5 必须依据 quantityKnown 展示“未清点”。 */
     public record Item(String id, String name, String type, String description,

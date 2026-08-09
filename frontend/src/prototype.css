@@ -728,6 +728,22 @@
 .narrative p[data-beat="new"] { margin-top: 26px; padding-top: 20px; border-top: 1px solid rgba(85, 122, 101, 0.2); }
 .narrative p[data-beat="new"]::before { display: block; margin: -29px auto 13px; padding: 0 9px; width: max-content; color: var(--celadon); background: var(--paper); content: "◇"; font-size: 11px; }
 
+.pending-decision {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 22px;
+  padding: 16px 18px;
+  background: rgba(232, 226, 207, 0.52);
+  border: 1px solid rgba(82, 116, 97, 0.3);
+  border-left: 3px solid var(--celadon);
+}
+
+.pending-decision p,
+.pending-decision strong,
+.pending-decision small { margin: 0; }
+.pending-decision strong { color: var(--ink); font-family: var(--display); font-size: 18px; line-height: 1.65; }
+.pending-decision small { color: var(--ink-soft); font-size: 13px; line-height: 1.55; }
+
 .signal-strip {
   display: flex;
   align-items: center;
@@ -970,6 +986,9 @@
 .game-shell[data-theme="night"] .narrative { padding: 15px 15px 4px; background: rgba(15, 22, 20, .86); border: 1px solid rgba(225, 220, 200, .13); border-left: 3px solid rgba(133, 181, 157, .72); }
 .game-shell[data-theme="night"] .narrative p { color: var(--ink); text-shadow: 0 1px 2px rgba(0, 0, 0, .82); }
 .game-shell[data-theme="night"] .narrative p[data-beat="new"]::before { background: #111817; }
+.game-shell[data-theme="night"] .pending-decision { background: rgba(18, 29, 26, .92); border-color: rgba(132, 174, 151, .34); }
+.game-shell[data-theme="night"] .pending-decision strong { color: var(--ink); }
+.game-shell[data-theme="night"] .pending-decision small { color: var(--ink-soft); }
 .game-shell[data-theme="night"] .ornament-line span { background: #111817; }
 .game-shell[data-theme="night"] .signal-strip, .game-shell[data-theme="night"] .chapter-generating { background: rgba(33, 48, 42, .62); }
 .game-shell[data-theme="night"] .talent-card[data-selected="true"], .game-shell[data-theme="night"] .fate-card[data-selected="true"] { background: rgba(48, 70, 60, .82); }

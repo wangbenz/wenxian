@@ -139,6 +139,7 @@ export type GameState = {
     highSpiritStones: number;
   } | null;
   narrative: string[];
+  pendingDecision?: { prompt: string } | null;
   signals: string[];
   choices: Choice[];
   world: WorldProfile;
@@ -296,6 +297,7 @@ export type StoryState = {
   condition: string;
   sceneTitle: string;
   narrative: string;
+  pendingDecision?: { prompt: string } | null;
   choices: StoryChoice[];
   inventory: Array<{ id: string; name: string; type: string; description: string; status: string; source: string; quantity: number; quantityKnown?: boolean; inPossession?: boolean }>;
   abilities: Array<{ id: string; name: string; type: string; description: string; status: string; source: string }>;

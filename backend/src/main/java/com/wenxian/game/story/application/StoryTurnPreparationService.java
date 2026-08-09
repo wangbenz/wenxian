@@ -7,6 +7,7 @@ import com.wenxian.game.story.agent.PromptContextAssembler.ContextSelection;
 import com.wenxian.game.story.agent.PromptContextAssembler.KnowledgeRef;
 import com.wenxian.game.story.agent.StoryModelRoute;
 import com.wenxian.game.story.agent.StoryPromptContext;
+import com.wenxian.game.story.agent.StoryPromptContext.PendingDecision;
 import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.persistence.StoryConversationRepository;
@@ -72,9 +73,10 @@ public class StoryTurnPreparationService {
         List<Entity> existingEntities = entities.listAll(saved.id());
         StoryProjection before = projections.load(saved, existingEntities,
                 memories.recentActive(saved.id(), RECENT_MEMORY_LIMIT));
+        var checkpoint = projections.loadDecisionCheckpoint(saved.state());
         StoryPromptContext context = contexts.assemble(before, new ContextRequest(playerAction,
                 worldSeedRules(saved.state()), selection(before, existingEntities), conversations.summary(saved.id()),
-                previousTurn(saved.id())));
+                previousTurn(saved.id()), checkpoint == null ? null : new PendingDecision(checkpoint.prompt())));
         StoryTurnAgent.Generated generation = agent.generate(context, route,
                 new StoryTurnAgent.InvocationContext(saved.id(), saved.turnNumber() + 1));
         StoryStateReducer.Applied applied = reducer.reduce(before, generation.patch());

@@ -14,6 +14,7 @@ import com.wenxian.game.story.agent.StoryModelFailureException;
 import com.wenxian.game.story.agent.StoryModelRoute;
 import com.wenxian.game.story.application.StoryTurnCommitService;
 import com.wenxian.game.story.application.StoryTurnPreparationService;
+import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.model.StoryApiModels.Ability;
 import com.wenxian.game.story.model.StoryApiModels.BootstrapResponse;
 import com.wenxian.game.story.model.StoryApiModels.CharacterRouteRequest;
@@ -24,6 +25,7 @@ import com.wenxian.game.story.model.StoryApiModels.CreateSaveRequest;
 import com.wenxian.game.story.model.StoryApiModels.EngineDescriptor;
 import com.wenxian.game.story.model.StoryApiModels.Item;
 import com.wenxian.game.story.model.StoryApiModels.Memory;
+import com.wenxian.game.story.model.StoryApiModels.PendingDecision;
 import com.wenxian.game.story.model.StoryApiModels.Protagonist;
 import com.wenxian.game.story.model.StoryApiModels.SaveResponse;
 import com.wenxian.game.story.model.StoryApiModels.SaveSummary;
@@ -39,6 +41,7 @@ import com.wenxian.game.story.persistence.StoryMemoryRepository.StoredMemory;
 import com.wenxian.game.story.persistence.StoryPersistenceModels.Entity;
 import com.wenxian.game.story.persistence.StoryPersistenceModels.NewTurn;
 import com.wenxian.game.story.persistence.StoryPersistenceModels.StoredSave;
+import com.wenxian.game.story.persistence.StoryProjectionPersistenceMapper;
 import com.wenxian.game.story.persistence.StorySaveRepository;
 import com.wenxian.game.story.persistence.StoryTurnRepository;
 import com.wenxian.game.v014.ai.V014StoryAgent;
@@ -110,6 +113,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
     private final GameVersionService releases;
     private final TransactionTemplate transactions;
     private final ObjectMapper mapper;
+    private final StoryProjectionPersistenceMapper projections;
     private final boolean enabled;
     private final boolean trustedTurnsEnabled;
     private final String legacyBaseUrl;
@@ -156,6 +160,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         this.releases = releases;
         this.transactions = transactions;
         this.mapper = mapper;
+        this.projections = new StoryProjectionPersistenceMapper(mapper);
         this.enabled = enabled;
         this.trustedTurnsEnabled = trustedTurnsEnabled;
         this.legacyBaseUrl = legacyBaseUrl;
@@ -489,6 +494,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                 ObjectNode copy = object.deepCopy();
                 // 可信投影属于通用 Story 内部扩展，不应泄漏给旧版 H5 状态模型反序列化。
                 copy.remove("_trustedProjection");
+                copy.remove("_trustedScene");
                 compatibleState = copy;
             }
             core = mapper.treeToValue(compatibleState, V014State.class);
@@ -629,7 +635,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                         state.protagonist().gender(), state.protagonist().origin(), state.protagonist().realm(),
                         state.protagonist().lifeGoal(), state.protagonist().storyTone()),
                 state.worldTimeMinutes(), state.currentLocation(), state.condition(), state.sceneTitle(),
-                state.narrative(), state.choices().stream()
+                state.narrative(), pendingDecision(saved), state.choices().stream()
                         .map(value -> new Choice(value.id(), value.title(), value.description())).toList(),
                 state.inventory().stream().map(value -> new Item(value.id(), value.name(), value.type(),
                         value.description(), value.status(), value.source(), value.quantity(),
@@ -641,6 +647,12 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                         value.lastKnownLocation(), Boolean.TRUE.equals(value.tracked()))).toList(),
                 state.memories().stream().map(value -> new Memory(value.id(), value.title(), value.summary(),
                         value.worldTimeMinutes(), value.importance())).toList());
+    }
+
+    private PendingDecision pendingDecision(StoredSave saved) {
+        StoryPatch.DecisionCheckpoint checkpoint = projections.loadDecisionCheckpoint(saved.state());
+        return checkpoint == null ? null
+                : new PendingDecision(checkpoint.prompt());
     }
 
     private V014State corrected(V014State before, String instruction) {

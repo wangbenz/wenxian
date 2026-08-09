@@ -124,7 +124,7 @@ function storySnapshotView(source: StorySaveResponse): ApiSnapshot {
     sceneTitle: state.sceneTitle, currentLocation: state.currentLocation,
     worldYear: Math.floor(state.worldTimeMinutes / minutesPerYear) + 1,
     day: Math.floor(inYear / 1440) + 1, minute: inYear % 1440, turn: state.turnNumber,
-    narrative: safeNarrativeParagraphs(state.narrative), signals: [],
+    narrative: safeNarrativeParagraphs(state.narrative), pendingDecision: state.pendingDecision ?? null, signals: [],
     choices: state.choices.map((choice) => ({ id: choice.id, label: choice.title, hint: choice.description })),
     world: { id: state.world.code, title: state.world.name, era: "此生命卷", summary: state.world.premise,
       cultivationLaw: state.world.cultivationStyle, dangerRule: "人物、时间与得失会沿同一份命卷继续变化。",
@@ -638,6 +638,7 @@ function AdventureView({ game, choices, resolution, aiSettings, isBusy, offline,
       <div className="ornament-line" aria-hidden="true"><span /></div>
       {readOnly && <section className="legacy-readonly-notice" role="status"><strong>旧版命卷 · 只读档案</strong><p>这段经历已经封存，可继续查阅剧情、角色、纪事与世界记录，但不能再行动、重开或修改。</p><button onClick={() => navigateEdition()} type="button">返回当前命卷</button></section>}
       <section className="narrative" aria-label="剧情">{game.narrative.map((paragraph, index) => <p data-beat={index > 0 && index % 3 === 0 ? "new" : undefined} key={`${index}-${paragraph}`}>{paragraph}</p>)}</section>
+      {game.pendingDecision && <section className="pending-decision" aria-label="等待你的决定" role="status"><p className="eyebrow">由你决定</p><strong>{game.pendingDecision.prompt}</strong><small>命卷已经停在这里，不会替你作出这个选择。</small></section>}
       {game.signals.length > 0 && <section className="signal-strip" aria-label="局势变化">{game.signals.map((signal, index) => <span className={index % 2 ? "signal-danger" : "signal-safe"} key={`${index}-${signal}`}>{signal}</span>)}</section>}
       {resolution && <section className="action-resolution" data-result={resolution.result} role="status">
         <p className="eyebrow">本轮未发生 · {resolution.result === "CLARIFY" ? "行动待明" : "世界裁决"}</p>

@@ -152,6 +152,10 @@ V0.15 先确定以下语义，不代表数据库已经新增字段：
 
 **权威性**：当前主角、世界时间、当前位置、当前处境和使用的引擎以本表为准。
 
+`state_json._trustedProjection` 保存带结构版本的当前世界事实与人物认知投影；
+`state_json._trustedScene.pendingDecision` 只在正文停于重大决定且等待玩家亲自回答时存在。
+下一回合不再等待决定时必须清除该字段，旧命卷缺少此扩展时按“当前无待决定事项”读取。
+
 重要查询索引：
 
 - `idx_story_save_user_status(user_id,status,updated_at)`：按账号读取当前与封存命卷；

@@ -393,6 +393,7 @@ POST /api/v1/story/saves/{archiveId}/fork
 - `worldFactPatches` 只能表示 `EXPAND/TRANSFORM/REVISE` 三种语义；
 - `knowledgePatches` 必须标明认知主体，不能冒充客观事实；
 - `decisionCheckpoint` 表示剧情是否已经来到下一项重大决定，正文不得越过该点继续替玩家行动；
+- 必选 `decisionCheckpoint` 必须进入当前命卷快照、下一回合客观上下文和稳定 API，H5 明确展示“由你决定”；玩家未明确回答时继续保留，亲自作答后的下一回合清除旧提示，刷新页面不能丢失或重复显示；
 - 所有 `UPDATE/HIDE/RESTORE` 必须引用本轮上下文中提供的稳定 ID；
 - Agent 生成的名称和自然语言不能作为关联旧实体的唯一依据。
 

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
+import com.wenxian.game.story.domain.StoryPatch.DecisionCheckpoint;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryProjection;
@@ -33,6 +34,7 @@ import java.util.Map;
 public final class StoryProjectionPersistenceMapper {
     static final String TRUSTED_PROJECTION = "_trustedProjection";
     static final String TRUSTED_ENTITY = "_trusted";
+    static final String TRUSTED_SCENE = "_trustedScene";
     private static final int TRUSTED_SCHEMA_VERSION = 1;
 
     private final ObjectMapper mapper;
@@ -93,6 +95,41 @@ public final class StoryProjectionPersistenceMapper {
                         .thenComparing(KnowledgeState::topicRef)).toList()));
         state.set(TRUSTED_PROJECTION, trusted);
         return state;
+    }
+
+    /**
+     * 保存当前场景正等待玩家确认的重大决定。非必选检查点会清除旧值，避免玩家完成决定后仍看到过期提示。
+     */
+    public ObjectNode writeDecisionCheckpoint(ObjectNode state, DecisionCheckpoint checkpoint) {
+        if (state == null) throw new IllegalArgumentException("待保存的命卷状态不能为空");
+        if (checkpoint == null || !checkpoint.required()) {
+            state.remove(TRUSTED_SCENE);
+            return state;
+        }
+        if (checkpoint.prompt() == null || checkpoint.prompt().isBlank()) {
+            throw new IllegalArgumentException("待玩家决定的场景必须包含明确提示");
+        }
+        ObjectNode scene = mapper.createObjectNode();
+        scene.put("schemaVersion", TRUSTED_SCHEMA_VERSION);
+        scene.set("pendingDecision", mapper.valueToTree(checkpoint));
+        state.set(TRUSTED_SCENE, scene);
+        return state;
+    }
+
+    /** 读取当前尚待玩家回答的决定；旧命卷没有该扩展时返回空。 */
+    public DecisionCheckpoint loadDecisionCheckpoint(JsonNode state) {
+        if (state == null || !state.has(TRUSTED_SCENE)) return null;
+        JsonNode scene = state.get(TRUSTED_SCENE);
+        if (!scene.isObject() || scene.path("schemaVersion").asInt(-1) != TRUSTED_SCHEMA_VERSION) {
+            throw new IllegalStateException("命卷场景控制结构版本不受支持");
+        }
+        JsonNode pending = scene.path("pendingDecision");
+        if (!pending.isObject()) throw new IllegalStateException("命卷待决定信息格式错误");
+        DecisionCheckpoint checkpoint = mapper.convertValue(pending, DecisionCheckpoint.class);
+        if (!checkpoint.required() || checkpoint.prompt() == null || checkpoint.prompt().isBlank()) {
+            throw new IllegalStateException("命卷待决定信息缺少有效提示");
+        }
+        return checkpoint;
     }
 
     /** 将投影中的全部实体转换为 upsert 所需记录；隐藏实体不会从结果中消失。 */

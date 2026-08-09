@@ -214,3 +214,10 @@ test("requires a preview and explicit confirmation before correcting story facts
   assert.equal(prototype.includes("不消耗回合 · 不推进时间 · 保留原有纪事"), true);
   assert.equal(prototype.includes("gameApi.storyCorrect("), false);
 });
+
+test("shows a persisted major decision instead of letting prose decide silently", async () => {
+  const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+  assert.equal(api.includes("pendingDecision?: { prompt: string } | null"), true);
+  assert.equal(prototype.includes("命卷已经停在这里，不会替你作出这个选择"), true);
+});
