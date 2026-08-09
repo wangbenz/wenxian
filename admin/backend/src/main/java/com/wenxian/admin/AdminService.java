@@ -1649,7 +1649,7 @@ public class AdminService {
             where.append("""
                     and (e.reference_id like ? or e.error_code like ? or e.save_id like ?
                          or coalesce(u.email,'') like ?
-                         or coalesce(s.state_json,'') like ?)
+                         or coalesce(direct_save.state_json, migrated_save.state_json, '') like ?)
                     """);
             args.add(like); args.add(like); args.add(like); args.add(like); args.add(like);
         }
@@ -1657,10 +1657,12 @@ public class AdminService {
         return jdbc.query("""
                 select e.reference_id, e.save_id, e.operation, e.category, e.error_code,
                        e.http_status, e.public_message, e.diagnostic, e.created_at,
-                       coalesce(u.email, '') email, s.state_json
+                       coalesce(u.email, '') email,
+                       coalesce(direct_save.state_json, migrated_save.state_json) state_json
                 from operation_error e
-                left join story_save s on s.id = e.save_id
-                left join app_user u on u.id = s.user_id
+                left join story_save direct_save on direct_save.id = e.save_id
+                left join story_save migrated_save on migrated_save.source_save_id = e.save_id
+                left join app_user u on u.id = coalesce(direct_save.user_id, migrated_save.user_id)
                 %s
                 order by e.created_at desc
                 limit ?
@@ -1695,10 +1697,12 @@ public class AdminService {
         Timestamp from = Timestamp.from(Instant.now().minus(Duration.ofDays(days)));
         return jdbc.query("""
                 select e.category, e.error_code, max(e.http_status) highest_status,
-                       count(*) occurrence_count, count(distinct s.user_id) affected_players,
+                       count(*) occurrence_count,
+                       count(distinct coalesce(direct_save.user_id, migrated_save.user_id)) affected_players,
                        max(e.created_at) latest_at, max(e.public_message) sample_message
                 from operation_error e
-                left join story_save s on s.id=e.save_id
+                left join story_save direct_save on direct_save.id=e.save_id
+                left join story_save migrated_save on migrated_save.source_save_id=e.save_id
                 where e.created_at>=?
                 group by e.category, e.error_code
                 order by (max(e.http_status)>=500) desc, count(*) desc, max(e.created_at) desc
