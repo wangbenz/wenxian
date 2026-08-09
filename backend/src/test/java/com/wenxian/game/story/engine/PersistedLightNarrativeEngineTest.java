@@ -1,5 +1,6 @@
 package com.wenxian.game.story.engine;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.api.GameApiException;
@@ -13,12 +14,19 @@ import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.application.StoryTurnCommitService;
 import com.wenxian.game.story.application.StoryTurnPreparationService;
 import com.wenxian.game.story.domain.StoryPatch;
+import com.wenxian.game.story.domain.StoryPatch.AbilityState;
+import com.wenxian.game.story.domain.StoryPatch.DecisionCheckpoint;
 import com.wenxian.game.story.domain.StoryPatch.EntityOperation;
 import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
+import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
+import com.wenxian.game.story.domain.StoryPatch.LifecycleValue;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.TimePassage;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
+import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
+import com.wenxian.game.story.domain.StoryPatch.WorldFactPatch;
 import com.wenxian.game.story.domain.StoryPatchValidator;
+import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.persistence.StoryConversationRepository;
 import com.wenxian.game.story.persistence.StoryCorrectionRepository;
 import com.wenxian.game.story.persistence.StoryEntityRepository;
@@ -282,6 +290,131 @@ class PersistedLightNarrativeEngineTest {
     }
 
     @Test
+    void trustedTurnsPersistDeadCharacterAcrossLaterNarrativeAndApiReload() {
+        ObjectNode attributes = mapper.createObjectNode();
+        attributes.put("identity", "旧日引路人");
+        attributes.put("relationship", "故人");
+        attributes.put("lastKnownLocation", "青岐山旧居");
+        StoryPatch death = turnPatch("山崩之后", "山崩过后，你只找到闻溪留下的旧物。", 60,
+                List.of(new EntityPatch(EntityOperation.CREATE, null, "CHARACTER", "闻溪", "已经身亡",
+                        "闻溪死于山崩，只留下旧物。", attributes, null, null, null,
+                        new LifecycleValue(LifecycleState.DEAD, "死于山崩"))), List.of(),
+                new DecisionCheckpoint(false, null));
+        StoryPatch revisit = turnPatch("重返旧居", "多年后你重返旧居，故人并未凭空归来。", 120,
+                List.of(new EntityPatch(EntityOperation.UPDATE, "character-trusted-test", "CHARACTER", null,
+                        "旧居只余遗物", null, null, null, null, null, null)), List.of(),
+                new DecisionCheckpoint(false, null));
+
+        try (TrustedRuntime runtime = trustedRuntime(death, revisit)) {
+            advance(runtime, "查看山崩后的旧居", "request-death-1");
+            var response = advance(runtime, "多年后重返旧居", "request-death-2");
+
+            StoryProjection projection = loadProjection(runtime);
+            assertEquals(1, projection.entities().size());
+            assertEquals(LifecycleState.DEAD,
+                    projection.entities().get("character-trusted-test").lifecycle());
+            assertEquals(1, response.state().characters().size());
+            assertEquals("闻溪", response.state().characters().getFirst().name());
+            assertEquals("旧居只余遗物", response.state().characters().getFirst().status());
+            assertEquals(2, runtime.jdbc().queryForObject(
+                    "select count(*) from story_turn where save_id=?", Integer.class, runtime.saveId()));
+        }
+    }
+
+    @Test
+    void trustedTurnsPersistMasteredAbilityAcrossUseAndApiReload() {
+        ObjectNode attributes = mapper.createObjectNode();
+        attributes.put("abilityType", "瞳术");
+        attributes.put("source", "旧日传承");
+        StoryPatch learn = turnPatch("掌握照影", "你真正掌握了照影诀。", 30,
+                List.of(new EntityPatch(EntityOperation.CREATE, null, "ABILITY", "照影诀", "已经掌握",
+                        "可辨灵机与虚妄。", attributes, null, null, AbilityState.MASTERED, null)),
+                List.of(), new DecisionCheckpoint(false, null));
+        StoryPatch use = turnPatch("照影辨真", "你施展照影诀，看破了石门上的障眼法。", 10,
+                List.of(new EntityPatch(EntityOperation.UPDATE, "ability-trusted-test", "ABILITY", null,
+                        "刚刚施展", null, null, null, null, AbilityState.MASTERED, null)),
+                List.of(), new DecisionCheckpoint(false, null));
+
+        try (TrustedRuntime runtime = trustedRuntime(learn, use)) {
+            advance(runtime, "研习照影诀", "request-ability-1");
+            var response = advance(runtime, "施展照影诀查看石门", "request-ability-2");
+
+            StoryProjection projection = loadProjection(runtime);
+            assertEquals(AbilityState.MASTERED,
+                    projection.entities().get("ability-trusted-test").abilityState());
+            assertEquals(1, response.state().abilities().size());
+            assertEquals("照影诀", response.state().abilities().getFirst().name());
+            assertEquals("刚刚施展", response.state().abilities().getFirst().status());
+        }
+    }
+
+    @Test
+    void trustedTurnPersistsExplicitThreeYearDurationInTimelineAndApi() {
+        long threeYears = 3L * 360 * 24 * 60;
+        StoryPatch retreat = turnPatch("三年闭关", "你依照自己的决定闭关三年，出关时山中草木已换三度。",
+                threeYears, List.of(), List.of(), new DecisionCheckpoint(false, null));
+
+        try (TrustedRuntime runtime = trustedRuntime(retreat)) {
+            var response = advance(runtime, "闭关三年", "request-time-1");
+
+            assertEquals(threeYears, response.state().worldTimeMinutes());
+            assertEquals(threeYears, loadProjection(runtime).worldTimeMinutes());
+            assertEquals(0L, runtime.jdbc().queryForObject(
+                    "select world_time_before from story_turn where save_id=?", Long.class, runtime.saveId()));
+            assertEquals(threeYears, runtime.jdbc().queryForObject(
+                    "select world_time_after from story_turn where save_id=?", Long.class, runtime.saveId()));
+        }
+    }
+
+    @Test
+    void trustedTurnPersistsMajorDecisionCheckpointAndReturnsControlToPlayer() {
+        StoryPatch proposal = turnPatch("山门之邀",
+                "使者说明了入门条件，随后停下等待你的决定，没有替你答应。", 15,
+                List.of(), List.of(), new DecisionCheckpoint(true, "是否接受使者提出的入门条件？"));
+
+        try (TrustedRuntime runtime = trustedRuntime(proposal)) {
+            var response = advance(runtime, "听完使者的条件", "request-decision-1");
+
+            assertTrue(response.state().narrative().contains("等待你的决定"));
+            assertEquals("继续观察", response.state().choices().getFirst().title());
+            String storedPatch = runtime.jdbc().queryForObject(
+                    "select state_patch_json from story_turn where save_id=?", String.class, runtime.saveId());
+            JsonNode checkpoint = readTree(storedPatch).path("decisionCheckpoint");
+            assertTrue(checkpoint.path("required").asBoolean());
+            assertEquals("是否接受使者提出的入门条件？", checkpoint.path("prompt").asText());
+        }
+    }
+
+    @Test
+    void trustedTurnsPersistWorldRevisionWithStableIdentityAndAuditReason() {
+        StoryPatch establish = turnPatch("旧世传闻", "你确认此界一直流传着无人飞升的说法。", 0,
+                List.of(), List.of(new WorldFactPatch(WorldFactOperation.EXPAND, null,
+                        "此界无人能够飞升", "旅途中确认的公开传闻")),
+                new DecisionCheckpoint(false, null));
+        StoryPatch revise = turnPatch("修订旧说", "你明确指出飞升道路只是被少数势力隐瞒。", 0,
+                List.of(), List.of(new WorldFactPatch(WorldFactOperation.REVISE,
+                        "world-fact-trusted-test", "飞升一直存在，只是道路被少数势力隐瞒",
+                        "玩家明确修订世界设定")), new DecisionCheckpoint(false, null));
+
+        try (TrustedRuntime runtime = trustedRuntime(establish, revise)) {
+            advance(runtime, "确认此界无人飞升的旧说", "request-world-1");
+            advance(runtime, "修正世界设定：飞升道路只是被隐瞒", "request-world-2");
+
+            StoryProjection projection = loadProjection(runtime);
+            assertEquals(1, projection.worldFacts().size());
+            var fact = projection.worldFacts().get("world-fact-trusted-test");
+            assertEquals(2, fact.revision());
+            assertEquals(WorldFactOperation.REVISE, fact.lastOperation());
+            assertEquals("玩家明确修订世界设定", fact.lastReason());
+            String latestPatch = runtime.jdbc().queryForObject("""
+                    select state_patch_json from story_turn where save_id=? order by turn_number desc limit 1
+                    """, String.class, runtime.saveId());
+            assertEquals("world-fact-trusted-test",
+                    readTree(latestPatch).path("worldFacts").get(0).path("factId").asText());
+        }
+    }
+
+    @Test
     void trustedTurnMapsProviderRejectionWithoutChangingSaveOrQuota() {
         EmbeddedDatabase database = database();
         try {
@@ -435,6 +568,73 @@ class PersistedLightNarrativeEngineTest {
                 // 运行时事务测试不依赖运营额度配置，只保留成功扣减的真实数据库行为。
             }
         };
+    }
+
+    private TrustedRuntime trustedRuntime(StoryPatch... patches) {
+        EmbeddedDatabase database = database();
+        JdbcTemplate jdbc = new JdbcTemplate(database);
+        StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+        StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+        StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+        AtomicInteger index = new AtomicInteger();
+        StoryTurnAgent agent = (context, route) -> {
+            int current = index.getAndIncrement();
+            if (current >= patches.length) throw new AssertionError("可信回放缺少第 " + (current + 1) + " 轮提案");
+            return new StoryTurnAgent.Generated(patches[current], List.of(
+                    new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                            "{}", "response-persisted-" + current, "test-model", 100, 180, 30)));
+        };
+        PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                agent, testPlayerAi(jdbc));
+        var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+        return new TrustedRuntime(database, jdbc, saves, entities, memories, engine, created.saveId());
+    }
+
+    private com.wenxian.game.story.model.StoryApiModels.SaveResponse advance(
+            TrustedRuntime runtime, String action, String requestId) {
+        var current = runtime.engine().get(USER, runtime.saveId());
+        return runtime.engine().takeTurn(USER, runtime.saveId(),
+                new TurnRequest(action, requestId, current.revision()));
+    }
+
+    private StoryProjection loadProjection(TrustedRuntime runtime) {
+        var save = runtime.saves().findOwned(USER.userId(), runtime.saveId()).orElseThrow();
+        return new StoryProjectionPersistenceMapper(mapper).load(save,
+                runtime.entities().listAll(runtime.saveId()), runtime.memories().recentActive(runtime.saveId(), 80));
+    }
+
+    private StoryPatch turnPatch(String title, String narrative, long elapsedMinutes,
+                                 List<EntityPatch> entities, List<WorldFactPatch> worldFacts,
+                                 DecisionCheckpoint checkpoint) {
+        return new StoryPatch(title, narrative,
+                new TimePassage(elapsedMinutes, TimeResolution.COMPLETE, null), null,
+                entities, worldFacts, List.of(), List.of(), checkpoint,
+                List.of(new StoryPatch.ChoiceDraft("继续观察", "先确认眼前变化，再决定下一步。")),
+                "你完成了本轮已经授权的行动。");
+    }
+
+    private JsonNode readTree(String value) {
+        try {
+            return mapper.readTree(value);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+            throw new AssertionError("测试无法读取已保存的回合补丁", error);
+        }
+    }
+
+    private record TrustedRuntime(
+            EmbeddedDatabase database,
+            JdbcTemplate jdbc,
+            StorySaveRepository saves,
+            StoryEntityRepository entities,
+            StoryMemoryRepository memories,
+            PersistedLightNarrativeEngine engine,
+            String saveId
+    ) implements AutoCloseable {
+        @Override
+        public void close() {
+            database.shutdown();
+        }
     }
 
     private EmbeddedDatabase database() {
