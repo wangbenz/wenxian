@@ -10,6 +10,7 @@ import com.wenxian.game.service.GameVersionService;
 import com.wenxian.game.service.PlayerAiService;
 import com.wenxian.game.story.agent.PromptContextAssembler;
 import com.wenxian.game.story.agent.StoryModelFailureException;
+import com.wenxian.game.story.agent.StoryModelRoute;
 import com.wenxian.game.story.agent.StoryPromptContext;
 import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.application.StoryTurnCommitService;
@@ -424,6 +425,69 @@ class PersistedLightNarrativeEngineTest {
                     """, String.class, runtime.saveId());
             assertEquals("world-fact-trusted-test",
                     readTree(latestPatch).path("worldFacts").get(0).path("factId").asText());
+        }
+    }
+
+    @Test
+    void trustedTurnRepairsOneReducerRejectedProposalAndCountsEveryModelRequest() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            StoryPatch rejected = turnPatch("北境异象", "你闭关时察觉北方有异象升起。", 60,
+                    List.of(), List.of(new WorldFactPatch(WorldFactOperation.TRANSFORM,
+                            "不存在的世界事实", "青岐州北方出现灵潮", "闭关期间的局势变化")),
+                    new DecisionCheckpoint(false, null));
+            StoryPatch repaired = turnPatch("北境异象", "你闭关时察觉北方有异象升起。", 60,
+                    List.of(), List.of(new WorldFactPatch(WorldFactOperation.EXPAND,
+                            null, "青岐州北方出现灵潮", "闭关期间的局势变化")),
+                    new DecisionCheckpoint(false, null));
+            AtomicInteger repairs = new AtomicInteger();
+            StoryTurnAgent semanticRepairAgent = new StoryTurnAgent() {
+                @Override
+                public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+                    return generated(rejected, "initial", 100, 180, 30);
+                }
+
+                @Override
+                public Generated repairRejected(StoryPromptContext context, StoryModelRoute route,
+                                                InvocationContext invocation, StoryPatch proposal,
+                                                String problem) {
+                    repairs.incrementAndGet();
+                    assertTrue(problem.contains("世界事实不存在"));
+                    return generated(repaired, "semantic-repair", 40, 90, 20);
+                }
+
+                private Generated generated(StoryPatch patch, String responseId,
+                                            int inputTokens, int outputTokens, long latencyMs) {
+                    return new Generated(patch, List.of(
+                            new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                                    "{}", responseId, "test-model", inputTokens, outputTokens, latencyMs)));
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    semanticRepairAgent, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            var response = engine.takeTurn(USER, created.saveId(),
+                    new TurnRequest("闭关时留意外界变化", "request-semantic-repair", 1));
+
+            assertEquals(1, repairs.get());
+            assertEquals(1, response.state().turnNumber());
+            StoryProjection projection = new StoryProjectionPersistenceMapper(mapper).load(
+                    saves.findOwned(USER.userId(), created.saveId()).orElseThrow(),
+                    entities.listAll(created.saveId()), memories.recentActive(created.saveId(), 20));
+            assertTrue(projection.worldFacts().values().stream()
+                    .anyMatch(value -> "青岐州北方出现灵潮".equals(value.statement())));
+            assertEquals(140, jdbc.queryForObject(
+                    "select prompt_tokens from story_turn where save_id=?", Integer.class, created.saveId()));
+            assertEquals(270, jdbc.queryForObject(
+                    "select completion_tokens from story_turn where save_id=?", Integer.class, created.saveId()));
+        } finally {
+            database.shutdown();
         }
     }
 

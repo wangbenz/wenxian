@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,8 +36,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class TrustedStoryTurnRealModelSmokeTest {
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
     private final PromptContextAssembler assembler = new PromptContextAssembler();
+    private final AtomicInteger entitySequence = new AtomicInteger();
     private final StoryStateReducer reducer = new StoryStateReducer(new StoryPatchValidator(),
-            prefix -> prefix + "-real-smoke");
+            prefix -> prefix + "-real-smoke-" + entitySequence.incrementAndGet());
 
     @Test
     void realModelPassesTrustedStoryReplayMatrix() {
@@ -126,11 +128,23 @@ class TrustedStoryTurnRealModelSmokeTest {
                 projection.entities().keySet(), projection.worldFacts().keySet(), List.of(), Set.of());
         StoryPromptContext context = assembler.assemble(projection,
                 new ContextRequest(action, List.of(), selection, "", null));
-        StoryTurnAgent.Generated generated = agent.generate(context, route);
+        StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
+                "real-smoke-" + scenario, 1);
+        StoryTurnAgent.Generated generated = agent.generate(context, route, invocation);
+        StoryStateReducer.Applied applied;
+        try {
+            applied = reducer.reduce(projection, generated.patch());
+        } catch (IllegalArgumentException rejected) {
+            StoryTurnAgent.Generated repaired = agent.repairRejected(context, route, invocation,
+                    generated.patch(), rejected.getMessage());
+            generated = new StoryTurnAgent.Generated(repaired.patch(), java.util.stream.Stream
+                    .concat(generated.modelResults().stream(), repaired.modelResults().stream()).toList());
+            applied = reducer.reduce(projection, repaired.patch());
+        }
         System.out.printf("TRUSTED_REAL_MODEL scenario=%s attempts=%d prompt=%d completion=%d latencyMs=%d model=%s%n",
                 scenario, generated.modelResults().size(), generated.inputTokens(), generated.outputTokens(),
                 generated.latencyMs(), generated.finalResult().model());
-        return reducer.reduce(projection, generated.patch());
+        return applied;
     }
 
     private StoryProjection projection(long time, Map<String, EntityState> entities,

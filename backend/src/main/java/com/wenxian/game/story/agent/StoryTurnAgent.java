@@ -24,6 +24,17 @@ public interface StoryTurnAgent {
         return generate(context, route);
     }
 
+    /**
+     * 当提案已经通过 JSON 校验、但被 Reducer 的通用事实边界拒绝时，生成一次紧凑的语义修复。
+     *
+     * <p>默认实现保持测试替身和其他 Agent 兼容；生产模型 Agent 可以覆盖该方法。调用方最多调用一次，
+     * 修复结果仍须重新经过完整 Reducer，不能直接提交。</p>
+     */
+    default Generated repairRejected(StoryPromptContext context, StoryModelRoute route,
+                                     InvocationContext invocation, StoryPatch rejected, String problem) {
+        throw new IllegalArgumentException("当前故事 Agent 不支持修复被拒绝的状态提案");
+    }
+
     /** 单次业务回合在模型用量日志中的稳定位置。 */
     record InvocationContext(String saveId, int turnNumber) {
         public InvocationContext {

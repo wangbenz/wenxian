@@ -1,6 +1,7 @@
 package com.wenxian.game.story.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryPatchValidator;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
@@ -88,6 +89,28 @@ class ModelBackedStoryTurnAgentTest {
 
         assertEquals(2, calls.get());
         assertEquals("推演结果未能形成可提交的状态提案", error.getMessage());
+    }
+
+    @Test
+    void repairsReducerRejectedProposalWithoutResendingNarrativeHistory() throws Exception {
+        StoryModelGateway gateway = request -> {
+            assertEquals(0.1, request.temperature());
+            assertTrue(request.userPrompt().contains("rejectedProposal"));
+            assertTrue(request.userPrompt().contains("要改变的世界事实不存在"));
+            assertTrue(request.userPrompt().contains("ability-reflection"), "修复请求必须保留稳定ID工作集");
+            assertFalse(request.userPrompt().contains("你来到石门前。"), "语义修复不应重复发送叙事历史");
+            return result(VALID_PATCH, 60, 120, 260);
+        };
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch rejected = mapper.readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Generated repaired = agent(gateway).repairRejected(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-semantic-repair", 9), rejected,
+                "要改变的世界事实不存在：青岐州北境异象");
+
+        assertEquals("石门之后", repaired.patch().title());
+        assertEquals(60, repaired.inputTokens());
+        assertEquals(120, repaired.outputTokens());
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.wenxian.game.story.agent.PromptContextAssembler;
 import com.wenxian.game.story.agent.PromptContextAssembler.ContextRequest;
 import com.wenxian.game.story.agent.PromptContextAssembler.ContextSelection;
 import com.wenxian.game.story.agent.PromptContextAssembler.KnowledgeRef;
+import com.wenxian.game.story.agent.StoryModelGateway;
 import com.wenxian.game.story.agent.StoryModelRoute;
 import com.wenxian.game.story.agent.StoryPromptContext;
 import com.wenxian.game.story.agent.StoryPromptContext.PendingDecision;
@@ -21,6 +22,7 @@ import com.wenxian.game.story.persistence.StoryTurnRepository;
 import com.wenxian.game.story.reducer.StoryStateReducer;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -77,10 +79,30 @@ public class StoryTurnPreparationService {
         StoryPromptContext context = contexts.assemble(before, new ContextRequest(playerAction,
                 worldSeedRules(saved.state()), selection(before, existingEntities), conversations.summary(saved.id()),
                 previousTurn(saved.id()), checkpoint == null ? null : new PendingDecision(checkpoint.prompt())));
-        StoryTurnAgent.Generated generation = agent.generate(context, route,
-                new StoryTurnAgent.InvocationContext(saved.id(), saved.turnNumber() + 1));
-        StoryStateReducer.Applied applied = reducer.reduce(before, generation.patch());
+        StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
+                saved.id(), saved.turnNumber() + 1);
+        StoryTurnAgent.Generated generation = agent.generate(context, route, invocation);
+        StoryStateReducer.Applied applied;
+        try {
+            applied = reducer.reduce(before, generation.patch());
+        } catch (IllegalArgumentException rejected) {
+            StoryTurnAgent.Generated repaired = agent.repairRejected(context, route, invocation,
+                    generation.patch(), rejected.getMessage());
+            generation = combine(generation, repaired);
+            try {
+                applied = reducer.reduce(before, repaired.patch());
+            } catch (IllegalArgumentException failedAgain) {
+                failedAgain.addSuppressed(rejected);
+                throw failedAgain;
+            }
+        }
         return new Prepared(before, applied, existingEntities, generation);
+    }
+
+    private StoryTurnAgent.Generated combine(StoryTurnAgent.Generated first, StoryTurnAgent.Generated repaired) {
+        List<StoryModelGateway.Result> attempts = new ArrayList<>(first.modelResults());
+        attempts.addAll(repaired.modelResults());
+        return new StoryTurnAgent.Generated(repaired.patch(), attempts);
     }
 
     private ContextSelection selection(StoryProjection projection, List<Entity> existing) {

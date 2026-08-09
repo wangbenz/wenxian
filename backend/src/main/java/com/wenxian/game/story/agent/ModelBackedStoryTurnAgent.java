@@ -18,7 +18,8 @@ import java.util.Map;
  * 使用中性模型网关生成普通回合的剧情和 StoryPatch。
  *
  * <p>上下文按客观事实、认知、记忆、历史叙事和玩家行动分层序列化。模型首次返回无法解析或违反通用
- * 结构约束时，只允许一次不携带完整历史的格式修复；两次都失败则拒绝本轮，数据库和玩家回合保持不变。</p>
+ * 结构约束时，只允许一次不携带完整历史的格式修复；提案随后被 Reducer 拒绝时，调用方还可请求一次只携带
+ * 客观工作集的语义修复。任何修复仍不通过时拒绝整轮，数据库和玩家回合保持不变。</p>
  */
 @Service
 public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
@@ -66,6 +67,14 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
     private static final String REPAIR_PROMPT = """
             下面是你刚才返回但未通过 JSON/结构校验的结果。只修复格式和契约字段，不新增剧情、事实或决定，
             不需要重新读取完整上下文。只返回修复后的单个 JSON 对象，不要 Markdown。
+            """;
+
+    private static final String SEMANTIC_REPAIR_PROMPT = """
+            下面的状态提案已经通过 JSON 结构校验，但被服务端事实边界拒绝。只修复被拒绝的补丁语义，
+            尽量保留原有标题、正文、时间和选项，不新增未经玩家授权的行动或事件。
+            UPDATE/HIDE/RESTORE 与 TRANSFORM/REVISE 只能复制 objective 中已有的稳定 ID；
+            若内容确实是新实体或新世界事实，分别改用 CREATE 或 EXPAND，并将对应 ID 设为 null。
+            只返回修复后的单个完整 JSON 对象，不要 Markdown、解释或额外文字。
             """;
 
     private final StoryModelGateway gateway;
@@ -127,6 +136,20 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         }
     }
 
+    @Override
+    public Generated repairRejected(StoryPromptContext context, StoryModelRoute route,
+                                    InvocationContext invocation, StoryPatch rejected, String problem) {
+        if (context == null || rejected == null) throw new IllegalArgumentException("语义修复缺少原始提案或上下文");
+        if (route == null) throw new IllegalArgumentException("语义修复缺少模型路由");
+        StoryModelGateway.Result repaired = call(route, invocation, "STORY_TURN_SEMANTIC_REPAIR", SYSTEM_PROMPT,
+                semanticRepairPrompt(context, rejected, problem), 0.1);
+        try {
+            return new Generated(parse(repaired.text()), List.of(repaired));
+        } catch (JsonProcessingException | IllegalArgumentException error) {
+            throw new IllegalArgumentException("语义修复仍未形成可提交的状态提案", error);
+        }
+    }
+
     private StoryModelGateway.Result call(StoryModelRoute route, InvocationContext invocation, String operation,
                                           String systemPrompt, String userPrompt, double temperature) {
         long started = System.nanoTime();
@@ -172,6 +195,19 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             return REPAIR_PROMPT + "\n" + mapper.writeValueAsString(payload);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("格式修复请求无法序列化", error);
+        }
+    }
+
+    private String semanticRepairPrompt(StoryPromptContext context, StoryPatch rejected, String problem) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("validationProblem", problem == null ? "状态提案违反事实边界" : problem);
+        payload.put("objective", context.objective());
+        payload.put("action", context.action());
+        payload.put("rejectedProposal", rejected);
+        try {
+            return SEMANTIC_REPAIR_PROMPT + "\n" + mapper.writeValueAsString(payload);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("语义修复请求无法序列化", error);
         }
     }
 
