@@ -1,0 +1,88 @@
+package com.wenxian.game.story.domain;
+
+import com.wenxian.game.story.domain.StoryPatch.EntityOperation;
+import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
+import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
+import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
+import com.wenxian.game.story.domain.StoryPatch.WorldFactPatch;
+
+/**
+ * 校验 Story Agent 变化提案的通用结构不变量。
+ *
+ * <p>本校验器只保护稳定引用、时间、数量、认知主体和修订审计等跨世界通用边界，
+ * 不判断某个种族能否修炼某功法，也不根据关键词裁决战斗和剧情合理性。</p>
+ */
+public final class StoryPatchValidator {
+
+    /** 校验失败时拒绝整份提案，调用方不得部分落库。 */
+    public void validate(StoryPatch patch) {
+        require(patch != null, "推演结果不能为空");
+        require(present(patch.narrative()), "推演结果必须包含正文");
+        validateTime(patch);
+        patch.entities().forEach(this::validateEntity);
+        patch.worldFacts().forEach(this::validateWorldFact);
+        patch.knowledge().forEach(knowledge -> {
+            require(present(knowledge.subjectRef()), "人物认知必须标明认知主体");
+            require(present(knowledge.summary()), "人物认知必须包含摘要");
+        });
+        patch.memories().forEach(memory -> {
+            require(present(memory.title()), "关键记忆必须包含标题");
+            require(present(memory.summary()), "关键记忆必须包含摘要");
+        });
+        if (patch.decisionCheckpoint() != null && patch.decisionCheckpoint().required()) {
+            require(present(patch.decisionCheckpoint().prompt()), "重大决定检查点必须说明待玩家决定的内容");
+        }
+    }
+
+    private void validateTime(StoryPatch patch) {
+        require(patch.time() != null, "推演结果必须说明实际经过时间");
+        require(patch.time().elapsedMinutes() >= 0, "实际经过时间不能为负数");
+        require(patch.time().resolution() != null, "时间结果必须说明是否完整执行");
+        if (patch.time().resolution() == StoryPatch.TimeResolution.INTERRUPTED) {
+            require(present(patch.time().interruptionReason()), "行动被中断时必须说明原因");
+        }
+    }
+
+    private void validateEntity(EntityPatch patch) {
+        require(patch != null, "实体补丁不能为空");
+        require(patch.operation() != null, "实体补丁必须包含操作");
+        require(present(patch.entityType()), "实体补丁必须包含类型");
+        if (patch.operation() == EntityOperation.CREATE) {
+            require(!present(patch.entityId()), "新实体的正式ID必须由服务端分配");
+            require(present(patch.name()), "新实体必须包含名称");
+        } else {
+            require(present(patch.entityId()), "更新已有实体必须引用稳定ID");
+        }
+        validateQuantity(patch.quantity());
+    }
+
+    private void validateQuantity(QuantityValue quantity) {
+        if (quantity == null) return;
+        if (quantity.known()) {
+            require(quantity.value() != null, "已知数量必须包含具体值");
+            require(quantity.value() >= 0, "物品数量不能为负数");
+        } else {
+            require(quantity.value() == null, "未知数量不能伪造具体值");
+        }
+    }
+
+    private void validateWorldFact(WorldFactPatch patch) {
+        require(patch != null, "世界事实补丁不能为空");
+        require(patch.operation() != null, "世界事实补丁必须包含操作");
+        require(present(patch.statement()), "世界事实补丁必须包含有效陈述");
+        if (patch.operation() != WorldFactOperation.EXPAND) {
+            require(present(patch.factId()), "转变或修订世界事实必须引用稳定ID");
+        }
+        if (patch.operation() == WorldFactOperation.REVISE) {
+            require(present(patch.reason()), "修订已有世界事实必须保存玩家确认的原因");
+        }
+    }
+
+    private boolean present(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private void require(boolean condition, String message) {
+        if (!condition) throw new IllegalArgumentException(message);
+    }
+}
