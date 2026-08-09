@@ -23,7 +23,7 @@ public final class V014ApiModels {
             @NotBlank @Size(min = 1, max = 20) String playerName,
             @NotBlank @Size(max = 20) String race,
             @NotBlank @Size(max = 20) String gender,
-            @NotBlank @Size(max = 120) String origin,
+            @NotBlank @Size(max = 160) String origin,
             @Size(max = 240) String opening,
             @Size(max = 160) String storyTone
     ) {}

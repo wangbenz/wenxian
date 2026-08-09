@@ -12,6 +12,7 @@ import static com.wenxian.game.story.domain.StoryPatch.WorldFactOperation.REVISE
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StoryPatchValidatorTest {
     private final StoryPatchValidator validator = new StoryPatchValidator();
@@ -67,6 +68,24 @@ class StoryPatchValidatorTest {
         IllegalArgumentException prompt = assertThrows(IllegalArgumentException.class,
                 () -> validator.validate(checkpoint));
         assertEquals("重大决定检查点必须说明待玩家决定的内容", prompt.getMessage());
+    }
+
+    @Test
+    void protectsTheDurationExplicitlyAuthorizedByThePlayer() {
+        long threeYears = 3L * 360 * 24 * 60;
+        StoryPatch shortened = patch(new StoryPatch.TimePassage(90L * 24 * 60, COMPLETE, null),
+                List.of(), List.of());
+        IllegalArgumentException mismatch = assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(shortened, threeYears));
+        assertTrue(mismatch.getMessage().contains("完整执行必须推进同样时长"));
+
+        StoryPatch interrupted = patch(new StoryPatch.TimePassage(90L * 24 * 60, INTERRUPTED,
+                "闭关地灵脉突然枯竭"), List.of(), List.of());
+        assertDoesNotThrow(() -> validator.validate(interrupted, threeYears));
+
+        StoryPatch complete = patch(new StoryPatch.TimePassage(threeYears, COMPLETE, null),
+                List.of(), List.of());
+        assertDoesNotThrow(() -> validator.validate(complete, threeYears));
     }
 
     private StoryPatch patch(StoryPatch.TimePassage time, List<StoryPatch.EntityPatch> entities,

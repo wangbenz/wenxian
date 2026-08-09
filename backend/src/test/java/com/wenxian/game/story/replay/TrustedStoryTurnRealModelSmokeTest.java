@@ -15,6 +15,7 @@ import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
 import com.wenxian.game.story.domain.StoryPatchValidator;
+import com.wenxian.game.story.domain.ExplicitDurationParser;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
@@ -131,15 +132,17 @@ class TrustedStoryTurnRealModelSmokeTest {
         StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
                 "real-smoke-" + scenario, 1);
         StoryTurnAgent.Generated generated = agent.generate(context, route, invocation);
+        Integer explicitDuration = ExplicitDurationParser.parseMinutes(action, projection.worldTimeMinutes());
+        Long explicitDurationMinutes = explicitDuration == null ? null : explicitDuration.longValue();
         StoryStateReducer.Applied applied;
         try {
-            applied = reducer.reduce(projection, generated.patch());
+            applied = reducer.reduce(projection, generated.patch(), explicitDurationMinutes);
         } catch (IllegalArgumentException rejected) {
             StoryTurnAgent.Generated repaired = agent.repairRejected(context, route, invocation,
                     generated.patch(), rejected.getMessage());
             generated = new StoryTurnAgent.Generated(repaired.patch(), java.util.stream.Stream
                     .concat(generated.modelResults().stream(), repaired.modelResults().stream()).toList());
-            applied = reducer.reduce(projection, repaired.patch());
+            applied = reducer.reduce(projection, repaired.patch(), explicitDurationMinutes);
         }
         System.out.printf("TRUSTED_REAL_MODEL scenario=%s attempts=%d prompt=%d completion=%d latencyMs=%d model=%s%n",
                 scenario, generated.modelResults().size(), generated.inputTokens(), generated.outputTokens(),

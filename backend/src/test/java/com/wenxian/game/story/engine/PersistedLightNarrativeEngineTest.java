@@ -371,6 +371,55 @@ class PersistedLightNarrativeEngineTest {
     }
 
     @Test
+    void trustedTurnRepairsACompletedActionThatShortensExplicitPlayerTime() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            long threeYears = 3L * 360 * 24 * 60;
+            AtomicInteger repairs = new AtomicInteger();
+            StoryTurnAgent agent = new StoryTurnAgent() {
+                @Override
+                public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+                    return generated(turnPatch("闭关三月", "你闭关三个月后自行出关。", 90L * 24 * 60,
+                            List.of(), List.of(), new DecisionCheckpoint(false, null)), "initial");
+                }
+
+                @Override
+                public Generated repairRejected(StoryPromptContext context, StoryModelRoute route,
+                                                InvocationContext invocation, StoryPatch proposal,
+                                                String problem) {
+                    repairs.incrementAndGet();
+                    assertTrue(problem.contains("完整执行必须推进同样时长"));
+                    return generated(turnPatch("三年闭关", "你依照自己的决定闭关三年。", threeYears,
+                            List.of(), List.of(), new DecisionCheckpoint(false, null)), "repair");
+                }
+
+                private Generated generated(StoryPatch patch, String responseId) {
+                    return new Generated(patch, List.of(
+                            new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                                    "{}", responseId, "test-model", 80, 120, 20)));
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    agent, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            var response = engine.takeTurn(USER, created.saveId(),
+                    new TurnRequest("闭关三年，专心温养神识", "request-time-repair", 1));
+
+            assertEquals(1, repairs.get());
+            assertEquals(threeYears, response.state().worldTimeMinutes());
+            assertEquals(1, response.state().turnNumber());
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
     void trustedTurnPersistsMajorDecisionCheckpointAndReturnsControlToPlayer() {
         StoryPatch proposal = turnPatch("山门之邀",
                 "使者说明了入门条件，随后停下等待你的决定，没有替你答应。", 15,
@@ -396,6 +445,90 @@ class PersistedLightNarrativeEngineTest {
             assertEquals("是否接受使者提出的入门条件？",
                     runtime.generatedContexts().get(1).objective().pendingDecision().prompt());
             assertNull(resolved.state().pendingDecision(), "玩家亲自作答后必须清除旧的待决定提示");
+        }
+    }
+
+    @Test
+    void trustedRuntimeKeepsThirtySequentialTurnsConsistent() {
+        List<StoryPatch> patches = new ArrayList<>();
+        long expectedMinutes = 0;
+        for (int turn = 1; turn <= 30; turn++) {
+            List<EntityPatch> entityPatches = new ArrayList<>();
+            List<WorldFactPatch> factPatches = new ArrayList<>();
+            DecisionCheckpoint checkpoint = new DecisionCheckpoint(false, null);
+            long elapsedMinutes = turn == 12 ? 30L * 24 * 60 : 60;
+            expectedMinutes += elapsedMinutes;
+
+            if (turn == 1) {
+                ObjectNode attributes = mapper.createObjectNode();
+                attributes.put("itemType", "丹药");
+                entityPatches.add(new EntityPatch(EntityOperation.CREATE, null, "ITEM", "清心丹",
+                        "随身携带", "可清心定神。", attributes, new QuantityValue(true, 5), true,
+                        null, null));
+            } else if (turn == 2) {
+                ObjectNode attributes = mapper.createObjectNode();
+                attributes.put("abilityType", "瞳术");
+                entityPatches.add(new EntityPatch(EntityOperation.CREATE, null, "ABILITY", "照影诀",
+                        "已经掌握", "可辨灵机与虚妄。", attributes, null, null,
+                        AbilityState.MASTERED, null));
+            } else if (turn == 3) {
+                ObjectNode attributes = mapper.createObjectNode();
+                attributes.put("relationship", "同行者");
+                entityPatches.add(new EntityPatch(EntityOperation.CREATE, null, "CHARACTER", "闻溪",
+                        "结伴同行", "在山道相识的同行者。", attributes, null, null, null,
+                        new LifecycleValue(LifecycleState.ACTIVE, null)));
+            } else if (turn == 10) {
+                entityPatches.add(new EntityPatch(EntityOperation.UPDATE, "item-trusted-test", "ITEM",
+                        null, "剩余四枚", null, null, new QuantityValue(true, 4), true,
+                        null, null));
+            } else if (turn == 20) {
+                entityPatches.add(new EntityPatch(EntityOperation.UPDATE, "item-trusted-test", "ITEM",
+                        null, "剩余三枚", null, null, new QuantityValue(true, 3), true,
+                        null, null));
+            } else if (turn == 25) {
+                entityPatches.add(new EntityPatch(EntityOperation.UPDATE, "character-trusted-test",
+                        "CHARACTER", null, "暂别后仍保持联系", null, null, null, null,
+                        null, null));
+            } else if (turn == 30) {
+                entityPatches.add(new EntityPatch(EntityOperation.UPDATE, "ability-trusted-test", "ABILITY",
+                        null, "运转自如", null, null, null, null, AbilityState.MASTERED, null));
+            }
+            if (turn == 5) {
+                factPatches.add(new WorldFactPatch(WorldFactOperation.EXPAND, null,
+                        "青岐州北部近日出现灵潮", "旅途中确认的公开异象"));
+            }
+            if (turn == 15) {
+                checkpoint = new DecisionCheckpoint(true, "是否接受陌生宗门的同行邀请？");
+            }
+            patches.add(turnPatch("长线回放·" + turn,
+                    "你完成了第" + turn + "轮已经授权的行动，并在新的选择前停下。",
+                    elapsedMinutes, entityPatches, factPatches, checkpoint));
+        }
+
+        try (TrustedRuntime runtime = trustedRuntime(patches.toArray(StoryPatch[]::new))) {
+            for (int turn = 1; turn <= 30; turn++) {
+                advance(runtime, turn == 16 ? "我决定婉拒邀请，继续自己的道路" : "执行第" + turn + "轮行动",
+                        "request-long-run-" + turn);
+            }
+
+            var response = runtime.engine().get(USER, runtime.saveId());
+            StoryProjection projection = loadProjection(runtime);
+            assertEquals(30, response.state().turnNumber());
+            assertEquals(31, response.revision());
+            assertEquals(expectedMinutes, response.state().worldTimeMinutes());
+            assertEquals(3, projection.entities().size());
+            assertEquals(3, projection.entities().get("item-trusted-test").quantity().value());
+            assertEquals(AbilityState.MASTERED,
+                    projection.entities().get("ability-trusted-test").abilityState());
+            assertEquals(LifecycleState.ACTIVE,
+                    projection.entities().get("character-trusted-test").lifecycle());
+            assertEquals(1, projection.worldFacts().size());
+            assertNull(response.state().pendingDecision());
+            assertEquals(30, runtime.jdbc().queryForObject(
+                    "select count(*) from story_turn where save_id=?", Integer.class, runtime.saveId()));
+            assertEquals(30, runtime.jdbc().queryForObject(
+                    "select coalesce(sum(used_count), 0) from user_daily_quota where user_id=?",
+                    Integer.class, USER.userId()));
         }
     }
 
@@ -486,6 +619,65 @@ class PersistedLightNarrativeEngineTest {
                     "select prompt_tokens from story_turn where save_id=?", Integer.class, created.saveId()));
             assertEquals(270, jdbc.queryForObject(
                     "select completion_tokens from story_turn where save_id=?", Integer.class, created.saveId()));
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
+    void trustedTurnRejectsSecondInvalidProposalWithoutChangingSaveOrQuota() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            StoryPatch invalid = turnPatch("北境异象", "你闭关时察觉北方有异象升起。", 60,
+                    List.of(), List.of(new WorldFactPatch(WorldFactOperation.TRANSFORM,
+                            "不存在的世界事实", "青岐州北方出现灵潮", "闭关期间的局势变化")),
+                    new DecisionCheckpoint(false, null));
+            AtomicInteger repairs = new AtomicInteger();
+            StoryTurnAgent alwaysInvalidAgent = new StoryTurnAgent() {
+                @Override
+                public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+                    return generated("initial");
+                }
+
+                @Override
+                public Generated repairRejected(StoryPromptContext context, StoryModelRoute route,
+                                                InvocationContext invocation, StoryPatch proposal,
+                                                String problem) {
+                    repairs.incrementAndGet();
+                    return generated("semantic-repair");
+                }
+
+                private Generated generated(String responseId) {
+                    return new Generated(invalid, List.of(
+                            new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                                    "{}", responseId, "test-model", 40, 90, 20)));
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    alwaysInvalidAgent, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            GameApiException error = assertThrows(GameApiException.class, () -> engine.takeTurn(USER,
+                    created.saveId(), new TurnRequest("闭关时留意外界变化", "request-invalid-repair", 1)));
+
+            assertEquals(1, repairs.get());
+            assertEquals("STORY_PATCH_REJECTED", error.code());
+            assertTrue(error.retryable());
+            assertFalse(error.turnConsumed());
+            assertFalse(error.stateChanged());
+            var unchanged = saves.findOwned(USER.userId(), created.saveId()).orElseThrow();
+            assertEquals(1, unchanged.revision());
+            assertEquals(0, unchanged.turnNumber());
+            assertEquals(0, jdbc.queryForObject("select count(*) from story_turn where save_id=?",
+                    Integer.class, created.saveId()));
+            assertEquals(0, jdbc.queryForObject(
+                    "select coalesce(sum(used_count), 0) from user_daily_quota where user_id=?",
+                    Integer.class, USER.userId()));
         } finally {
             database.shutdown();
         }

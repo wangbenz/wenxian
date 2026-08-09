@@ -46,8 +46,15 @@ public final class StoryStateReducer {
 
     /** 归并失败时拒绝整份提案，调用方不得保存部分实体或推进世界时间。 */
     public Applied reduce(StoryProjection before, StoryPatch proposal) {
+        return reduce(before, proposal, null);
+    }
+
+    /**
+     * 按玩家本轮明确授权的持续时间归并提案；无法可靠识别明确时长时传 {@code null}。
+     */
+    public Applied reduce(StoryProjection before, StoryPatch proposal, Long explicitDurationMinutes) {
         if (before == null) throw new IllegalArgumentException("当前事实投影不能为空");
-        validator.validate(proposal);
+        validator.validate(proposal, explicitDurationMinutes);
 
         Map<String, EntityState> entities = new LinkedHashMap<>(before.entities());
         Map<String, WorldFactState> worldFacts = new LinkedHashMap<>(before.worldFacts());

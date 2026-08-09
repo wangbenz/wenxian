@@ -16,9 +16,18 @@ public final class StoryPatchValidator {
 
     /** 校验失败时拒绝整份提案，调用方不得部分落库。 */
     public void validate(StoryPatch patch) {
+        validate(patch, null);
+    }
+
+    /**
+     * 在通用结构校验之外，保护玩家明确授权的行动时长。
+     *
+     * @param explicitDurationMinutes 玩家明确写出的持续分钟数；无法可靠识别时为 {@code null}
+     */
+    public void validate(StoryPatch patch, Long explicitDurationMinutes) {
         require(patch != null, "推演结果不能为空");
         require(present(patch.narrative()), "推演结果必须包含正文");
-        validateTime(patch);
+        validateTime(patch, explicitDurationMinutes);
         patch.entities().forEach(this::validateEntity);
         patch.worldFacts().forEach(this::validateWorldFact);
         patch.knowledge().forEach(knowledge -> {
@@ -35,12 +44,22 @@ public final class StoryPatchValidator {
         }
     }
 
-    private void validateTime(StoryPatch patch) {
+    private void validateTime(StoryPatch patch, Long explicitDurationMinutes) {
         require(patch.time() != null, "推演结果必须说明实际经过时间");
         require(patch.time().elapsedMinutes() >= 0, "实际经过时间不能为负数");
         require(patch.time().resolution() != null, "时间结果必须说明是否完整执行");
         if (patch.time().resolution() == StoryPatch.TimeResolution.INTERRUPTED) {
             require(present(patch.time().interruptionReason()), "行动被中断时必须说明原因");
+        }
+        if (explicitDurationMinutes == null) return;
+        long elapsed = patch.time().elapsedMinutes();
+        if (patch.time().resolution() == StoryPatch.TimeResolution.COMPLETE) {
+            require(elapsed == explicitDurationMinutes,
+                    "玩家明确要求推进" + explicitDurationMinutes + "分钟；完整执行必须推进同样时长，当前为"
+                            + elapsed + "分钟。如行动提前结束，请改为INTERRUPTED并说明中断原因");
+        } else {
+            require(elapsed < explicitDurationMinutes,
+                    "被中断的行动必须早于玩家要求的" + explicitDurationMinutes + "分钟结束");
         }
     }
 

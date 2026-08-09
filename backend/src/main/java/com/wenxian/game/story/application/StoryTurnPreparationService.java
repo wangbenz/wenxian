@@ -11,6 +11,7 @@ import com.wenxian.game.story.agent.StoryPromptContext;
 import com.wenxian.game.story.agent.StoryPromptContext.PendingDecision;
 import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.domain.StoryProjection;
+import com.wenxian.game.story.domain.ExplicitDurationParser;
 import com.wenxian.game.story.persistence.StoryConversationRepository;
 import com.wenxian.game.story.persistence.StoryEntityRepository;
 import com.wenxian.game.story.persistence.StoryMemoryRepository;
@@ -81,22 +82,28 @@ public class StoryTurnPreparationService {
                 previousTurn(saved.id()), checkpoint == null ? null : new PendingDecision(checkpoint.prompt())));
         StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
                 saved.id(), saved.turnNumber() + 1);
+        Long explicitDurationMinutes = explicitDuration(playerAction, before.worldTimeMinutes());
         StoryTurnAgent.Generated generation = agent.generate(context, route, invocation);
         StoryStateReducer.Applied applied;
         try {
-            applied = reducer.reduce(before, generation.patch());
+            applied = reducer.reduce(before, generation.patch(), explicitDurationMinutes);
         } catch (IllegalArgumentException rejected) {
             StoryTurnAgent.Generated repaired = agent.repairRejected(context, route, invocation,
                     generation.patch(), rejected.getMessage());
             generation = combine(generation, repaired);
             try {
-                applied = reducer.reduce(before, repaired.patch());
+                applied = reducer.reduce(before, repaired.patch(), explicitDurationMinutes);
             } catch (IllegalArgumentException failedAgain) {
                 failedAgain.addSuppressed(rejected);
                 throw failedAgain;
             }
         }
         return new Prepared(before, applied, existingEntities, generation);
+    }
+
+    private Long explicitDuration(String playerAction, long worldTimeMinutes) {
+        Integer minutes = ExplicitDurationParser.parseMinutes(playerAction, worldTimeMinutes);
+        return minutes == null ? null : minutes.longValue();
     }
 
     private StoryTurnAgent.Generated combine(StoryTurnAgent.Generated first, StoryTurnAgent.Generated repaired) {
