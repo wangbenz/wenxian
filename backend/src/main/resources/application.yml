@@ -42,6 +42,8 @@ game:
     login-failures-per-window: ${WENXIAN_LOGIN_FAILURES_PER_WINDOW:5}
   ai-config-master-key: ${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}
   ai-config-force-environment: ${WENXIAN_AI_CONFIG_FORCE_ENVIRONMENT:false}
+  story-correction-token-secret: ${WENXIAN_STORY_CORRECTION_TOKEN_SECRET:${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}}
+  story-correction-token-ttl-minutes: ${WENXIAN_STORY_CORRECTION_TOKEN_TTL_MINUTES:10}
 
 deepseek:
   api-key: ${DEEPSEEK_API_KEY:}

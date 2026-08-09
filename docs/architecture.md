@@ -26,6 +26,8 @@ V0.13 与 V0.14 为了快速验证不同玩法，分别形成了独立接口、S
 - 已新增 `story_*` 通用表脚本以及命卷、回合、实体 Repository；RDS 当前由通用表承接 V0.14 权威写入；
 - 已建立中性 `StoryPatch`、事实 Reducer、上下文装配、两阶段修正提案与认证令牌；LangChain4j
   供应商调用已抽离为版本无关 `StoryModelGateway`，V0.14 通过兼容适配器继续使用相同行为；
+- 已建立中性投影与现有 `story_*` 表的映射，以及修正确认单事务提交服务；修正审计失败时快照、实体和
+  revision 会整批回滚，但两阶段 HTTP 接口和 H5 确认页尚未开放；
 - 已完成 V0.14 只读预演、隔离候选、双哈希激活、全量迁移和迁移后核对；旧表不再参与命卷状态与存活上限判断；
 - V0.13 不再转换为可写命卷，原表作为历史档案冻结；后续运营统计通过独立统计事件与日汇总解耦版本业务表；
 - 通用运行时通过 `wenxian.story.persisted-runtime-enabled=true` 显式开启；关闭时可回到迁移前兼容路径排查，但不能把通用表新数据反写旧表。
@@ -335,7 +337,7 @@ POST /api/v1/story/saves/{saveId}/corrections/preview
 
 预览调用只允许 Agent 解析为 `FACT`、`COGNITION` 或 `WORLD` 提案，不修改命卷、不推进时间、不扣回合。
 响应返回玩家可读的变化摘要和短时有效的 `proposalToken`。Token 由服务端认证加密，至少绑定账号、命卷、
-`expectedRevision`、提案正文和失效时间；H5 不能自行构造或修改提案。
+`expectedRevision`、玩家原始修正说明、提案正文和失效时间；H5 不能自行构造或修改提案。
 
 ```json
 POST /api/v1/story/saves/{saveId}/corrections/confirm
@@ -346,8 +348,9 @@ POST /api/v1/story/saves/{saveId}/corrections/confirm
 ```
 
 确认调用不得重新请求模型；服务端解密并验证同一提案、账号归属、命卷和 revision 后，再交由
-`StoryCorrectionReducer` 原子应用并写入 `story_state_correction`。修正属于显式状态写入，失败时不得覆盖
-较新的命卷。兼容期旧的单步 `/corrections` 入口保持可运行但不再扩展，待两阶段流程灰度通过后停止。
+`StoryCorrectionReducer` 应用。`StoryCorrectionCommitService` 在同一事务更新核心快照、受影响实体、revision
+和 `story_state_correction`；任何写入失败都整批回滚。修正属于显式状态写入，失败时不得覆盖较新的命卷，
+也不得推进世界时间或增加回合。兼容期旧的单步 `/corrections` 入口保持可运行但不再扩展，待两阶段流程灰度通过后停止。
 
 成功响应返回完整当前视图、最新 `revision`、回合号和 capabilities。`requestId` 已提交时返回同一结果；正式统一引擎应在同账号另一轮仍在生成时返回可重试的 `TURN_IN_PROGRESS`。兼容引擎至少必须用账号锁与 `revision` 保证并发请求只能成功一次，不得覆盖较新的命卷。
 

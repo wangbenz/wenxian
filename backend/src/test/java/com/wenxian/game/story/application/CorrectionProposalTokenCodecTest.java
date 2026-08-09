@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Base64;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -39,8 +40,11 @@ class CorrectionProposalTokenCodecTest {
     void rejectsTamperingAndWrongOwnershipOrRevision() {
         CorrectionProposalTokenCodec codec = codec(NOW);
         String token = codec.issue("user-1", "story-save-1", 12, "修正地点", proposal());
-        String tampered = token.substring(0, token.length() - 1)
-                + (token.endsWith("A") ? "B" : "A");
+        String[] tokenParts = token.split("\\.", 2);
+        byte[] packed = Base64.getUrlDecoder().decode(tokenParts[1]);
+        packed[packed.length / 2] ^= 0x01;
+        String tampered = tokenParts[0] + "."
+                + Base64.getUrlEncoder().withoutPadding().encodeToString(packed);
 
         assertInvalid(() -> codec.verify(tampered, "user-1", "story-save-1", 12));
         assertInvalid(() -> codec.verify(token, "user-2", "story-save-1", 12));
