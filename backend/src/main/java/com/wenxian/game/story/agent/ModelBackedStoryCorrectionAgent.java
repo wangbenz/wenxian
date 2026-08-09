@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wenxian.game.story.domain.StoryCorrectionProposal;
 import com.wenxian.game.story.domain.StoryCorrectionValidator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
@@ -52,6 +53,7 @@ public class ModelBackedStoryCorrectionAgent implements StoryCorrectionAgent {
     private final ObjectMapper tolerantMapper;
     private final StoryCorrectionValidator validator;
 
+    @Autowired
     public ModelBackedStoryCorrectionAgent(StoryModelGateway gateway, ObjectMapper mapper) {
         this(gateway, mapper, new StoryCorrectionValidator());
     }
