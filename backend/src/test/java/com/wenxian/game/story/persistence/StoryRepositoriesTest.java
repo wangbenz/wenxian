@@ -73,6 +73,8 @@ class StoryRepositoriesTest {
             assertEquals(1, entities.listVisible("story-save-2").size());
             assertEquals(1, entities.hide("story-save-2", "entity-token", 2, "已移出行囊"));
             assertTrue(entities.listVisible("story-save-2").isEmpty());
+            assertEquals("entity-token", entities.listAll("story-save-2").getFirst().id(),
+                    "权威读取必须保留已隐藏实体，避免后续归并重复创建同一身份");
             assertEquals(1, jdbc.queryForObject("select count(*) from story_entity", Integer.class),
                     "整理实体只隐藏当前视图，不能删除历史身份");
         } finally {

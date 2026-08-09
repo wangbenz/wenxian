@@ -479,7 +479,8 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
 
     private void synchronizeEntities(String saveId, V014State state) {
         Map<String, Entity> existing = new HashMap<>();
-        entities.listVisible(saveId).forEach(entity -> existing.put(entity.id(), entity));
+        // 状态归并必须读取全部事实，不能把已整理或暂时不可见的实体误判为从未存在。
+        entities.listAll(saveId).forEach(entity -> existing.put(entity.id(), entity));
         for (V014State.Item item : state.inventory()) {
             ObjectNode attributes = mapper.createObjectNode();
             attributes.put("itemType", item.type());

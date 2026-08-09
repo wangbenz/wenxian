@@ -43,6 +43,19 @@ public class StoryEntityRepository {
                 """, (row, index) -> map(row), saveId);
     }
 
+    /**
+     * 读取命卷的全部实体事实，包括已移出行囊、停止关注和暂时不可见的记录。
+     *
+     * <p>该方法用于权威状态归并与事实追查；玩家当前页面仍应使用 {@link #listVisible(String)}。
+     * 不得用可见列表代替权威读取，否则同一稳定实体再次进入剧情时可能被错误地当作新实体插入。</p>
+     */
+    public List<Entity> listAll(String saveId) {
+        return jdbc.query("""
+                select * from story_entity where save_id=?
+                order by entity_type, last_changed_turn desc, created_at
+                """, (row, index) -> map(row), saveId);
+    }
+
     public int update(Entity entity) {
         return jdbc.update("""
                 update story_entity set entity_type=?, name=?, status=?, visible=?, summary=?, attributes_json=?,
