@@ -261,7 +261,8 @@ POST   /api/v1/story/saves
 GET    /api/v1/story/saves/{saveId}
 DELETE /api/v1/story/saves/{saveId}
 POST   /api/v1/story/saves/{saveId}/turns
-POST   /api/v1/story/saves/{saveId}/corrections
+POST   /api/v1/story/saves/{saveId}/corrections/preview
+POST   /api/v1/story/saves/{saveId}/corrections/confirm
 DELETE /api/v1/story/saves/{saveId}/entities/{entityId}
 POST   /api/v1/story/saves/{saveId}/fork
 
@@ -323,14 +324,28 @@ POST /api/v1/story/saves/{saveId}/turns
 ### 修正命卷
 
 ```json
-POST /api/v1/story/saves/{saveId}/corrections
+POST /api/v1/story/saves/{saveId}/corrections/preview
 {
   "expectedRevision": 138,
   "instruction": "当前地点应为青岐城北门"
 }
 ```
 
-修正属于显式状态写入，也必须携带当前修订号；失败时不得覆盖较新的命卷。
+预览调用只允许 Agent 解析为 `FACT`、`COGNITION` 或 `WORLD` 提案，不修改命卷、不推进时间、不扣回合。
+响应返回玩家可读的变化摘要和短时有效的 `proposalToken`。Token 由服务端认证加密，至少绑定账号、命卷、
+`expectedRevision`、提案正文和失效时间；H5 不能自行构造或修改提案。
+
+```json
+POST /api/v1/story/saves/{saveId}/corrections/confirm
+{
+  "expectedRevision": 138,
+  "proposalToken": "opaque-token"
+}
+```
+
+确认调用不得重新请求模型；服务端解密并验证同一提案、账号归属、命卷和 revision 后，再交由
+`StoryCorrectionReducer` 原子应用并写入 `story_state_correction`。修正属于显式状态写入，失败时不得覆盖
+较新的命卷。兼容期旧的单步 `/corrections` 入口保持可运行但不再扩展，待两阶段流程灰度通过后停止。
 
 成功响应返回完整当前视图、最新 `revision`、回合号和 capabilities。`requestId` 已提交时返回同一结果；正式统一引擎应在同账号另一轮仍在生成时返回可重试的 `TURN_IN_PROGRESS`。兼容引擎至少必须用账号锁与 `revision` 保证并发请求只能成功一次，不得覆盖较新的命卷。
 
@@ -638,6 +653,18 @@ V0.15 可信闭环进入编码前还必须建立六组真实回放用例：人�
 8. **灰度决定**：通过后再决定是否升级 `engine_version/state_schema_version`，以及是否需要最小数据库迁移。
 
 第一批默认不新增业务表。若人物认知需要支持多个主体和证据链，现有 `story_memory` 无法可靠承载时，再单独评审增加中性字段；不得把主体 ID 拼进摘要文本临时凑合。
+
+### 中性投影持久化评估
+
+首批中性组件继续复用 `story_*`，不创建 `v015_*` 表：
+
+- `story_save.state_json` 保存主角核心快照、当前世界事实投影和人物认知投影；这些集合必须带结构版本；
+- `story_entity` 继续保存物品、能力和重要人物的稳定身份，明确/未知数量、当前归属、能力状态和人物生命周期写入 `attributes_json` 的保留事实区；
+- `story_turn.state_patch_json` 只保存 Reducer 最终接受并补齐服务端 ID 后的 `StoryPatch`，不能保存模型原始 JSON 冒充结果；
+- `story_memory` 继续保存玩家可回看的关键记忆，Repository 需要读取真实 `memory_type`；证据引用无法可靠落库时，只允许增加中性 `evidence_refs_json` 字段，不另建发布版本表；
+- 投影加载实体时必须读取当前命卷的全部实体，再由上下文选择决定是否进入 Prompt；不能用 `listVisible` 代替权威读取，否则已整理、售出或暂不关注的历史实体无法被正确恢复或追查。
+
+中性运行时接管前先实现纯映射和事务测试。涉及 `story_memory` 字段的迁移需单独评审、更新数据字典并在 RDS 备份后执行；在此之前不改变线上表结构。
 
 ### 首批真实回放验收矩阵
 
