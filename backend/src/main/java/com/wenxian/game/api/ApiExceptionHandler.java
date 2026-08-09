@@ -12,6 +12,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -89,6 +90,11 @@ public class ApiExceptionHandler {
         return respond(HttpStatus.BAD_REQUEST, "INVALID_ARGUMENT", "INPUT", "填写内容需要调整",
                 message, List.of("根据提示修改后重新提交"), false, false, false, Map.of(),
                 diagnostic(error), error, request);
+    }
+
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void clientDisconnected(AsyncRequestNotUsableException error, HttpServletRequest request) {
+        LOGGER.info("客户端已在响应完成前断开连接: {} {}", request.getMethod(), request.getRequestURI());
     }
 
     @ExceptionHandler(Exception.class)

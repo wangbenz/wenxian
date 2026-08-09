@@ -25,7 +25,7 @@ class AdminServiceOperationErrorTest {
                 .setName("admin-errors-" + UUID.randomUUID()).build();
         jdbc = new JdbcTemplate(database);
         jdbc.execute("create table app_user(id varchar(64) primary key, email varchar(255) not null)");
-        jdbc.execute("create table story_save(id varchar(80) primary key, user_id varchar(64), state_json clob)");
+        jdbc.execute("create table story_save(id varchar(80) primary key, user_id varchar(64), source_save_id varchar(80), state_json clob)");
         jdbc.execute("""
                 create table operation_error(
                   reference_id varchar(40) primary key, save_id varchar(80), operation varchar(120),
@@ -53,5 +53,27 @@ class AdminServiceOperationErrorTest {
 
         assertEquals(1, service.operationErrors("player@example.com", "RESOURCE", 100).size());
         assertEquals(0, service.operationErrors("player@example.com", "SYSTEM", 100).size());
+
+        List<Map<String, Object>> summary = service.operationErrorSummary(7, 10);
+        assertEquals(1, summary.size());
+        assertEquals("CURRENCY_INSUFFICIENT", summary.getFirst().get("code"));
+        assertEquals(1L, summary.getFirst().get("affectedPlayers"));
+    }
+
+    @Test
+    void resolvesLegacyErrorThroughUnifiedSaveSourceId() {
+        jdbc.update("""
+                update story_save
+                set id='story-save-1', source_save_id='save-1',
+                    state_json='{"protagonist":{"name":"林渊","realm":"引气"}}'
+                where id='save-1'
+                """);
+
+        List<Map<String, Object>> rows = service.operationErrors("player@example.com", "RESOURCE", 100);
+        assertEquals(1, rows.size());
+        assertEquals("林渊", rows.getFirst().get("playerName"));
+
+        List<Map<String, Object>> summary = service.operationErrorSummary(7, 10);
+        assertEquals(1L, summary.getFirst().get("affectedPlayers"));
     }
 }

@@ -45,14 +45,14 @@ class PlayerAiServiceTest {
 
             jdbc.update("update gameplay_config set config_value='1' where config_key='account_public_turn_limit'");
             jdbc.update("update gameplay_config set config_value='赠送回合已用完，请选择后续方式。' where config_key='account_public_turn_limit_message'");
-            jdbc.update("insert into gameplay_config(config_key,config_value,updated_at) values ('registration_contact_text','请加入QQ群：1092478336',?)",
+            jdbc.update("insert into gameplay_config(config_key,config_value,updated_at) values ('registration_contact_text','请加入《问仙录》二群：532549329',?)",
                     Timestamp.from(Instant.now()));
             PublicTurnLimitException quotaError = assertThrows(PublicTurnLimitException.class,
                     () -> service.assertPublicQuota("user-1", route));
             assertEquals("赠送回合已用完，请选择后续方式。", quotaError.getMessage());
             assertEquals(1, quotaError.turnLimit());
-            assertEquals("请加入QQ群：1092478336", quotaError.contactText());
-            assertEquals("1092478336", quotaError.supportGroup());
+            assertEquals("请加入《问仙录》二群：532549329", quotaError.contactText());
+            assertEquals("532549329", quotaError.supportGroup());
 
             jdbc.update("insert into user_ai_credential(user_id,provider,api_key_ciphertext,masked_suffix,status,last_verified_at,created_at,updated_at) values ('user-1','DEEPSEEK',?,'1234','ACTIVE',?,?,?)",
                     SecretCipher.encrypt("sk-user-secret-123456789", "master-key"), Timestamp.from(Instant.now()),

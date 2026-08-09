@@ -135,6 +135,10 @@ export type OperationError = {
   referenceId: string; saveId: string | null; operation: string; category: string; code: string;
   httpStatus: number; message: string; diagnostic: string; email: string; playerName: string; at: string;
 };
+export type OperationErrorSummary = {
+  category: string; code: string; highestStatus: number; count: number;
+  affectedPlayers: number; latestAt: string; message: string;
+};
 
 export type MigrationPolicy = { prepareEnabled: boolean; activationEnabled: boolean; batchLimit: number };
 export type MigrationOverview = {
@@ -223,6 +227,7 @@ export const adminApi = {
   removeAccessWhitelist: (userId: string) => request<AccessControl>(`/access-control/whitelist/${encodeURIComponent(userId)}`, { method: "DELETE" }),
   operationLogs: () => request<Array<{ operation: string; detail: string; at: string }>>("/operation-logs"),
   operationErrors: (search = "", category = "", limit = 100) => request<OperationError[]>(`/operation-errors?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}&limit=${limit}`),
+  operationErrorSummary: (days = 7, limit = 12) => request<OperationErrorSummary[]>(`/operation-errors/summary?days=${days}&limit=${limit}`),
   migrationOverview: () => request<MigrationOverview>("/story-migrations/overview"),
   migrationPreview: (cursor = "", limit = 10) => request<MigrationPreviewPage>(`/story-migrations/preview?cursor=${encodeURIComponent(cursor)}&limit=${limit}`),
   migrationTasks: (limit = 30) => request<MigrationTask[]>(`/story-migrations/tasks?limit=${limit}`),

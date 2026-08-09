@@ -116,7 +116,7 @@ class V014GameServiceBoundaryTest {
                 Timestamp.from(now), Timestamp.from(now));
         config(jdbc, "account_public_turn_limit", "1", now);
         config(jdbc, "account_public_turn_limit_message", "平台回合已用完", now);
-        config(jdbc, "registration_contact_text", "QQ群：1092478336", now);
+        config(jdbc, "registration_contact_text", "《问仙录》二群：532549329", now);
         config(jdbc, "custom_api_enabled", "true", now);
         config(jdbc, "max_active_saves", "2", now);
         config(jdbc, "current_game_version", "V0.14", now);
