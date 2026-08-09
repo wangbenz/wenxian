@@ -58,7 +58,10 @@ public record StoryPatch(
             String status,
             String summary,
             JsonNode attributes,
-            QuantityValue quantity
+            QuantityValue quantity,
+            Boolean inPossession,
+            AbilityState abilityState,
+            LifecycleValue lifecycle
     ) {}
 
     public enum EntityOperation {
@@ -70,6 +73,25 @@ public record StoryPatch(
 
     /** `known=false` 表示只确认持有但数量未知，此时 value 必须为空。 */
     public record QuantityValue(boolean known, Integer value) {}
+
+    /** 能力是否仍然掌握与能否临时施展分开表达，不再从自然语言状态猜测。 */
+    public enum AbilityState {
+        MASTERED,
+        TEMPORARILY_BLOCKED,
+        LOST,
+        UNKNOWN
+    }
+
+    /** 人物客观生命周期；终态被反转时必须记录明确原因。 */
+    public record LifecycleValue(LifecycleState state, String changeReason) {}
+
+    public enum LifecycleState {
+        ACTIVE,
+        MISSING,
+        DORMANT,
+        DEAD,
+        UNKNOWN
+    }
 
     /** 世界扩展、世界内转变与玩家显式修订使用同一审计契约。 */
     public record WorldFactPatch(

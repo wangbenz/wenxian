@@ -23,6 +23,7 @@ public final class StoryPatchValidator {
         patch.worldFacts().forEach(this::validateWorldFact);
         patch.knowledge().forEach(knowledge -> {
             require(present(knowledge.subjectRef()), "人物认知必须标明认知主体");
+            require(present(knowledge.topicRef()), "人物认知必须标明认知对象");
             require(present(knowledge.summary()), "人物认知必须包含摘要");
         });
         patch.memories().forEach(memory -> {
@@ -54,6 +55,9 @@ public final class StoryPatchValidator {
             require(present(patch.entityId()), "更新已有实体必须引用稳定ID");
         }
         validateQuantity(patch.quantity());
+        if (patch.lifecycle() != null) {
+            require(patch.lifecycle().state() != null, "人物生命周期变化必须包含目标状态");
+        }
     }
 
     private void validateQuantity(QuantityValue quantity) {
