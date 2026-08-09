@@ -7,6 +7,9 @@ import com.wenxian.game.story.model.StoryApiModels.BootstrapResponse;
 import com.wenxian.game.story.model.StoryApiModels.CharacterRouteRequest;
 import com.wenxian.game.story.model.StoryApiModels.CharacterRouteResponse;
 import com.wenxian.game.story.model.StoryApiModels.CorrectionRequest;
+import com.wenxian.game.story.model.StoryApiModels.CorrectionConfirmRequest;
+import com.wenxian.game.story.model.StoryApiModels.CorrectionPreviewRequest;
+import com.wenxian.game.story.model.StoryApiModels.CorrectionPreviewResponse;
 import com.wenxian.game.story.model.StoryApiModels.CreateSaveRequest;
 import com.wenxian.game.story.model.StoryApiModels.SaveResponse;
 import com.wenxian.game.story.model.StoryApiModels.SaveSummary;
@@ -94,6 +97,22 @@ public class StoryController {
             @PathVariable @Pattern(regexp = SAVE_ID) String saveId,
             @Valid @RequestBody CorrectionRequest request) {
         return stories.correct(user(token), saveId, request);
+    }
+
+    @PostMapping("/saves/{saveId}/corrections/preview")
+    public CorrectionPreviewResponse previewCorrection(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
+            @PathVariable @Pattern(regexp = SAVE_ID) String saveId,
+            @Valid @RequestBody CorrectionPreviewRequest request) {
+        return stories.previewCorrection(user(token), saveId, request);
+    }
+
+    @PostMapping("/saves/{saveId}/corrections/confirm")
+    public SaveResponse confirmCorrection(
+            @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
+            @PathVariable @Pattern(regexp = SAVE_ID) String saveId,
+            @Valid @RequestBody CorrectionConfirmRequest request) {
+        return stories.confirmCorrection(user(token), saveId, request);
     }
 
     @DeleteMapping("/saves/{saveId}")

@@ -129,8 +129,8 @@ public final class CorrectionProposalTokenCodec {
         if (expectedRevision < 1) throw new IllegalArgumentException("修正令牌缺少有效revision");
     }
 
-    private IllegalArgumentException invalid(Throwable cause) {
-        return new IllegalArgumentException("修正提案无效或已经过期", cause);
+    private InvalidProposalTokenException invalid(Throwable cause) {
+        return new InvalidProposalTokenException("修正提案无效或已经过期", cause);
     }
 
     private record TokenPayload(
@@ -148,4 +148,11 @@ public final class CorrectionProposalTokenCodec {
             StoryCorrectionProposal proposal,
             Instant expiresAt
     ) {}
+
+    /** 认证失败、归属不符、revision 不符或过期都使用同一安全异常，避免泄露令牌内部细节。 */
+    public static final class InvalidProposalTokenException extends IllegalArgumentException {
+        private InvalidProposalTokenException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
 }

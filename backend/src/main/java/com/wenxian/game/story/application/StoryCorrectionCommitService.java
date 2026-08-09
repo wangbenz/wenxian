@@ -11,7 +11,6 @@ import com.wenxian.game.story.persistence.StoryPersistenceModels.Entity;
 import com.wenxian.game.story.persistence.StoryPersistenceModels.StoredSave;
 import com.wenxian.game.story.persistence.StoryProjectionPersistenceMapper;
 import com.wenxian.game.story.persistence.StorySaveRepository;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -71,16 +70,29 @@ public class StoryCorrectionCommitService {
     private Committed confirmInTransaction(String userId, String saveId, long expectedRevision,
                                              String proposalToken) {
         StoredSave saved = saves.findOwned(userId, saveId)
-                .orElseThrow(() -> new IllegalArgumentException("没有找到可修正的命卷"));
-        if (!"ACTIVE".equals(saved.status())) throw new IllegalArgumentException("封存命卷不能继续修正");
+                .orElseThrow(() -> new StoryCorrectionException(StoryCorrectionException.Reason.SAVE_NOT_FOUND,
+                        "没有找到可修正的命卷"));
+        if (!"ACTIVE".equals(saved.status())) {
+            throw new StoryCorrectionException(StoryCorrectionException.Reason.SAVE_NOT_ACTIVE,
+                    "封存命卷不能继续修正");
+        }
         if (saved.revision() != expectedRevision) {
-            throw new OptimisticLockingFailureException("命卷已经发生变化，请刷新后重新预览修正");
+            throw new StoryCorrectionException(StoryCorrectionException.Reason.REVISION_CONFLICT,
+                    "命卷已经发生变化，请刷新后重新预览修正");
         }
 
         List<Entity> existingEntities = entities.listAll(saveId);
         StoryProjection before = projections.load(saved, existingEntities, memories.recentActive(saveId, 80));
-        StoryCorrectionWorkflow.Confirmed confirmed = workflow.confirm(userId, saveId, expectedRevision,
-                proposalToken, before);
+        StoryCorrectionWorkflow.Confirmed confirmed;
+        try {
+            confirmed = workflow.confirm(userId, saveId, expectedRevision, proposalToken, before);
+        } catch (CorrectionProposalTokenCodec.InvalidProposalTokenException error) {
+            String message = "修正预览已经失效，请重新预览后确认";
+            throw new StoryCorrectionException(StoryCorrectionException.Reason.PROPOSAL_INVALID, message, error);
+        } catch (IllegalArgumentException error) {
+            throw new StoryCorrectionException(StoryCorrectionException.Reason.PROPOSAL_REJECTED,
+                    "当前事实无法应用这份修正，请刷新后重新说明", error);
+        }
         StoryProjection after = confirmed.projection();
         if (after.worldTimeMinutes() != before.worldTimeMinutes()) {
             throw new IllegalStateException("命卷修正不能推进世界时间");

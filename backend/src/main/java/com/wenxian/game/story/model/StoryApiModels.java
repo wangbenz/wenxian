@@ -65,6 +65,26 @@ public final class StoryApiModels {
             @Positive long expectedRevision
     ) {}
 
+    /** 只生成修正提案，不改变命卷。 */
+    public record CorrectionPreviewRequest(
+            @NotBlank @Size(min = 2, max = 500) String instruction,
+            @Positive long expectedRevision
+    ) {}
+
+    /** 玩家确认预览时只回传服务端签发的不可读令牌。 */
+    public record CorrectionConfirmRequest(
+            @NotBlank @Size(max = 24_000) String proposalToken,
+            @Positive long expectedRevision
+    ) {}
+
+    /** H5 用于二次确认的自然语言预览，不暴露供应商、模型或技术解析字段。 */
+    public record CorrectionPreviewResponse(
+            String kind,
+            String explanation,
+            String confirmationPrompt,
+            String proposalToken
+    ) {}
+
     public record SaveSummary(String saveId, int slotNo, String mode,
                               String engineCode, int engineVersion, int stateSchemaVersion,
                               long revision, int turnNumber, List<String> capabilities,

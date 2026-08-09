@@ -15,7 +15,6 @@ import com.wenxian.game.story.persistence.StoryPersistenceModels.StoredTurn;
 import com.wenxian.game.story.persistence.StoryProjectionPersistenceMapper;
 import com.wenxian.game.story.persistence.StorySaveRepository;
 import com.wenxian.game.story.persistence.StoryTurnRepository;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -72,16 +71,28 @@ public class StoryCorrectionPreviewService {
                                                     String instruction) {
         Snapshot snapshot = transactions.execute(status -> snapshot(userId, saveId, expectedRevision, instruction));
         if (snapshot == null) throw new IllegalStateException("命卷修正预览没有读取到一致快照");
-        return workflow.preview(userId, saveId, expectedRevision, instruction, snapshot.context(),
-                routes.resolve(userId));
+        var route = routes.resolve(userId);
+        try {
+            return workflow.preview(userId, saveId, expectedRevision, instruction, snapshot.context(), route);
+        } catch (StoryCorrectionException error) {
+            throw error;
+        } catch (RuntimeException error) {
+            throw new StoryCorrectionException(StoryCorrectionException.Reason.PREVIEW_FAILED,
+                    "当前修正说明未能形成可确认的变化", error);
+        }
     }
 
     private Snapshot snapshot(String userId, String saveId, long expectedRevision, String instruction) {
         StoredSave saved = saves.findOwned(userId, saveId)
-                .orElseThrow(() -> new IllegalArgumentException("没有找到可修正的命卷"));
-        if (!"ACTIVE".equals(saved.status())) throw new IllegalArgumentException("封存命卷不能继续修正");
+                .orElseThrow(() -> new StoryCorrectionException(StoryCorrectionException.Reason.SAVE_NOT_FOUND,
+                        "没有找到可修正的命卷"));
+        if (!"ACTIVE".equals(saved.status())) {
+            throw new StoryCorrectionException(StoryCorrectionException.Reason.SAVE_NOT_ACTIVE,
+                    "封存命卷不能继续修正");
+        }
         if (saved.revision() != expectedRevision) {
-            throw new OptimisticLockingFailureException("命卷已经发生变化，请刷新后重新发起修正");
+            throw new StoryCorrectionException(StoryCorrectionException.Reason.REVISION_CONFLICT,
+                    "命卷已经发生变化，请刷新后重新发起修正");
         }
         StoryProjection projection = projections.load(saved, entities.listAll(saveId),
                 memories.recentActive(saveId, RECENT_MEMORY_LIMIT));
