@@ -2,6 +2,14 @@ package com.wenxian.game.story.agent;
 
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.exception.AuthenticationException;
+import dev.langchain4j.exception.ContentFilteredException;
+import dev.langchain4j.exception.InvalidRequestException;
+import dev.langchain4j.exception.LangChain4jException;
+import dev.langchain4j.exception.ModelNotFoundException;
+import dev.langchain4j.exception.RateLimitException;
+import dev.langchain4j.exception.RetriableException;
+import dev.langchain4j.exception.UnresolvedModelServerException;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -42,10 +50,15 @@ public class LangChain4jStoryModelGateway implements StoryModelGateway {
                 .logResponses(false)
                 .build();
         long started = System.nanoTime();
-        ChatResponse response = model.chat(List.of(
-                SystemMessage.from(request.systemPrompt()),
-                UserMessage.from(request.userPrompt())
-        ));
+        ChatResponse response;
+        try {
+            response = model.chat(List.of(
+                    SystemMessage.from(request.systemPrompt()),
+                    UserMessage.from(request.userPrompt())
+            ));
+        } catch (RuntimeException error) {
+            throw normalize(error);
+        }
         long latency = (System.nanoTime() - started) / 1_000_000;
         TokenUsage usage = response.tokenUsage();
         int input = usage == null || usage.inputTokenCount() == null ? 0 : usage.inputTokenCount();
@@ -53,5 +66,33 @@ public class LangChain4jStoryModelGateway implements StoryModelGateway {
         String text = response.aiMessage() == null ? "" : response.aiMessage().text();
         return new Result(text == null ? "" : text, response.id(),
                 response.modelName() == null ? request.model() : response.modelName(), input, output, latency);
+    }
+
+    /** 将传输实现异常收敛为不含供应商细节的中性失败类型。 */
+    RuntimeException normalize(RuntimeException error) {
+        if (error instanceof StoryModelFailureException) return error;
+        if (error instanceof AuthenticationException) {
+            return failure(StoryModelFailureException.Kind.AUTHENTICATION, "model authentication rejected", error);
+        }
+        if (error instanceof ContentFilteredException) {
+            return failure(StoryModelFailureException.Kind.CONTENT_FILTERED, "model content filtered", error);
+        }
+        if (error instanceof RateLimitException) {
+            return failure(StoryModelFailureException.Kind.RATE_LIMITED, "model rate limited", error);
+        }
+        if (error instanceof InvalidRequestException || error instanceof ModelNotFoundException
+                || error instanceof UnresolvedModelServerException) {
+            return failure(StoryModelFailureException.Kind.REQUEST_REJECTED, "model request rejected", error);
+        }
+        if (error instanceof RetriableException || error instanceof LangChain4jException) {
+            return failure(StoryModelFailureException.Kind.TEMPORARY_UNAVAILABLE,
+                    "model temporarily unavailable", error);
+        }
+        return error;
+    }
+
+    private StoryModelFailureException failure(StoryModelFailureException.Kind kind, String diagnostic,
+                                                RuntimeException cause) {
+        return new StoryModelFailureException(kind, diagnostic, cause);
     }
 }

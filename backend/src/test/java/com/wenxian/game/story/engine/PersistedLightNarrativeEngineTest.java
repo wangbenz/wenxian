@@ -8,6 +8,7 @@ import com.wenxian.game.service.ActiveSavePolicyService;
 import com.wenxian.game.service.GameVersionService;
 import com.wenxian.game.service.PlayerAiService;
 import com.wenxian.game.story.agent.PromptContextAssembler;
+import com.wenxian.game.story.agent.StoryModelFailureException;
 import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.application.StoryTurnCommitService;
 import com.wenxian.game.story.application.StoryTurnPreparationService;
@@ -280,6 +281,108 @@ class PersistedLightNarrativeEngineTest {
         }
     }
 
+    @Test
+    void trustedTurnMapsProviderRejectionWithoutChangingSaveOrQuota() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            StoryTurnAgent rejectingAgent = (context, route) -> {
+                throw new StoryModelFailureException(StoryModelFailureException.Kind.REQUEST_REJECTED,
+                        "provider detail must remain internal", null);
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    rejectingAgent, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            GameApiException error = assertThrows(GameApiException.class, () -> engine.takeTurn(USER,
+                    created.saveId(), new TurnRequest("推开山门。", "request-rejected", 1)));
+
+            assertEquals("PLATFORM_GENERATION_UNAVAILABLE", error.code());
+            assertTrue(error.retryable());
+            assertFalse(error.turnConsumed());
+            assertFalse(error.stateChanged());
+            var unchanged = saves.findOwned(USER.userId(), created.saveId()).orElseThrow();
+            assertEquals(1, unchanged.revision());
+            assertEquals(0, unchanged.turnNumber());
+            assertEquals(0, jdbc.queryForObject("select count(*) from story_turn where save_id=?",
+                    Integer.class, created.saveId()));
+            assertEquals(0, jdbc.queryForObject(
+                    "select coalesce(sum(used_count), 0) from user_daily_quota where user_id=?",
+                    Integer.class, USER.userId()));
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
+    void trustedTurnRollsBackEveryWriteWhenQuotaRecordingFails() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            StoryTurnAgent agent = (context, route) -> {
+                EntityPatch consume = new EntityPatch(EntityOperation.UPDATE, "item-pills", "ITEM",
+                        null, "剩余两枚", null, null, new QuantityValue(true, 2), true,
+                        null, null);
+                StoryPatch patch = new StoryPatch("服丹静修", "你服下一枚清心丹，在静室中调息片刻。",
+                        new TimePassage(30, TimeResolution.COMPLETE, null), null,
+                        List.of(consume), List.of(), List.of(),
+                        List.of(new StoryPatch.MemoryDraft("EVENT", "服丹静修",
+                                "你服下一枚清心丹调息。", "NORMAL", List.of())),
+                        new StoryPatch.DecisionCheckpoint(false, null),
+                        List.of(new StoryPatch.ChoiceDraft("结束调息", "查看周围动静。")),
+                        "你已经服下一枚清心丹。短暂调息仍在继续。");
+                return new StoryTurnAgent.Generated(patch, List.of(
+                        new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                                "{}", "response-rollback", "test-model", 100, 180, 30)));
+            };
+            PlayerAiService failingQuota = new PlayerAiService(jdbc, null, RestClient.builder(),
+                    "https://example.invalid", "test-master-key") {
+                @Override
+                public void assertPublicQuota(String userId, Route route) {
+                    // 允许进入提交阶段，以验证提交末端失败后的整体回滚。
+                }
+
+                @Override
+                public void recordSuccessfulInvocation(String userId, Route route) {
+                    throw new IllegalStateException("simulated quota persistence failure");
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    agent, failingQuota);
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+            ObjectNode itemAttributes = mapper.createObjectNode();
+            itemAttributes.put("itemType", "丹药");
+            itemAttributes.put("quantity", 3);
+            itemAttributes.put("inPossession", true);
+            entities.insert(new Entity("item-pills", created.saveId(), "ITEM", "清心丹", "持有",
+                    true, "可清心定神", itemAttributes, 0, 0, Instant.now(), Instant.now()));
+
+            assertThrows(IllegalStateException.class, () -> engine.takeTurn(USER, created.saveId(),
+                    new TurnRequest("服下一枚清心丹。", "request-rollback", 1)));
+
+            var unchanged = saves.findOwned(USER.userId(), created.saveId()).orElseThrow();
+            assertEquals(1, unchanged.revision());
+            assertEquals(0, unchanged.turnNumber());
+            Entity unchangedPills = entities.listAll(created.saveId()).stream()
+                    .filter(value -> "item-pills".equals(value.id())).findFirst().orElseThrow();
+            assertEquals(3, unchangedPills.attributes().path("quantity").asInt());
+            assertEquals(1, memories.recentActive(created.saveId(), 20).size(),
+                    "创建命卷时的初始记忆必须保留，但失败回合不能新增记忆");
+            assertEquals(0, jdbc.queryForObject("select count(*) from story_turn where save_id=?",
+                    Integer.class, created.saveId()));
+        } finally {
+            database.shutdown();
+        }
+    }
+
     private PersistedLightNarrativeEngine engine(EmbeddedDatabase database, StorySaveRepository saves,
                                                   StoryEntityRepository entities,
                                                   StoryMemoryRepository memories) {
@@ -322,6 +425,16 @@ class PersistedLightNarrativeEngineTest {
                 new V014StateReducer(), new StubModels(), new V014WorldCatalog(false), null,
                 new ActiveSavePolicyService(jdbc), playerAi, releases, transactions, mapper,
                 true, true, "https://example.com");
+    }
+
+    private PlayerAiService testPlayerAi(JdbcTemplate jdbc) {
+        return new PlayerAiService(jdbc, null, RestClient.builder(),
+                "https://example.invalid", "test-master-key") {
+            @Override
+            public void assertPublicQuota(String userId, Route route) {
+                // 运行时事务测试不依赖运营额度配置，只保留成功扣减的真实数据库行为。
+            }
+        };
     }
 
     private EmbeddedDatabase database() {

@@ -10,6 +10,7 @@ import com.wenxian.game.config.RuntimeAiConfigService;
 import com.wenxian.game.service.ActiveSavePolicyService;
 import com.wenxian.game.service.GameVersionService;
 import com.wenxian.game.service.PlayerAiService;
+import com.wenxian.game.story.agent.StoryModelFailureException;
 import com.wenxian.game.story.agent.StoryModelRoute;
 import com.wenxian.game.story.application.StoryTurnCommitService;
 import com.wenxian.game.story.application.StoryTurnPreparationService;
@@ -352,6 +353,10 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                         "自己的推演密钥已失效", "推演服务拒绝了当前密钥，本次未消耗回合或修改命卷。",
                         List.of("前往设置重新验证密钥", "确认密钥仍有额度且未被停用"), false,
                         false, false, Map.of(), "personal credential rejected by provider", error);
+            }
+            StoryModelFailureException modelFailure = findModelFailure(error);
+            if (modelFailure != null) {
+                throw playerSafeModelFailure(modelFailure, resolvedRoute.hasCustomCredential());
             }
             if (error instanceof IllegalArgumentException) {
                 throw GameApiException.temporary("STORY_PATCH_REJECTED", "这一轮没有形成一致结果",
@@ -729,9 +734,53 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         int depth = 0;
         while (cursor != null && depth++ < 8) {
             if (cursor instanceof AuthenticationException) return true;
+            if (cursor instanceof StoryModelFailureException failure
+                    && failure.kind() == StoryModelFailureException.Kind.AUTHENTICATION) return true;
             cursor = cursor.getCause();
         }
         return false;
+    }
+
+    private StoryModelFailureException findModelFailure(Throwable error) {
+        Throwable cursor = error;
+        int depth = 0;
+        while (cursor != null && depth++ < 8) {
+            if (cursor instanceof StoryModelFailureException failure) return failure;
+            cursor = cursor.getCause();
+        }
+        return null;
+    }
+
+    private GameApiException playerSafeModelFailure(StoryModelFailureException failure, boolean personal) {
+        return switch (failure.kind()) {
+            case REQUEST_REJECTED -> personal
+                    ? new GameApiException(HttpStatus.CONFLICT, "PERSONAL_GENERATION_REJECTED", "CREDENTIAL",
+                    "自己的推演服务没有接受请求",
+                    "常见原因是账户余额不足、当前能力不可用或密钥权限不足。本次未消耗回合，也没有改变命卷。",
+                    List.of("检查对应账户余额与权限", "重新验证或更换自己的密钥"), false,
+                    false, false, Map.of(), "personal model request rejected", failure)
+                    : new GameApiException(HttpStatus.SERVICE_UNAVAILABLE, "PLATFORM_GENERATION_UNAVAILABLE", "SYSTEM",
+                    "推演服务暂时不可用",
+                    "平台推演配置当前需要维护，本次未消耗回合，也没有改变命卷。",
+                    List.of("稍后重新尝试", "留意后续服务通知"), true,
+                    false, false, Map.of(), "platform model request rejected", failure);
+            case RATE_LIMITED -> new GameApiException(HttpStatus.BAD_GATEWAY, "GENERATION_RATE_LIMITED", "SYSTEM",
+                    "当前推演请求较多", "服务暂时没有完成这一轮，本次未消耗回合，也没有改变命卷。",
+                    List.of("稍等片刻后重试"), true, false, false, Map.of(),
+                    "model request rate limited", failure);
+            case CONTENT_FILTERED -> new GameApiException(HttpStatus.BAD_REQUEST, "STORY_CONTENT_FILTERED", "INPUT",
+                    "这一轮暂时无法生成", "本轮描述未能通过推演服务检查，命卷没有发生变化。",
+                    List.of("换一种更简洁的方式描述行动", "减少可能引起误解的细节"), false,
+                    false, false, Map.of(), "model content filtered", failure);
+            case TEMPORARY_UNAVAILABLE -> GameApiException.temporary("STORY_GENERATION_UNAVAILABLE",
+                    "推演服务暂时没有响应", "本次未消耗回合，也没有改变命卷。",
+                    List.of("稍后重新尝试本轮行动"), "model temporarily unavailable", failure);
+            case AUTHENTICATION -> new GameApiException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "PLATFORM_GENERATION_UNAVAILABLE", "SYSTEM", "推演服务暂时不可用",
+                    "平台推演配置当前需要维护，本次未消耗回合，也没有改变命卷。",
+                    List.of("稍后重新尝试", "留意后续服务通知"), true,
+                    false, false, Map.of(), "platform model authentication rejected", failure);
+        };
     }
 
     private SaveResponse withTurnGate(String userId, Supplier<SaveResponse> action) {
