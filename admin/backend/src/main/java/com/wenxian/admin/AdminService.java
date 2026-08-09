@@ -719,21 +719,7 @@ public class AdminService {
     }
 
     int usersReachingTurnMilestone(int milestone) {
-        return count("""
-                SELECT count(distinct user_id) FROM (
-                    SELECT gs.user_id, gt.save_id
-                    FROM game_save gs
-                    JOIN game_turn gt ON gt.save_id = gs.id
-                    GROUP BY gs.user_id, gt.save_id
-                    HAVING count(*) >= ?
-                    UNION ALL
-                    SELECT gla.user_id, glta.original_save_id
-                    FROM game_life_archive gla
-                    JOIN game_life_turn_archive glta ON glta.life_archive_id = gla.id
-                    GROUP BY gla.user_id, glta.original_save_id
-                    HAVING count(*) >= ?
-                ) milestone_users
-                """, milestone, milestone);
+        return count("select count(distinct user_id) from story_save where turn_number >= ?", milestone);
     }
 
     private Map<String, Object> funnelStage(String key, String label, int users, int totalUsers) {
@@ -818,7 +804,7 @@ public class AdminService {
         result.put("currentUsers", currentUsers);
         result.put("remainingSlots", Math.max(0, maxUsers - currentUsers));
         result.put("limitMessage", configValue("registration_limit_message", "当前系统试玩人数较多，暂时停止新账号注册。"));
-        result.put("contactText", configValue("registration_contact_text", "如需参与测试或反馈问题，请加入QQ群：1092478336。"));
+        result.put("contactText", configValue("registration_contact_text", "如需参与测试或反馈问题，请加入《问仙录》二群：532549329。"));
         return result;
     }
 
@@ -969,14 +955,14 @@ public class AdminService {
 
         String from = """
                 FROM app_user u
-                LEFT JOIN game_save gs ON gs.id = (
-                    SELECT gs_recent.id FROM game_save gs_recent
-                    WHERE gs_recent.user_id = u.id
+                LEFT JOIN story_save gs ON gs.id = (
+                    SELECT gs_recent.id FROM story_save gs_recent
+                    WHERE gs_recent.user_id = u.id AND gs_recent.status = 'ACTIVE'
                     ORDER BY gs_recent.updated_at DESC LIMIT 1
                 )
                 LEFT JOIN (
                     SELECT user_id, count(*) active_save_count
-                    FROM game_save GROUP BY user_id
+                    FROM story_save WHERE status = 'ACTIVE' GROUP BY user_id
                 ) active_saves ON active_saves.user_id = u.id
                 LEFT JOIN user_ai_credential cred ON cred.user_id = u.id
                 LEFT JOIN (
@@ -986,7 +972,7 @@ public class AdminService {
                 ) registration ON registration.user_id = u.id
                 LEFT JOIN (
                     SELECT user_id, count(*) archive_count
-                    FROM game_life_archive GROUP BY user_id
+                    FROM story_save WHERE status <> 'ACTIVE' GROUP BY user_id
                 ) arc ON arc.user_id = u.id
                 """;
         int total = jdbc.queryForObject("SELECT count(*) " + from + where, Integer.class, args.toArray());
@@ -995,7 +981,7 @@ public class AdminService {
                 SELECT u.id, u.email,
                        COALESCE(registration.first_registered_at, u.registered_at) AS registered_at,
                        u.last_login_at,
-                       gs.id AS save_id, gs.state_json, gs.updated_at AS save_updated,
+                       gs.id AS save_id, gs.state_json, gs.turn_number, gs.updated_at AS save_updated,
                        coalesce(arc.archive_count, 0) AS archive_count,
                        coalesce(active_saves.active_save_count, 0) AS active_save_count,
                        cred.masked_suffix credential_suffix, cred.status credential_status,
@@ -1016,7 +1002,7 @@ public class AdminService {
                 realm = player.path("realm").asText("");
                 race = player.path("race").asText("");
                 rowDifficulty = state.path("difficulty").asText("NORMAL");
-                turnCount = state.path("turn").asInt(0);
+                turnCount = Math.max(row.getInt("turn_number"), state.path("turn").asInt(0));
             } catch (Exception ignored) { }
             Map<String, Object> user = new LinkedHashMap<>();
             user.put("userId", row.getString("id"));
@@ -1054,12 +1040,14 @@ public class AdminService {
 
     public List<Map<String, Object>> currentTurnRanking(int requestedLimit) {
         int limit = Math.max(1, Math.min(requestedLimit, 50));
-        List<Map<String, Object>> ranking = jdbc.query("""
+        return jdbc.query("""
                 SELECT u.id user_id, u.email, u.last_login_at,
-                       gs.id save_id, gs.state_json, gs.updated_at
-                FROM game_save gs
+                       gs.id save_id, gs.state_json, gs.turn_number, gs.updated_at
+                FROM story_save gs
                 JOIN app_user u ON u.id = gs.user_id
-                WHERE u.status = 'ACTIVE'
+                WHERE u.status = 'ACTIVE' AND gs.status = 'ACTIVE'
+                ORDER BY gs.turn_number DESC, gs.updated_at DESC
+                LIMIT ?
                 """, (row, index) -> {
             String playerName = "";
             String realm = "";
@@ -1068,7 +1056,7 @@ public class AdminService {
                 JsonNode state = mapper.readTree(row.getString("state_json"));
                 playerName = state.path("player").path("name").asText("");
                 realm = state.path("player").path("realm").asText("");
-                turn = Math.max(0, state.path("turn").asInt(0));
+                turn = Math.max(row.getInt("turn_number"), state.path("turn").asInt(0));
             } catch (Exception ignored) { }
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("userId", row.getString("user_id"));
@@ -1080,16 +1068,7 @@ public class AdminService {
             item.put("lastActiveAt", displayTime(row.getTimestamp("last_login_at")));
             item.put("saveUpdatedAt", displayTime(row.getTimestamp("updated_at")));
             return item;
-        });
-        ranking.sort((left, right) -> {
-            int byTurn = Integer.compare(
-                    ((Number) right.get("turn")).intValue(),
-                    ((Number) left.get("turn")).intValue());
-            if (byTurn != 0) return byTurn;
-            return String.valueOf(right.get("saveUpdatedAt"))
-                    .compareTo(String.valueOf(left.get("saveUpdatedAt")));
-        });
-        return ranking.stream().limit(limit).toList();
+        }, limit);
     }
 
     public Map<String, Object> userDetail(String userId) {
@@ -1136,30 +1115,30 @@ public class AdminService {
                 SELECT gs.id, gs.slot_no, gs.state_json, gs.updated_at,
                        coalesce(turns.turn_count, 0) turn_count,
                        coalesce(turns.total_tokens, 0) total_tokens
-                FROM game_save gs
+                FROM story_save gs
                 LEFT JOIN (
                     SELECT save_id, count(*) turn_count,
                            coalesce(sum(prompt_tokens + completion_tokens), 0) total_tokens
-                    FROM game_turn GROUP BY save_id
+                    FROM story_turn GROUP BY save_id
                 ) turns ON turns.save_id = gs.id
-                WHERE gs.user_id = ? ORDER BY gs.slot_no
+                WHERE gs.user_id = ? AND gs.status = 'ACTIVE' ORDER BY gs.slot_no
                 """, (row, idx) -> lifeSummary("CURRENT", "ACTIVE", row.getString("id"),
                 row.getString("state_json"), displayTime(row.getTimestamp("updated_at")),
                 row.getInt("turn_count"), row.getLong("total_tokens")), userId);
         var historicalLives = jdbc.query("""
-                SELECT gla.id, gla.original_save_id, gla.state_json, gla.end_reason, gla.ended_at,
+                SELECT gs.id, gs.state_json, gs.status, gs.updated_at,
                        coalesce(turns.turn_count, 0) turn_count,
                        coalesce(turns.total_tokens, 0) total_tokens
-                FROM game_life_archive gla
+                FROM story_save gs
                 LEFT JOIN (
-                    SELECT life_archive_id, count(*) turn_count,
+                    SELECT save_id, count(*) turn_count,
                            coalesce(sum(prompt_tokens + completion_tokens), 0) total_tokens
-                    FROM game_life_turn_archive GROUP BY life_archive_id
-                ) turns ON turns.life_archive_id = gla.id
-                WHERE gla.user_id = ? ORDER BY gla.ended_at DESC
-                """, (row, idx) -> lifeSummary("ARCHIVED", row.getString("end_reason"),
-                row.getString("original_save_id"), row.getString("state_json"),
-                displayTime(row.getTimestamp("ended_at")), row.getInt("turn_count"),
+                    FROM story_turn GROUP BY save_id
+                ) turns ON turns.save_id = gs.id
+                WHERE gs.user_id = ? AND gs.status <> 'ACTIVE' ORDER BY gs.updated_at DESC
+                """, (row, idx) -> lifeSummary("ARCHIVED", row.getString("status"),
+                row.getString("id"), row.getString("state_json"),
+                displayTime(row.getTimestamp("updated_at")), row.getInt("turn_count"),
                 row.getLong("total_tokens")), userId);
 
         List<Map<String, Object>> allLives = new ArrayList<>(currentLives);
@@ -1207,20 +1186,17 @@ public class AdminService {
     public Map<String, Object> userTurns(String userId, String saveId, int page, int size, Integer turnNumber) {
         int limit = Math.max(1, Math.min(size, 100));
         int offset = Math.max(page, 0) * limit;
-        boolean current = count("select count(*) from game_save where id = ? and user_id = ?", saveId, userId) > 0;
-        String table = current ? "game_turn" : "game_life_turn_archive";
-        String where = current ? "save_id = ?" : "original_save_id = ?";
-        if (!current && count("select count(*) from game_life_archive where original_save_id = ? and user_id = ?", saveId, userId) == 0) {
+        if (count("select count(*) from story_save where id = ? and user_id = ?", saveId, userId) == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "该角色记录不存在");
         }
         String turnFilter = turnNumber == null ? "" : " and turn_number = " + Math.max(0, turnNumber);
-        int total = count("select count(*) from " + table + " where " + where + turnFilter, saveId);
+        int total = count("select count(*) from story_turn where save_id = ?" + turnFilter, saveId);
         var turns = jdbc.query("""
                 SELECT turn_number, player_action, prompt_tokens, completion_tokens,
-                       latency_ms, model, response_id, state_delta_json, created_at
-                FROM %s WHERE %s %s
+                       latency_ms, model, request_id, state_patch_json, created_at
+                FROM story_turn WHERE save_id = ? %s
                 ORDER BY turn_number DESC LIMIT ? OFFSET ?
-                """.formatted(table, where, turnFilter), (row, idx) -> {
+                """.formatted(turnFilter), (row, idx) -> {
             Map<String, Object> t = new LinkedHashMap<>();
             t.put("turn", row.getInt("turn_number"));
             t.put("action", row.getString("player_action"));
@@ -1229,11 +1205,11 @@ public class AdminService {
             t.put("totalTokens", row.getInt("prompt_tokens") + row.getInt("completion_tokens"));
             t.put("latency", row.getLong("latency_ms"));
             t.put("model", row.getString("model"));
-            if (row.getString("response_id") != null) {
-                t.put("responseId", row.getString("response_id"));
+            if (row.getString("request_id") != null) {
+                t.put("responseId", row.getString("request_id"));
             }
             t.put("at", displayTime(row.getTimestamp("created_at")));
-            t.put("stateDelta", row.getString("state_delta_json"));
+            t.put("stateDelta", row.getString("state_patch_json"));
             t.put("status", "SUCCESS");
             return t;
         }, saveId, limit, offset);
@@ -1241,9 +1217,7 @@ public class AdminService {
     }
 
     public List<Map<String, Object>> userAdjudications(String userId, String saveId, int limit) {
-        boolean ownsCurrent = count("select count(*) from game_save where id=? and user_id=?", saveId, userId) > 0;
-        boolean ownsArchive = count("select count(*) from game_life_archive where original_save_id=? and user_id=?", saveId, userId) > 0;
-        if (!ownsCurrent && !ownsArchive) {
+        if (count("select count(*) from story_save where id=? and user_id=?", saveId, userId) == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "该角色记录不存在");
         }
         return jdbc.query("""
@@ -1673,7 +1647,7 @@ public class AdminService {
                        e.http_status, e.public_message, e.diagnostic, e.created_at,
                        coalesce(u.email, '') email, s.state_json
                 from operation_error e
-                left join game_save s on s.id = e.save_id
+                left join story_save s on s.id = e.save_id
                 left join app_user u on u.id = s.user_id
                 where (? = '' or e.category = ?)
                 order by e.created_at desc

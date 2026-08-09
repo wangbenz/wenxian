@@ -41,10 +41,13 @@ class AdminServiceUserFilterTest {
                 )
                 """);
         jdbc.execute("""
-                create table game_save (
+                create table story_save (
                     id varchar(80) primary key,
                     user_id varchar(64) not null,
+                    slot_no integer not null default 1,
+                    status varchar(24) not null,
                     state_json clob not null,
+                    turn_number integer not null default 0,
                     updated_at timestamp
                 )
                 """);
@@ -65,28 +68,16 @@ class AdminServiceUserFilterTest {
                 )
                 """);
         jdbc.execute("""
-                create table game_life_archive (
-                    id varchar(80) primary key,
-                    user_id varchar(64) not null,
-                    original_save_id varchar(80) not null,
-                    state_json clob not null,
-                    end_reason varchar(24) not null default 'LEGACY',
-                    ended_at timestamp not null
-                )
-                """);
-        jdbc.execute("""
-                create table game_turn (
+                create table story_turn (
                     id varchar(80) primary key,
                     save_id varchar(80) not null,
-                    prompt_tokens integer not null default 0,
-                    completion_tokens integer not null default 0
-                )
-                """);
-        jdbc.execute("""
-                create table game_life_turn_archive (
-                    id varchar(80) primary key,
-                    life_archive_id varchar(80) not null,
-                    original_save_id varchar(80) not null,
+                    request_id varchar(80) not null,
+                    turn_number integer not null,
+                    player_action clob,
+                    state_patch_json clob,
+                    model varchar(120),
+                    latency_ms bigint not null default 0,
+                    created_at timestamp not null default current_timestamp,
                     prompt_tokens integer not null default 0,
                     completion_tokens integer not null default 0
                 )
@@ -140,16 +131,9 @@ class AdminServiceUserFilterTest {
     void requiresMilestoneToBeReachedWithinOneCharacter() {
         insertUser("user-split", "split@example.com", "2026-07-30", 10);
         insertUser("user-reached", "reached@example.com", "2026-07-30", 11);
-        jdbc.update("insert into game_save(id,user_id,state_json,updated_at) values ('save-current','user-split','{}',current_timestamp)");
-        jdbc.update("insert into game_life_archive(id,user_id,original_save_id,state_json,end_reason,ended_at) values ('life-split','user-split','save-old','{}','RESTARTED',current_timestamp)");
-        jdbc.update("insert into game_life_archive(id,user_id,original_save_id,state_json,end_reason,ended_at) values ('life-reached','user-reached','save-three','{}','DEAD',current_timestamp)");
-        insertCurrentTurn("current-1", "save-current");
-        insertCurrentTurn("current-2", "save-current");
-        insertArchivedTurn("old-1", "life-split", "save-old");
-        insertArchivedTurn("old-2", "life-split", "save-old");
-        insertArchivedTurn("three-1", "life-reached", "save-three");
-        insertArchivedTurn("three-2", "life-reached", "save-three");
-        insertArchivedTurn("three-3", "life-reached", "save-three");
+        insertSave("save-current", "user-split", "ACTIVE", 2, "{}");
+        insertSave("save-old", "user-split", "ARCHIVED", 2, "{}");
+        insertSave("save-three", "user-reached", "DEAD", 3, "{}");
 
         assertEquals(2, service.usersReachingTurnMilestone(1));
         assertEquals(1, service.usersReachingTurnMilestone(3));
@@ -161,12 +145,16 @@ class AdminServiceUserFilterTest {
         insertUser("user-low", "low@example.com", "2026-07-30", 10);
         insertUser("user-high", "high@example.com", "2026-07-30", 11);
         jdbc.update("""
-                insert into game_save(id,user_id,state_json,updated_at)
-                values ('save-low','user-low','{"turn":3,"player":{"name":"低回合","realm":"凡俗"}}',current_timestamp)
+                insert into story_save(id,user_id,status,state_json,turn_number,updated_at)
+                values ('save-low','user-low','ACTIVE','{"turn":3,"player":{"name":"低回合","realm":"凡俗"}}',3,current_timestamp)
                 """);
         jdbc.update("""
-                insert into game_save(id,user_id,state_json,updated_at)
-                values ('save-high','user-high','{"turn":18,"player":{"name":"高回合","realm":"引气"}}',current_timestamp)
+                insert into story_save(id,user_id,status,state_json,turn_number,updated_at)
+                values ('save-high','user-high','ACTIVE','{"turn":18,"player":{"name":"高回合","realm":"引气"}}',18,current_timestamp)
+                """);
+        jdbc.update("""
+                insert into story_save(id,user_id,status,state_json,turn_number,updated_at)
+                values ('save-archived','user-low','ARCHIVED','{"turn":999,"player":{"name":"封存命卷","realm":"化神"}}',999,current_timestamp)
                 """);
 
         List<Map<String, Object>> ranking = service.currentTurnRanking(10);
@@ -191,11 +179,8 @@ class AdminServiceUserFilterTest {
                 .atZone(shanghai).toInstant());
     }
 
-    private void insertCurrentTurn(String id, String saveId) {
-        jdbc.update("insert into game_turn(id,save_id,prompt_tokens,completion_tokens) values (?,?,10,20)", id, saveId);
-    }
-
-    private void insertArchivedTurn(String id, String lifeId, String saveId) {
-        jdbc.update("insert into game_life_turn_archive(id,life_archive_id,original_save_id,prompt_tokens,completion_tokens) values (?,?,?,10,20)", id, lifeId, saveId);
+    private void insertSave(String id, String userId, String status, int turns, String state) {
+        jdbc.update("insert into story_save(id,user_id,status,state_json,turn_number,updated_at) values (?,?,?,?,?,current_timestamp)",
+                id, userId, status, state, turns);
     }
 }

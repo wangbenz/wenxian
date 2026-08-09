@@ -431,6 +431,7 @@ create table if not exists story_save (
     unique key uk_story_save_source (source_type, source_save_id),
     key idx_story_save_user_status (user_id, status, updated_at),
     key idx_story_save_engine (engine_code, engine_version, status),
+    key idx_story_save_status_turn (status, turn_number, updated_at) comment '按生命周期和回合数查询当前命卷排行榜',
     constraint fk_story_save_user foreign key (user_id) references app_user(id) on delete cascade,
     constraint fk_story_save_parent foreign key (parent_save_id) references story_save(id),
     constraint fk_story_save_engine foreign key (engine_code, engine_version)

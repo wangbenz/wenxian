@@ -27,7 +27,6 @@ public class AnalyticsAggregationService {
     private static final ZoneId REPORTING_ZONE = ZoneId.of("Asia/Shanghai");
     private static final int CALCULATION_VERSION = 1;
     private final JdbcTemplate jdbc;
-    private volatile boolean startupReconciled;
 
     public AnalyticsAggregationService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -50,27 +49,22 @@ public class AnalyticsAggregationService {
                 // 最后写入完成标记。此前任何一步中断，下一次都会幂等重试完整回算。
                 put(today, "BACKFILL_COMPLETED", 1);
             } else {
-                // 部署切换期间旧后端尚未发送统计事件，管理台每次启动时从权威业务表补齐一次差额。
-                if (!startupReconciled) backfillUserDays();
-                // 仅刷新今天与昨天，用于覆盖跨日延迟写入；不反复扫描全部历史表。
+                // 历史回算完成后只刷新独立统计层，避免管理台启动反复扫描、混算旧版业务表。
                 aggregateDay(today.minusDays(1));
                 aggregateDay(today);
             }
-            startupReconciled = true;
         } catch (RuntimeException error) {
             log.error("统计聚合失败，已保留上一版可用数据", error);
         }
     }
 
     /**
-     * 每天低峰期从权威业务表重新对账一次，弥补统计异步线程在短暂故障期间可能漏记的事实。
-     * 该任务幂等更新统计层，不修改玩家业务表。
+     * 每天低峰期刷新统计汇总。玩家事实由实时统计事件写入，不再跨版本扫描业务表。
      */
     @Scheduled(cron = "0 20 4 * * *", zone = "Asia/Shanghai")
     public void reconcileSourceFacts() {
         try {
             LocalDate today = LocalDate.now(REPORTING_ZONE);
-            backfillUserDays();
             aggregateDay(today.minusDays(1));
             aggregateDay(today);
         } catch (RuntimeException error) {
@@ -90,8 +84,8 @@ public class AnalyticsAggregationService {
     }
 
     /**
-     * 将旧命卷事实回算到统一玩家日表。这里只读旧表，不修改、不删除玩家历史数据。
-     * 新版实时事件与回算数据相遇时取较大计数，避免重复累计。
+     * 首次启用统计平台时，从统一命卷事实回算玩家日表。
+     * 旧版数据应先迁移到统一故事表，禁止在统计查询中长期 UNION 多套业务表。
      */
     void backfillUserDays() {
         jdbc.update("""
@@ -121,32 +115,10 @@ public class AnalyticsAggregationService {
                            0, coalesce(s.created_release, s.source_edition, 'UNKNOWN')
                     from story_state_correction c join story_save s on s.id=c.save_id
                     union all
-                    select s.user_id,
-                           coalesce((select min(t.created_at) from game_turn t where t.save_id=s.id), s.updated_at),
-                           1, 0, 0, 0, 0, 'LEGACY'
-                    from game_save s
-                    union all
-                    select s.user_id, t.created_at, 0, 1, 0, 0, 0, 'LEGACY'
-                    from game_turn t join game_save s on s.id=t.save_id
-                    union all
-                    select a.user_id,
-                           coalesce((select min(t.created_at) from game_life_turn_archive t where t.life_archive_id=a.id), a.ended_at),
-                           1, 0, 0, 0, 0, 'LEGACY'
-                    from game_life_archive a
-                    union all
-                    select user_id, ended_at, 0, 0, 0, 0, 1, 'LEGACY'
-                    from game_life_archive
-                    union all
-                    select a.user_id, t.created_at, 0, 1, 0, 0, 0, 'LEGACY'
-                    from game_life_turn_archive t join game_life_archive a on a.id=t.life_archive_id
-                    union all
-                    select s.user_id, coalesce(v.updated_at, s.updated_at), 0, 0, 0, 0, 1,
+                    select s.user_id, s.updated_at, 0, 0, 0, 0, 1,
                            coalesce(s.created_release, s.source_edition, 'UNKNOWN')
                     from story_save s
-                    left join story_save_migration m
-                           on m.target_save_id=s.id and m.source_engine='V014' and m.status='SUCCESS'
-                    left join v014_game_save v on v.id=m.source_save_id
-                    where s.status='ARCHIVED'
+                    where s.status<>'ACTIVE'
                 ) f
                 group by date(f.occurred_at), f.user_id
                 on duplicate key update

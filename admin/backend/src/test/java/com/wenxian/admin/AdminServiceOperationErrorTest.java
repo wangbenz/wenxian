@@ -25,7 +25,7 @@ class AdminServiceOperationErrorTest {
                 .setName("admin-errors-" + UUID.randomUUID()).build();
         jdbc = new JdbcTemplate(database);
         jdbc.execute("create table app_user(id varchar(64) primary key, email varchar(255) not null)");
-        jdbc.execute("create table game_save(id varchar(80) primary key, user_id varchar(64), state_json clob)");
+        jdbc.execute("create table story_save(id varchar(80) primary key, user_id varchar(64), state_json clob)");
         jdbc.execute("""
                 create table operation_error(
                   reference_id varchar(40) primary key, save_id varchar(80), operation varchar(120),
@@ -33,7 +33,7 @@ class AdminServiceOperationErrorTest {
                   public_message varchar(600), diagnostic clob, created_at timestamp)
                 """);
         jdbc.update("insert into app_user(id,email) values ('user-1','player@example.com')");
-        jdbc.update("insert into game_save(id,user_id,state_json) values ('save-1','user-1','{\"player\":{\"name\":\"林渊\"}}')");
+        jdbc.update("insert into story_save(id,user_id,state_json) values ('save-1','user-1','{\"player\":{\"name\":\"林渊\"}}')");
         jdbc.update("""
                 insert into operation_error(reference_id,save_id,operation,category,error_code,http_status,public_message,diagnostic,created_at)
                 values ('WX-20260802-ABC123','save-1','POST /turns','RESOURCE','CURRENCY_INSUFFICIENT',422,'身上钱财不足','wallet mismatch',current_timestamp)

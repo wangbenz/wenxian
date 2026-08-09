@@ -136,6 +136,11 @@
 
 **权威性**：当前主角、世界时间、当前位置、当前处境和使用的引擎以本表为准。
 
+重要查询索引：
+
+- `idx_story_save_user_status(user_id,status,updated_at)`：按账号读取当前与封存命卷；
+- `idx_story_save_status_turn(status,turn_number,updated_at)`：管理台只在指定生命周期内查询回合榜，避免加载全部命卷后在 Java 排序。
+
 ## 6. `story_turn`：回合事实表
 
 **职责**：追加保存每次正式行动、正文、结构化补丁、模型路由、Token和延迟。成功写入后不可修改剧情事实。

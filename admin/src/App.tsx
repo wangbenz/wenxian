@@ -1,21 +1,66 @@
 import "./App.css";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import {
+  ChartBar,
+  Check,
+  CaretDown,
+  ArrowRight,
+  GearSix,
+  Key,
+  List,
+  PaperPlaneTilt,
+  ShieldCheck,
+  SignOut,
+  UsersThree,
+  WarningCircle,
+  X,
+} from "@phosphor-icons/react";
 import { adminApi, clearToken, isAuthenticated, setToken, type AccessControl, type ActionAdjudication, type AdminAccount, type AgentExecution, type AiUsageAnalytics, type AnalyticsDay, type AnalyticsOverview, type DashboardData, type GameplayAnalytics, type GameplayConfig, type GenerationProvider, type GrowthAnalytics, type LifeSummary, type MigrationOverview, type MigrationPolicy, type MigrationPreviewPage, type MigrationTask, type OperationError, type RegistrationConfig, type ReleaseNoteAdmin, type TurnPage, type TurnRankingItem, type TurnRow, type UserDetail, type UserRow, type V014Overview } from "./admin-api";
 
+const LazyOverviewTrendChart = lazy(() => import("./OverviewTrendChart"));
+
 type Page = "dashboard" | "growth" | "gameplay" | "ai" | "migrations" | "users" | "errors" | "releases" | "models" | "limits" | "access" | "operations" | "admins" | "logs";
-const NAV: Array<[Page, string, string, string]> = [
-  ["dashboard", "运营概览", "OVERVIEW", "数据分析"], ["growth", "增长与留存", "RETENTION", "数据分析"], ["gameplay", "游玩情况", "GAMEPLAY", "数据分析"], ["ai", "模型消耗", "AI USAGE", "数据分析"],
-  ["users", "玩家档案", "PLAYERS", "玩家支持"], ["errors", "问题查询", "SUPPORT", "玩家支持"],
-  ["releases", "版本公告", "RELEASES", "发布与配置"], ["models", "生成模型", "MODELS", "发布与配置"], ["limits", "推演额度", "LIMITS", "发布与配置"], ["access", "灰度访问", "ACCESS", "发布与配置"], ["operations", "运营配置", "OPERATIONS", "发布与配置"],
-  ["migrations", "命卷迁移", "MIGRATION", "系统维护"], ["admins", "管理账号", "ADMINS", "系统维护"], ["logs", "操作记录", "AUDIT", "系统维护"],
+type ModuleId = "data" | "players" | "publishing" | "settings" | "system";
+type PageConfig = { id: Page; label: string; module: ModuleId };
+
+// 管理台只保留五个稳定一级模块，业务页面通过模块内页签承载，避免功能增加时无限堆叠侧栏。
+const MODULES = [
+  { id: "data" as const, label: "数据中心", icon: ChartBar },
+  { id: "players" as const, label: "玩家中心", icon: UsersThree },
+  { id: "publishing" as const, label: "发布中心", icon: PaperPlaneTilt },
+  { id: "settings" as const, label: "平台设置", icon: GearSix },
+  { id: "system" as const, label: "系统维护", icon: ShieldCheck },
 ];
+const PAGES: PageConfig[] = [
+  { id: "dashboard", label: "运营总览", module: "data" },
+  { id: "growth", label: "增长留存", module: "data" },
+  { id: "gameplay", label: "游玩行为", module: "data" },
+  { id: "ai", label: "模型成本", module: "data" },
+  { id: "users", label: "玩家档案", module: "players" },
+  { id: "errors", label: "问题查询", module: "players" },
+  { id: "releases", label: "版本公告", module: "publishing" },
+  { id: "operations", label: "运营配置", module: "publishing" },
+  { id: "models", label: "生成模型", module: "settings" },
+  { id: "limits", label: "推演额度", module: "settings" },
+  { id: "access", label: "灰度访问", module: "settings" },
+  { id: "migrations", label: "命卷迁移", module: "system" },
+  { id: "admins", label: "管理账号", module: "system" },
+  { id: "logs", label: "操作记录", module: "system" },
+];
+const DEFAULT_PAGE: Record<ModuleId, Page> = {
+  data: "dashboard",
+  players: "users",
+  publishing: "releases",
+  settings: "models",
+  system: "logs",
+};
 const fmt = (value?: string | null) => value ? new Date(value).toLocaleString("zh-CN") : "—";
 const shanghaiDate = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date());
 const num = (value: number) => new Intl.NumberFormat("zh-CN").format(value || 0);
 const compactNum = (value: number) => new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(value || 0);
 const latency = (value: number) => value ? `${(value / 1000).toFixed(1)} 秒` : "—";
 const difficulty = (value: string) => value === "HARD" ? "困难" : "普通";
-const lifeEndReason = (value: LifeSummary["endReason"]) => value === "DEAD" ? "身死道消" : value === "ABANDONED" ? "主动封存" : value === "RESTARTED" ? "主动重开" : value === "ACTIVE" ? "当前命卷" : "旧版记录";
+const lifeEndReason = (value: LifeSummary["endReason"]) => value === "DEAD" ? "身死道消" : value === "ABANDONED" ? "主动封存" : value === "RESTARTED" ? "主动重开" : value === "ARCHIVED" ? "已封存" : value === "ACTIVE" ? "当前命卷" : "旧版记录";
 const problemCategory = (value: string) => ({ INPUT: "输入与规则", RESOURCE: "资源与货币", ACCOUNT: "账号登录", CREDENTIAL: "推演密钥", QUOTA: "回合额度", STATE: "存档状态", SYSTEM: "服务异常" } as Record<string, string>)[value] ?? value;
 
 function useOverlay(onClose: () => void) {
@@ -49,35 +94,85 @@ function Login({ onDone }: { onDone: () => void }) {
 function Shell({ onLogout }: { onLogout: () => void }) {
   const [page, setPage] = useState<Page>("dashboard"); const [open, setOpen] = useState(false); const [securityOpen, setSecurityOpen] = useState(false); const [registrationDate, setRegistrationDate] = useState("");
   const version = useLoad(() => adminApi.appVersion(), []);
-  const item = NAV.find(([id]) => id === page)!;
-  const groups = [...new Set(NAV.map((entry) => entry[3]))];
-  return <div className="admin-shell"><aside aria-label="管理台导航" className={open ? "sidebar open" : "sidebar"}><button aria-label="关闭导航菜单" className="sidebar-close" onClick={() => setOpen(false)}>×</button><div className="sidebar-brand"><strong>问仙录</strong><span>试玩运营台 · {version.data?.version ?? "同步中"}</span></div><nav>{groups.map((group) => <section className="nav-group" key={group}><h2>{group}</h2>{NAV.filter((entry) => entry[3] === group).map(([id, label, english]) => <button aria-current={page === id ? "page" : undefined} key={id} onClick={() => { if (id === "users") setRegistrationDate(""); setPage(id); setOpen(false); }}><small>{english}</small>{label}</button>)}</section>)}</nav><div className="sidebar-actions"><button onClick={() => { setSecurityOpen(true); setOpen(false); }}>修改管理密码</button><button onClick={onLogout}>退出管理台</button></div></aside>{open && <button aria-label="关闭导航菜单" className="sidebar-mask" onClick={() => setOpen(false)} />}<main className="admin-main"><header><button aria-expanded={open} aria-label="打开导航菜单" className="menu" onClick={() => setOpen(true)}><span aria-hidden="true">☰</span></button><div><p>{item[2]}</p><h1>{item[1]}</h1></div><span className="environment">内部试玩环境</span></header><section className="admin-content">{page === "dashboard" && <AnalyticsDashboard onSelectRegistrationDate={(date) => { setRegistrationDate(date); setPage("users"); }} />}{page === "growth" && <GrowthPage />}{page === "gameplay" && <GameplayPage />}{page === "ai" && <AiUsagePage />}{page === "migrations" && <MigrationCenter />}{page === "users" && <Users initialRegisteredDate={registrationDate} />}{page === "errors" && <OperationErrors />}{page === "releases" && <Releases currentVersion={version.data?.version ?? ""} onVersionChanged={version.reload} />}{page === "models" && <Models />}{page === "limits" && <Limits />}{page === "access" && <AccessControlPage />}{page === "operations" && <Operations />}{page === "admins" && <AdminAccounts />}{page === "logs" && <Logs />}</section></main>{securityOpen && <ChangePasswordModal onClose={() => setSecurityOpen(false)} onChanged={onLogout} />}</div>;
+  const currentPage = PAGES.find((entry) => entry.id === page)!;
+  const currentModule = MODULES.find((entry) => entry.id === currentPage.module)!;
+  const modulePages = PAGES.filter((entry) => entry.module === currentModule.id);
+  const navigate = (next: Page) => {
+    if (next === "users") setRegistrationDate("");
+    setPage(next);
+    setOpen(false);
+  };
+  return <div className="admin-shell">
+    <aside aria-label="管理台导航" className={open ? "sidebar open" : "sidebar"}>
+      <button aria-label="关闭导航菜单" className="sidebar-close" onClick={() => setOpen(false)} type="button"><X size={20} weight="bold" /></button>
+      <div className="sidebar-brand"><span className="sidebar-seal">问</span><span><strong>问仙录管理台</strong><small>WENXIAN OPERATIONS</small></span></div>
+      <nav>{MODULES.map(({ id, label, icon: Icon }) => <button aria-current={currentModule.id === id ? "page" : undefined} key={id} onClick={() => navigate(DEFAULT_PAGE[id])} type="button"><Icon aria-hidden="true" size={21} weight={currentModule.id === id ? "fill" : "regular"} /><span>{label}</span></button>)}</nav>
+      <div className="sidebar-account"><span className="account-avatar">问</span><span><strong>问仙小筑</strong><small>运营管理员</small></span></div>
+      <div className="sidebar-actions"><button onClick={() => { setSecurityOpen(true); setOpen(false); }} type="button"><Key size={18} />修改密码</button><button onClick={onLogout} type="button"><SignOut size={18} />退出管理台</button></div>
+      <p className="sidebar-version">当前版本 {version.data?.version ?? "同步中"}</p>
+    </aside>
+    {open && <button aria-label="关闭导航菜单" className="sidebar-mask" onClick={() => setOpen(false)} />}
+    <main className="admin-main">
+      <header className="workspace-header">
+        <div className="workspace-title"><button aria-expanded={open} aria-label="打开导航菜单" className="menu" onClick={() => setOpen(true)} type="button"><List size={23} /></button><div><h1>{currentModule.label}</h1><p>{currentPage.label}</p></div></div>
+        <div className="workspace-meta"><span className="environment">内部试玩环境</span><span className="reporting-time">北京时间 · {shanghaiDate()}</span></div>
+      </header>
+      <nav aria-label={`${currentModule.label}页面`} className="module-tabs">{modulePages.map((entry) => <button aria-current={page === entry.id ? "page" : undefined} key={entry.id} onClick={() => navigate(entry.id)} type="button">{entry.label}</button>)}</nav>
+      <section className="admin-content">{page === "dashboard" && <AnalyticsDashboard onOpenProblems={() => setPage("errors")} onSelectRegistrationDate={(date) => { setRegistrationDate(date); setPage("users"); }} />}{page === "growth" && <GrowthPage />}{page === "gameplay" && <GameplayPage />}{page === "ai" && <AiUsagePage />}{page === "migrations" && <MigrationCenter />}{page === "users" && <Users initialRegisteredDate={registrationDate} />}{page === "errors" && <OperationErrors />}{page === "releases" && <Releases currentVersion={version.data?.version ?? ""} onVersionChanged={version.reload} />}{page === "models" && <Models />}{page === "limits" && <Limits />}{page === "access" && <AccessControlPage />}{page === "operations" && <Operations />}{page === "admins" && <AdminAccounts />}{page === "logs" && <Logs />}</section>
+    </main>
+    {securityOpen && <ChangePasswordModal onClose={() => setSecurityOpen(false)} onChanged={onLogout} />}
+  </div>;
 }
 
 const metric = (day: AnalyticsDay | undefined, code: string) => Number(day?.[code] ?? 0);
 
-function AnalyticsDashboard({ onSelectRegistrationDate }: { onSelectRegistrationDate: (date: string) => void }) {
+function AnalyticsDashboard({ onSelectRegistrationDate, onOpenProblems }: { onSelectRegistrationDate: (date: string) => void; onOpenProblems: () => void }) {
   const query = useLoad<AnalyticsOverview>(() => adminApi.analyticsOverview(14), []);
   return <State loading={query.loading} error={query.error}>{query.data && <>
-    <div className="page-intro"><div><h2>今天发生了什么</h2><p>只统计有效游玩行为；登录但未游玩不会计入活跃。</p></div><span className="data-freshness">更新于 {fmt(query.data.calculatedAt)}</span></div>
-    {query.data.alerts.length > 0 && <section className="operation-alerts"><strong>需要留意</strong><div>{query.data.alerts.map((alert) => <p key={alert}>{alert}</p>)}</div></section>}
+    <div className="page-intro overview-intro"><div><h2>今日概况</h2><p>只统计有效游玩行为，登录但未游玩不会计入活跃。</p></div><span className="data-freshness">更新于 {fmt(query.data.calculatedAt)}</span></div>
     <MetricSection primary title="核心运营" items={[
       ["累计账号", num(query.data.totalUsers), "当前有效账号"],
       ["今日新增", num(metric(query.data.today, "REGISTERED_USERS")), "按北京时间自然日"],
       ["今日活跃", num(metric(query.data.today, "ACTIVE_USERS")), "发生过有效游玩行为"],
       ["今日完成回合", num(metric(query.data.today, "SUCCESSFUL_TURNS")), `累计 ${num(query.data.totalSuccessfulTurns)}`],
     ]} />
-    <AnalyticsTrend title="近 14 日核心趋势" days={query.data.trend} columns={[["REGISTERED_USERS", "新增"], ["ACTIVE_USERS", "活跃"], ["SUCCESSFUL_TURNS", "回合"], ["FINAL_ERRORS", "最终失败"]]} onDate={onSelectRegistrationDate} />
+    <div className="dashboard-workbench">
+      <OverviewTrendChart days={query.data.trend} />
+      <DashboardAttention alerts={query.data.alerts} failures={metric(query.data.today, "FINAL_ERRORS")} onOpenProblems={onOpenProblems} />
+    </div>
+    <AnalyticsTrend title="关键运营数据" days={query.data.trend} columns={[["REGISTERED_USERS", "新增"], ["ACTIVE_USERS", "活跃"], ["SUCCESSFUL_TURNS", "回合"], ["FINAL_ERRORS", "最终失败"]]} onDate={onSelectRegistrationDate} />
   </>}</State>;
+}
+
+function OverviewTrendChart({ days }: { days: AnalyticsDay[] }) {
+  return <Panel title="近 14 日运营趋势 · 不同量级分图展示"><Suspense fallback={<div className="chart-loading">正在绘制趋势…</div>}><LazyOverviewTrendChart days={days} /></Suspense></Panel>;
+}
+
+function DashboardAttention({ alerts, failures, onOpenProblems }: { alerts: string[]; failures: number; onOpenProblems: () => void }) {
+  const items = alerts.length > 0 ? alerts : failures > 0 ? [`今日有 ${num(failures)} 次操作最终失败，建议查看问题记录。`] : [];
+  return <Panel title="待处理事项"><div className="attention-list">{items.map((alert, index) => <article key={alert}><span className="attention-level"><WarningCircle size={18} weight="fill" />{index === 0 ? "高" : "中"}</span><p>{alert}</p><button className="table-action" onClick={onOpenProblems} type="button">查看问题<ArrowRight size={14} /></button></article>)}{items.length === 0 && <div className="attention-empty"><Check size={24} weight="bold" /><strong>运行平稳</strong><span>当前没有需要优先处理的异常。</span></div>}</div>{items.length > 0 && <button className="attention-more" onClick={onOpenProblems} type="button">查看全部问题<ArrowRight size={15} /></button>}</Panel>;
 }
 
 function GrowthPage() {
   const query = useLoad<GrowthAnalytics>(() => adminApi.analyticsGrowth(30), []);
   return <State loading={query.loading} error={query.error}>{query.data && <>
     <div className="page-intro"><div><h2>增长与留存</h2><p>{query.data.definition}</p></div></div>
+    <GrowthFunnel data={query.data.funnel ?? { registered: 0, createdSave: 0, firstTurn: 0 }} />
     <AnalyticsTrend title="近 30 日新增、活跃与首回合" days={query.data.daily} columns={[["REGISTERED_USERS", "新增"], ["ACTIVE_USERS", "活跃"], ["CREATED_SAVES", "创建命卷"], ["SUCCESSFUL_TURNS", "完成回合"]]} />
-    <Panel title="注册批次留存"><Table label="注册批次留存"><thead><tr><th>注册日期</th><th>观察日</th><th>注册</th><th>已激活</th><th>再次活跃</th><th>留存率</th><th>口径</th></tr></thead><tbody>{query.data.retention.map((row) => <tr key={`${row.cohortDate}-${row.day}`}><td>{row.cohortDate}</td><td>D{row.day}</td><td>{num(row.registered)}</td><td>{num(row.activated)}</td><td>{num(row.retained)}</td><td>{Number(row.rate).toFixed(1)}%</td><td>{row.origin === "BACKFILL" ? "历史回算" : "实时"}</td></tr>)}</tbody></Table>{query.data.retention.length === 0 && <p className="empty-state">统计任务完成后会显示留存数据。</p>}</Panel>
+    <RetentionHeatmap rows={query.data.retention} />
   </>}</State>;
+}
+
+function GrowthFunnel({ data }: { data: GrowthAnalytics["funnel"] }) {
+  const steps = [["注册账号", data.registered], ["创建命卷", data.createdSave], ["完成首回合", data.firstTurn]] as const;
+  return <Panel title="近 30 日新玩家激活漏斗"><div className="growth-funnel">{steps.map(([label, value], index) => { const base = index === 0 ? data.registered : steps[index - 1][1]; const rate = base ? value * 100 / base : 0; return <article key={label}><span>0{index + 1}</span><div><small>{label}</small><strong>{num(value)}</strong><em>{index === 0 ? "注册批次人数" : `上一步转化 ${rate.toFixed(1)}%`}</em></div></article>; })}</div><p className="panel-note">同一注册批次向后观察是否创建命卷、完成过有效回合，不按页面访问量计算。</p></Panel>;
+}
+
+function RetentionHeatmap({ rows }: { rows: GrowthAnalytics["retention"] }) {
+  const days = [1, 3, 7, 14];
+  const dates = [...new Set(rows.filter((row) => row.registered > 0).map((row) => row.cohortDate))].sort().reverse();
+  const at = (date: string, day: number) => rows.find((row) => row.cohortDate === date && row.day === day);
+  return <Panel title="注册批次留存热力图"><Table label="注册批次留存热力图"><thead><tr><th>注册日期</th><th>注册</th><th>已激活</th>{days.map((day) => <th key={day}>D{day}</th>)}</tr></thead><tbody>{dates.map((date) => { const source = rows.find((row) => row.cohortDate === date); return <tr key={date}><td>{date}</td><td>{num(source?.registered ?? 0)}</td><td>{num(source?.activated ?? 0)}</td>{days.map((day) => { const item = at(date, day); const rate = Number(item?.rate ?? 0); return <td key={day}><span className="retention-cell" style={{ "--retention": `${Math.min(1, rate / 100)}` } as CSSProperties}>{item ? `${rate.toFixed(1)}%` : "—"}</span></td>; })}</tr>; })}</tbody></Table>{dates.length === 0 && <p className="empty-state">统计任务完成后会显示留存数据。</p>}<p className="panel-note">越深的蓝色表示留存越高；尚未到达观察日显示为“—”。</p></Panel>;
 }
 
 function GameplayPage() {
@@ -91,10 +186,19 @@ function GameplayPage() {
 function AiUsagePage() {
   const query = useLoad<AiUsageAnalytics>(() => adminApi.analyticsAiUsage(14), []);
   return <State loading={query.loading} error={query.error}>{query.data && <>
+    <AiUsageSummary data={query.data} />
     <AnalyticsTrend title="平台额度 · 近 14 日" days={query.data.platform} columns={[["AI_REQUESTS", "请求"], ["AI_FAILURES", "失败"], ["PROMPT_TOKENS", "输入 Token"], ["COMPLETION_TOKENS", "输出 Token"]]} />
     <AnalyticsTrend title="玩家自备密钥 · 近 14 日" days={query.data.player} columns={[["AI_REQUESTS", "请求"], ["AI_FAILURES", "失败"], ["PROMPT_TOKENS", "输入 Token"], ["COMPLETION_TOKENS", "输出 Token"]]} />
     <Panel title="模型与密钥来源"><Table label="模型消耗"><thead><tr><th>供应商</th><th>模型</th><th>来源</th><th>请求</th><th>输入</th><th>输出</th><th>缓存命中</th><th>失败</th><th>平均耗时</th></tr></thead><tbody>{query.data.models.map((row) => <tr key={`${row.provider}-${row.model}-${row.source}`}><td>{row.provider}</td><td>{row.model}</td><td>{row.source === "PUBLIC" ? "平台" : "玩家"}</td><td>{num(row.requests)}</td><td>{num(row.promptTokens)}</td><td>{num(row.completionTokens)}</td><td>{num(row.cacheHitTokens)}</td><td>{num(row.failures)}</td><td>{latency(row.averageLatency)}</td></tr>)}</tbody></Table></Panel>
   </>}</State>;
+}
+
+function AiUsageSummary({ data }: { data: AiUsageAnalytics }) {
+  const total = (rows: AnalyticsDay[], code: string) => rows.reduce((sum, row) => sum + metric(row, code), 0);
+  const requests = total(data.platform, "AI_REQUESTS"); const failures = total(data.platform, "AI_FAILURES");
+  const prompt = total(data.platform, "PROMPT_TOKENS"); const completion = total(data.platform, "COMPLETION_TOKENS");
+  const hit = total(data.platform, "CACHE_HIT_TOKENS"); const miss = total(data.platform, "CACHE_MISS_TOKENS");
+  return <><MetricSection primary title="近 14 日平台模型消耗" items={[["平台请求", num(requests), failures ? `失败率 ${(failures * 100 / Math.max(1, requests)).toFixed(1)}%` : "无最终失败"], ["平台 Token", num(prompt + completion), `输入 ${num(prompt)} · 输出 ${num(completion)}`], ["单次平均", num(Math.round((prompt + completion) / Math.max(1, requests))), "输入与输出合计"], ["缓存命中率", `${(hit * 100 / Math.max(1, hit + miss)).toFixed(1)}%`, `命中 ${num(hit)} Token`]]} /><p className="data-definition">这里只展示实际调用量与效率；金额成本请以供应商账单和当期价格为准。</p></>;
 }
 
 function AnalyticsTrend({ title, days, columns, onDate }: { title: string; days: AnalyticsDay[]; columns: Array<[string, string]>; onDate?: (date: string) => void }) {
@@ -216,10 +320,10 @@ function SelectMenu({ label, value, options, onChange }: {
   }, []);
   return <div className={open ? "select-menu open" : "select-menu"} ref={root}>
     <button aria-expanded={open} aria-haspopup="listbox" aria-label={`${label}：${selected.label}`} className="select-trigger" onClick={() => setOpen((current) => !current)} type="button">
-      <span>{selected.label}</span><b aria-hidden="true">⌄</b>
+      <span>{selected.label}</span><CaretDown aria-hidden="true" size={16} weight="bold" />
     </button>
     {open && <div aria-label={label} className="select-options" role="listbox">{options.map((option) =>
-      <button aria-selected={option.value === value} key={option.value || "all"} onClick={() => { onChange(option.value); setOpen(false); }} role="option" type="button">{option.label}{option.value === value && <span aria-hidden="true">✓</span>}</button>
+      <button aria-selected={option.value === value} key={option.value || "all"} onClick={() => { onChange(option.value); setOpen(false); }} role="option" type="button">{option.label}{option.value === value && <Check aria-hidden="true" size={16} weight="bold" />}</button>
     )}</div>}
   </div>;
 }
@@ -311,7 +415,7 @@ function Users({ initialRegisteredDate = "" }: { initialRegisteredDate?: string 
     </State>
     <div className="filters">
       <label className="search-field"><span className="sr-only">搜索玩家</span><input placeholder="搜索完整邮箱、角色名、用户或存档 ID" value={search} onChange={(e) => { setSearch(e.currentTarget.value); setPage(0); }} /></label>
-      <label><span className="sr-only">注册日期</span><input aria-label="注册日期" type="date" value={registeredDate} onChange={(e) => { setRegisteredDate(e.currentTarget.value); setPage(0); }} /></label>
+      <label className="date-filter">注册日期<input aria-label="注册日期，格式为年-月-日" inputMode="numeric" maxLength={10} placeholder="YYYY-MM-DD" value={registeredDate} onChange={(e) => { setRegisteredDate(e.currentTarget.value.replace(/[^0-9-]/g, "")); setPage(0); }} /></label>
       <SelectMenu label="角色状态" value={state} onChange={(value) => { setState(value); setPage(0); }} options={[
         { value: "", label: "全部角色状态" },
         { value: "NONE", label: "尚未创建角色" },
@@ -646,7 +750,8 @@ function OperationErrors() {
   const [draft, setDraft] = useState(""); const [search, setSearch] = useState(""); const [category, setCategory] = useState("");
   const query = useLoad<OperationError[]>(() => adminApi.operationErrors(search, category), [search, category]);
   const submit = (event: FormEvent) => { event.preventDefault(); setSearch(draft.trim()); };
-  return <><div className="page-intro"><div><h2>玩家问题查询</h2><p>让玩家提供页面上的问题编号，可直接定位失败原因，不再依赖截图猜测。</p></div></div><form className="filters" onSubmit={submit}><label className="search-field">问题编号、邮箱、角色、存档或错误编码<input placeholder="例如 WX-20260802-ABC123" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} /></label><SelectMenu label="问题分类" value={category} onChange={setCategory} options={[{ value: "", label: "全部分类" }, { value: "INPUT", label: "输入与规则" }, { value: "RESOURCE", label: "资源与货币" }, { value: "ACCOUNT", label: "账号登录" }, { value: "CREDENTIAL", label: "推演密钥" }, { value: "QUOTA", label: "回合额度" }, { value: "STATE", label: "存档状态" }, { value: "SYSTEM", label: "服务异常" }]} /><button className="secondary" type="submit">查询</button></form><State loading={query.loading} error={query.error}><Panel title={`最近问题 · ${query.data?.length ?? 0}`}><Table label="玩家问题列表"><thead><tr><th>问题编号</th><th>玩家</th><th>分类</th><th>错误编码</th><th>提示内容</th><th>时间</th></tr></thead><tbody>{query.data?.map((item) => <tr key={item.referenceId}><td><strong>{item.referenceId}</strong><small>{item.operation}</small></td><td>{item.email || item.playerName || "未关联"}<small>{item.playerName || (item.saveId ? shortId(item.saveId) : "—")}</small></td><td>{problemCategory(item.category)}</td><td>{item.code}<small>HTTP {item.httpStatus}</small></td><td className="wide">{item.message}{item.diagnostic && <details><summary>内部诊断</summary><p>{item.diagnostic}</p></details>}</td><td>{fmt(item.at)}</td></tr>)}</tbody></Table>{query.data?.length === 0 && <p className="empty-state">暂时没有符合条件的问题记录。</p>}</Panel></State></>;
+  const groups = Object.values((query.data ?? []).reduce<Record<string, { code: string; category: string; count: number; latest: string; status: number }>>((all, item) => { const current = all[item.code] ?? { code: item.code, category: item.category, count: 0, latest: item.at, status: item.httpStatus }; current.count += 1; if (item.at > current.latest) current.latest = item.at; current.status = Math.max(current.status, item.httpStatus); all[item.code] = current; return all; }, {})).sort((a, b) => (b.status >= 500 ? 1 : 0) - (a.status >= 500 ? 1 : 0) || b.count - a.count).slice(0, 6);
+  return <><div className="page-intro"><div><h2>玩家问题查询</h2><p>先看高频与服务端异常，再用玩家提供的问题编号定位单次失败。</p></div></div><State loading={query.loading} error={query.error}>{groups.length > 0 && <Panel title="待处理问题队列"><div className="problem-queue">{groups.map((item) => <button key={item.code} onClick={() => { setDraft(item.code); setSearch(item.code); }} type="button"><span className={item.status >= 500 ? "severity severity-high" : "severity"}>{item.status >= 500 ? "高" : "中"}</span><div><strong>{item.code}</strong><small>{problemCategory(item.category)} · 最近 {fmt(item.latest)}</small></div><b>{item.count}<small>次</small></b></button>)}</div></Panel>}</State><form className="filters" onSubmit={submit}><label className="search-field">问题编号、邮箱、角色、存档或错误编码<input placeholder="例如 WX-20260802-ABC123" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} /></label><SelectMenu label="问题分类" value={category} onChange={setCategory} options={[{ value: "", label: "全部分类" }, { value: "INPUT", label: "输入与规则" }, { value: "RESOURCE", label: "资源与货币" }, { value: "ACCOUNT", label: "账号登录" }, { value: "CREDENTIAL", label: "推演密钥" }, { value: "QUOTA", label: "回合额度" }, { value: "STATE", label: "存档状态" }, { value: "SYSTEM", label: "服务异常" }]} /><button className="secondary" type="submit">查询</button></form><State loading={query.loading} error={query.error}><Panel title={`问题明细 · ${query.data?.length ?? 0}`}><Table label="玩家问题列表"><thead><tr><th>问题编号</th><th>玩家</th><th>分类</th><th>错误编码</th><th>提示内容</th><th>时间</th></tr></thead><tbody>{query.data?.map((item) => <tr key={item.referenceId}><td><strong>{item.referenceId}</strong><small>{item.operation}</small></td><td>{item.email || item.playerName || "未关联"}<small>{item.playerName || (item.saveId ? shortId(item.saveId) : "—")}</small></td><td>{problemCategory(item.category)}</td><td>{item.code}<small>HTTP {item.httpStatus}</small></td><td className="wide">{item.message}{item.diagnostic && <details><summary>内部诊断</summary><p>{item.diagnostic}</p></details>}</td><td>{fmt(item.at)}</td></tr>)}</tbody></Table>{query.data?.length === 0 && <p className="empty-state">暂时没有符合条件的问题记录。</p>}</Panel></State></>;
 }
 
 function ChangePasswordModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
@@ -674,7 +779,12 @@ function MetricSection({ title, items, primary = false }: { title: string; items
 
 function Panel({ title, children }: { title: ReactNode; children: ReactNode }) { return <section className="panel"><header><h2>{title}</h2></header>{children}</section>; }
 function Table({ children, label = "数据列表" }: { children: ReactNode; label?: string }) { return <div className="table-scroll"><table aria-label={label}>{children}</table></div>; }
-function Pager({ page, size, total, onPage }: { page: number; size: number; total: number; onPage: (page: number) => void }) { return <div className="pager"><button disabled={page <= 0} onClick={() => onPage(page - 1)}>上一页</button><span>第 {page + 1} / {Math.max(1, Math.ceil(total / size))} 页</span><button disabled={(page + 1) * size >= total} onClick={() => onPage(page + 1)}>下一页</button></div>; }
+function Pager({ page, size, total, onPage }: { page: number; size: number; total: number; onPage: (page: number) => void }) {
+  const pages = Math.max(1, Math.ceil(total / size)); const [jump, setJump] = useState("");
+  const visible = [...new Set([0, pages - 1, page - 2, page - 1, page, page + 1, page + 2].filter((value) => value >= 0 && value < pages))].sort((a, b) => a - b);
+  const go = () => { const target = Number(jump); if (Number.isInteger(target) && target >= 1 && target <= pages) { onPage(target - 1); setJump(""); } };
+  return <div className="pager"><div className="pager-pages"><button aria-label="第一页" disabled={page <= 0} onClick={() => onPage(0)}>首页</button><button aria-label="上一页" disabled={page <= 0} onClick={() => onPage(page - 1)}>上一页</button>{visible.map((value, index) => <span key={value}>{index > 0 && value - visible[index - 1] > 1 && <i>…</i>}<button aria-current={value === page ? "page" : undefined} onClick={() => onPage(value)}>{value + 1}</button></span>)}<button aria-label="下一页" disabled={page + 1 >= pages} onClick={() => onPage(page + 1)}>下一页</button><button aria-label="最后一页" disabled={page + 1 >= pages} onClick={() => onPage(pages - 1)}>末页</button></div><label>跳至<input inputMode="numeric" placeholder={String(page + 1)} value={jump} onChange={(event) => setJump(event.currentTarget.value.replace(/\D/g, ""))} onKeyDown={(event) => event.key === "Enter" && go()} />页<button disabled={!jump} onClick={go}>前往</button></label><small>共 {num(total)} 条 · {pages} 页</small></div>;
+}
 function Badge({ value }: { value: string }) { const labels: Record<string, string> = { ACTIVE: "可用", DISABLED: "已停用", EXHAUSTED: "已失效", SUCCESS: "已激活", FAILED: "失败", NONE: "尚未创建", CURRENT: "当前角色", RESTARTED: "仅有前世", DRAFT: "草稿", PUBLISHED: "已发布", ARCHIVED: "已归档", ACTIVE_MODEL: "当前使用", STANDBY: "备用", READY: "可迁移", WARNING: "需留意", INVALID: "不可迁移", ERROR: "预演异常", UNPROCESSED: "未处理", RUNNING: "准备中", HASH_MISMATCH: "哈希不一致" }; return <span className={`badge badge-${value.toLowerCase()}`}>{labels[value] ?? value}</span>; }
 function shortId(value: string) { return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value; }
 function shortHash(value?: string | null) { return value ? `${value.slice(0, 8)}…${value.slice(-6)}` : "—"; }

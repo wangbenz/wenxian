@@ -7,6 +7,7 @@ export type AnalyticsOverview = {
 };
 export type GrowthAnalytics = {
   daily: AnalyticsDay[];
+  funnel: { registered: number; createdSave: number; firstTurn: number };
   retention: Array<{ cohortDate: string; day: number; registered: number; activated: number; retained: number; rate: number; origin: string }>;
   definition: string;
 };
@@ -88,7 +89,7 @@ export type TurnRankingItem = {
 export type LifeSummary = {
   status: "CURRENT" | "ARCHIVED"; saveId: string; at: string; playerName: string;
   realm: string; race: string; difficulty: "NORMAL" | "HARD"; phase: string; turn: number; sceneTitle: string;
-  endReason: "ACTIVE" | "DEAD" | "RESTARTED" | "ABANDONED" | "LEGACY"; endingTitle: string; endingDetail: string; totalTokens: number;
+  endReason: "ACTIVE" | "ARCHIVED" | "DEAD" | "RESTARTED" | "ABANDONED" | "LEGACY"; endingTitle: string; endingDetail: string; totalTokens: number;
 };
 export type UserDetail = {
   user: { userId: string; email: string; status: string; registeredAt: string; lastLoginAt: string | null;

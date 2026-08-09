@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -52,6 +53,7 @@ public class AdminAnalyticsService {
     public Map<String, Object> growth(int requestedDays) {
         int days = range(requestedDays);
         LocalDate today = LocalDate.now(REPORTING_ZONE);
+        LocalDate firstDay = today.minusDays(days - 1L);
         List<Map<String, Object>> retention = jdbc.query("""
                 select cohort_date, retention_day, registered_users, activated_users, retained_users,
                        case when registered_users=0 then 0 else retained_users*100.0/registered_users end retention_rate,
@@ -67,11 +69,31 @@ public class AdminAnalyticsService {
                 "retained", row.getLong("retained_users"),
                 "rate", row.getBigDecimal("retention_rate"),
                 "origin", row.getString("data_origin")
-        ), Date.valueOf(today.minusDays(days - 1L)));
+        ), Date.valueOf(firstDay));
+        Timestamp from = Timestamp.from(firstDay.atStartOfDay(REPORTING_ZONE).toInstant());
+        Timestamp to = Timestamp.from(today.plusDays(1).atStartOfDay(REPORTING_ZONE).toInstant());
+        Map<String, Object> funnel = jdbc.queryForObject("""
+                select count(*) registered,
+                       sum(case when exists (
+                           select 1 from analytics_user_day d
+                           where d.user_id=u.id and d.created_save_count>0
+                       ) then 1 else 0 end) created_save,
+                       sum(case when exists (
+                           select 1 from analytics_user_day d
+                           where d.user_id=u.id and d.successful_turn_count>0
+                       ) then 1 else 0 end) first_turn
+                from app_user u
+                where u.status='ACTIVE' and u.registered_at>=? and u.registered_at<?
+                """, (row, index) -> Map.<String, Object>of(
+                "registered", row.getLong("registered"),
+                "createdSave", row.getLong("created_save"),
+                "firstTurn", row.getLong("first_turn")
+        ), from, to);
         return Map.of(
                 "daily", dailySeries(today, days,
                         List.of("REGISTERED_USERS", "ACTIVE_USERS", "CREATED_SAVES", "SUCCESSFUL_TURNS"), "ALL", "ALL"),
                 "retention", retention,
+                "funnel", funnel == null ? Map.of("registered", 0, "createdSave", 0, "firstTurn", 0) : funnel,
                 "definition", "活跃指当日创建命卷、完成回合、修正或整理实体，不以登录代替。"
         );
     }
