@@ -1,54 +1,33 @@
 package com.wenxian.game.v014.ai;
 
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.chat.request.ResponseFormat;
-import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.model.output.TokenUsage;
+import com.wenxian.game.story.agent.LangChain4jStoryModelGateway;
+import com.wenxian.game.story.agent.StoryModelGateway;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-
+/**
+ * V0.14 模型调用兼容适配器。
+ *
+ * <p>实际供应商调用已经下沉到中性 {@link StoryModelGateway}；该类只保留旧 Agent 的请求和响应类型，
+ * 避免在 V0.15 建设期间改变仍在运行的旧接口行为。</p>
+ */
 @Component
 public class LangChain4jModelGateway implements V014ModelGateway {
+    private final StoryModelGateway delegate;
+
+    public LangChain4jModelGateway() {
+        this(new LangChain4jStoryModelGateway());
+    }
+
+    LangChain4jModelGateway(StoryModelGateway delegate) {
+        this.delegate = delegate;
+    }
+
     @Override
     public Result generate(Request request) {
-        if (!"OPENAI_COMPATIBLE".equals(request.adapterType())) {
-            throw new IllegalArgumentException("Unsupported model adapter: " + request.adapterType());
-        }
-        ChatModel model = OpenAiChatModel.builder()
-                .baseUrl(request.baseUrl())
-                .apiKey(request.apiKey())
-                .modelName(request.model())
-                .temperature(request.temperature())
-                .responseFormat(ResponseFormat.JSON)
-                // V0.14 keeps thinking disabled for every gameplay model, including Pro.
-                // sendThinking(false) only controls whether earlier reasoning_content is sent
-                // back; DeepSeek's actual switch is this top-level request parameter.
-                .customParameters("DEEPSEEK".equals(request.provider())
-                        ? Map.of("thinking", Map.of("type", "disabled")) : Map.of())
-                .sendThinking(false)
-                .returnThinking(false)
-                .timeout(Duration.ofSeconds(90))
-                .maxRetries(1)
-                .logRequests(false)
-                .logResponses(false)
-                .build();
-        long started = System.nanoTime();
-        ChatResponse response = model.chat(List.of(
-                SystemMessage.from(request.systemPrompt()),
-                UserMessage.from(request.userPrompt())
-        ));
-        long latency = (System.nanoTime() - started) / 1_000_000;
-        TokenUsage usage = response.tokenUsage();
-        int input = usage == null || usage.inputTokenCount() == null ? 0 : usage.inputTokenCount();
-        int output = usage == null || usage.outputTokenCount() == null ? 0 : usage.outputTokenCount();
-        String text = response.aiMessage() == null ? "" : response.aiMessage().text();
-        return new Result(text == null ? "" : text, response.id(),
-                response.modelName() == null ? request.model() : response.modelName(), input, output, latency);
+        StoryModelGateway.Result result = delegate.generate(new StoryModelGateway.Request(
+                request.baseUrl(), request.apiKey(), request.provider(), request.adapterType(), request.model(),
+                request.systemPrompt(), request.userPrompt(), request.temperature()));
+        return new Result(result.text(), result.responseId(), result.model(), result.inputTokens(),
+                result.outputTokens(), result.latencyMs());
     }
 }
