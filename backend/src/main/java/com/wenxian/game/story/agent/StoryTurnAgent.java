@@ -14,6 +14,24 @@ import java.util.List;
 public interface StoryTurnAgent {
     Generated generate(StoryPromptContext context, StoryModelRoute route);
 
+    /**
+     * 携带本次回合的审计位置生成提案。
+     *
+     * <p>默认实现保持测试替身和非持久化调用兼容；真实模型 Agent 会使用该信息分别记录首次生成、格式修复等
+     * 单次模型请求。审计位置不能进入 Prompt，也不能改变 Agent 的状态提案权限。</p>
+     */
+    default Generated generate(StoryPromptContext context, StoryModelRoute route, InvocationContext invocation) {
+        return generate(context, route);
+    }
+
+    /** 单次业务回合在模型用量日志中的稳定位置。 */
+    record InvocationContext(String saveId, int turnNumber) {
+        public InvocationContext {
+            if (saveId == null || saveId.isBlank()) throw new IllegalArgumentException("模型调用缺少命卷ID");
+            if (turnNumber < 1) throw new IllegalArgumentException("模型调用回合号必须大于0");
+        }
+    }
+
     /** 一次业务推演及其全部模型尝试；最后一个结果是最终被解析的响应。 */
     record Generated(StoryPatch patch, List<StoryModelGateway.Result> modelResults) {
         public Generated {

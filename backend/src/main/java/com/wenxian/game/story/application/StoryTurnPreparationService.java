@@ -75,7 +75,8 @@ public class StoryTurnPreparationService {
         StoryPromptContext context = contexts.assemble(before, new ContextRequest(playerAction,
                 worldSeedRules(saved.state()), selection(before, existingEntities), conversations.summary(saved.id()),
                 previousTurn(saved.id())));
-        StoryTurnAgent.Generated generation = agent.generate(context, route);
+        StoryTurnAgent.Generated generation = agent.generate(context, route,
+                new StoryTurnAgent.InvocationContext(saved.id(), saved.turnNumber() + 1));
         StoryStateReducer.Applied applied = reducer.reduce(before, generation.patch());
         return new Prepared(before, applied, existingEntities, generation);
     }

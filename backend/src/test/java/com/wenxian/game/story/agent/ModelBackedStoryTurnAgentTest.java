@@ -1,10 +1,12 @@
 package com.wenxian.game.story.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wenxian.game.story.domain.StoryPatchValidator;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -84,6 +86,49 @@ class ModelBackedStoryTurnAgentTest {
 
         assertEquals(2, calls.get());
         assertEquals("推演结果未能形成可提交的状态提案", error.getMessage());
+    }
+
+    @Test
+    void reportsInitialRepairAndFailedRequestsAsSeparateModelFacts() {
+        AtomicInteger calls = new AtomicInteger();
+        ArrayList<String> succeeded = new ArrayList<>();
+        ArrayList<String> failed = new ArrayList<>();
+        StoryModelInvocationRecorder recorder = new StoryModelInvocationRecorder() {
+            @Override
+            public void succeeded(StoryTurnAgent.InvocationContext invocation, String operation,
+                                  StoryModelRoute route, StoryModelGateway.Result result) {
+                assertEquals("save-observed", invocation.saveId());
+                assertEquals(7, invocation.turnNumber());
+                succeeded.add(operation);
+            }
+
+            @Override
+            public void failed(StoryTurnAgent.InvocationContext invocation, String operation,
+                               StoryModelRoute route, long latencyMs, RuntimeException failure) {
+                failed.add(operation);
+            }
+        };
+        StoryModelGateway repairedGateway = request -> calls.incrementAndGet() == 1
+                ? result("not-json", 20, 5, 10)
+                : result(VALID_PATCH, 30, 100, 20);
+        ModelBackedStoryTurnAgent repairedAgent = new ModelBackedStoryTurnAgent(repairedGateway, recorder,
+                new ObjectMapper().findAndRegisterModules(), new StoryPatchValidator());
+
+        repairedAgent.generate(context(), route(), new StoryTurnAgent.InvocationContext("save-observed", 7));
+
+        assertEquals(List.of("STORY_TURN", "STORY_TURN_REPAIR"), succeeded);
+        assertTrue(failed.isEmpty());
+
+        StoryModelGateway failedGateway = request -> {
+            throw new StoryModelFailureException(StoryModelFailureException.Kind.RATE_LIMITED,
+                    "internal diagnostic", null);
+        };
+        ModelBackedStoryTurnAgent failedAgent = new ModelBackedStoryTurnAgent(failedGateway, recorder,
+                new ObjectMapper().findAndRegisterModules(), new StoryPatchValidator());
+
+        assertThrows(StoryModelFailureException.class, () -> failedAgent.generate(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-observed", 7)));
+        assertEquals(List.of("STORY_TURN"), failed);
     }
 
     private ModelBackedStoryTurnAgent agent(StoryModelGateway gateway) {

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryPatchValidator;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -66,16 +67,25 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             """;
 
     private final StoryModelGateway gateway;
+    private final StoryModelInvocationRecorder invocations;
     private final ObjectMapper mapper;
     private final ObjectMapper tolerantMapper;
     private final StoryPatchValidator validator;
 
-    public ModelBackedStoryTurnAgent(StoryModelGateway gateway, ObjectMapper mapper) {
-        this(gateway, mapper, new StoryPatchValidator());
+    @Autowired
+    public ModelBackedStoryTurnAgent(StoryModelGateway gateway, StoryModelInvocationRecorder invocations,
+                                     ObjectMapper mapper) {
+        this(gateway, invocations, mapper, new StoryPatchValidator());
     }
 
-    ModelBackedStoryTurnAgent(StoryModelGateway gateway, ObjectMapper mapper, StoryPatchValidator validator) {
+    public ModelBackedStoryTurnAgent(StoryModelGateway gateway, ObjectMapper mapper) {
+        this(gateway, StoryModelInvocationRecorder.NOOP, mapper, new StoryPatchValidator());
+    }
+
+    ModelBackedStoryTurnAgent(StoryModelGateway gateway, StoryModelInvocationRecorder invocations,
+                              ObjectMapper mapper, StoryPatchValidator validator) {
         this.gateway = gateway;
+        this.invocations = invocations == null ? StoryModelInvocationRecorder.NOOP : invocations;
         this.mapper = mapper;
         this.tolerantMapper = mapper.copy()
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -85,6 +95,11 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
 
     @Override
     public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+        return generate(context, route, null);
+    }
+
+    @Override
+    public Generated generate(StoryPromptContext context, StoryModelRoute route, InvocationContext invocation) {
         if (context == null) throw new IllegalArgumentException("回合推演缺少命卷上下文");
         if (context.action() == null || context.action().playerAction() == null
                 || context.action().playerAction().isBlank()) {
@@ -93,12 +108,13 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         if (route == null) throw new IllegalArgumentException("回合推演缺少模型路由");
 
         List<StoryModelGateway.Result> attempts = new ArrayList<>();
-        StoryModelGateway.Result first = call(route, SYSTEM_PROMPT, userPrompt(context), 0.7);
+        StoryModelGateway.Result first = call(route, invocation, "STORY_TURN",
+                SYSTEM_PROMPT, userPrompt(context), 0.7);
         attempts.add(first);
         try {
             return new Generated(parse(first.text()), attempts);
         } catch (JsonProcessingException | IllegalArgumentException firstError) {
-            StoryModelGateway.Result repaired = call(route, SYSTEM_PROMPT,
+            StoryModelGateway.Result repaired = call(route, invocation, "STORY_TURN_REPAIR", SYSTEM_PROMPT,
                     repairPrompt(first.text(), firstError.getMessage()), 0.1);
             attempts.add(repaired);
             try {
@@ -109,10 +125,20 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         }
     }
 
-    private StoryModelGateway.Result call(StoryModelRoute route, String systemPrompt, String userPrompt,
-                                          double temperature) {
-        return gateway.generate(new StoryModelGateway.Request(route.baseUrl(), route.apiKey(), route.provider(),
-                route.adapterType(), route.model(), systemPrompt, userPrompt, temperature));
+    private StoryModelGateway.Result call(StoryModelRoute route, InvocationContext invocation, String operation,
+                                          String systemPrompt, String userPrompt, double temperature) {
+        long started = System.nanoTime();
+        try {
+            StoryModelGateway.Result result = gateway.generate(new StoryModelGateway.Request(
+                    route.baseUrl(), route.apiKey(), route.provider(), route.adapterType(), route.model(),
+                    systemPrompt, userPrompt, temperature));
+            invocations.succeeded(invocation, operation, route, result);
+            return result;
+        } catch (RuntimeException failure) {
+            invocations.failed(invocation, operation, route,
+                    (System.nanoTime() - started) / 1_000_000L, failure);
+            throw failure;
+        }
     }
 
     private StoryPatch parse(String raw) throws JsonProcessingException {
