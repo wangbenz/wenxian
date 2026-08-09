@@ -191,3 +191,17 @@ test("keeps restart safe and exposes the account key before entering the world",
   assert.equal(prototype.includes("接入自己的推演密钥"), true);
   assert.equal(prototype.includes("返回原来的命卷"), true);
 });
+
+test("requires a preview and explicit confirmation before correcting story facts", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+  const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
+
+  assert.equal(api.includes("storyCorrectionPreview"), true);
+  assert.equal(api.includes("/corrections/preview"), true);
+  assert.equal(api.includes("storyCorrectionConfirm"), true);
+  assert.equal(api.includes("/corrections/confirm"), true);
+  assert.equal(prototype.includes("生成修正预览"), true);
+  assert.equal(prototype.includes("确认写入命卷"), true);
+  assert.equal(prototype.includes("不消耗回合 · 不推进时间 · 保留原有纪事"), true);
+  assert.equal(prototype.includes("gameApi.storyCorrect("), false);
+});

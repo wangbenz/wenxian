@@ -308,6 +308,12 @@ export type StorySaveResponse = {
   personalProvider: string | null;
   personalModel: string | null;
 };
+export type StoryCorrectionPreview = {
+  kind: "FACT" | "COGNITION" | "WORLD";
+  explanation: string;
+  confirmationPrompt: string;
+  proposalToken: string;
+};
 export type StorySaveSummary = {
   id: string; slotNo: number; worldName: string; playerName: string; race: string;
   realm: string; turnNumber: number; status: string; updatedAt: string;
@@ -602,6 +608,12 @@ export const gameApi = {
   }).then(legacySaveView),
   storyCorrect: (saveId: string, instruction: string, expectedRevision: number) => request<StorySaveContract>(`/api/v1/story/saves/${encodeURIComponent(saveId)}/corrections`, {
     method: "POST", body: JSON.stringify({ instruction, expectedRevision }),
+  }).then(legacySaveView),
+  storyCorrectionPreview: (saveId: string, instruction: string, expectedRevision: number) => request<StoryCorrectionPreview>(`/api/v1/story/saves/${encodeURIComponent(saveId)}/corrections/preview`, {
+    method: "POST", body: JSON.stringify({ instruction, expectedRevision }),
+  }),
+  storyCorrectionConfirm: (saveId: string, proposalToken: string, expectedRevision: number) => request<StorySaveContract>(`/api/v1/story/saves/${encodeURIComponent(saveId)}/corrections/confirm`, {
+    method: "POST", body: JSON.stringify({ proposalToken, expectedRevision }),
   }).then(legacySaveView),
   storyRemoveEntity: (saveId: string, entityId: string, revision: number) => request<StorySaveContract>(`/api/v1/story/saves/${encodeURIComponent(saveId)}/entities/${encodeURIComponent(entityId)}?revision=${revision}`, {
     method: "DELETE",

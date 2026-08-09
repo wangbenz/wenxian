@@ -31,6 +31,7 @@ import {
   type SyncMode,
   type StoryBootstrap,
   type StoryCharacterRoute,
+  type StoryCorrectionPreview,
   type StoryGenerationSettings,
   type StorySaveResponse,
 } from "./game-api";
@@ -962,13 +963,40 @@ function RecordCleanupDialog({ target, isBusy, onCancel, onConfirm }: { target: 
   </section></div>;
 }
 
-function QuickSettingsPanel({ theme, fontSize, generation, aiSettings, email, passwordConfigured, isBusy, legacyReadOnly = false, showLegacyArchive = false, onClose, onTheme, onFontSize, onPlatform, onAiSettings, onPasswordSettings, onSaves, onReset, onLogout, onDeleteAccount }: { theme: ThemeMode; fontSize: FontSizeMode; generation: StoryGenerationSettings | null; aiSettings: AiSettings | null; email: string; passwordConfigured: boolean; isBusy: boolean; legacyReadOnly?: boolean; showLegacyArchive?: boolean; onClose: () => void; onTheme: (value: ThemeMode) => void; onFontSize: (value: FontSizeMode) => void; onPlatform: () => void; onAiSettings: () => void; onPasswordSettings: () => void; onSaves: () => void; onReset: () => void; onLogout: () => void; onDeleteAccount: () => void }) {
+function StoryCorrectionDialog({ preview, error, isBusy, onCancel, onPreview, onConfirm, onEdit }: { preview: StoryCorrectionPreview | null; error: UiProblem | null; isBusy: boolean; onCancel: () => void; onPreview: (instruction: string) => void; onConfirm: () => void; onEdit: () => void }) {
+  const [instruction, setInstruction] = useState("");
+  const kindLabel = preview?.kind === "WORLD" ? "世界设定" : preview?.kind === "COGNITION" ? "人物认知" : "客观事实";
+  return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog correction-dialog" role="dialog">
+    <div className="ink-dialog-seal" aria-hidden="true">正</div><p className="eyebrow">CORRECT THE RECORD</p>
+    <h2>{preview ? "确认这次命卷修正" : "修正命卷事实"}</h2>
+    {preview ? <>
+      <p>系统只会写入下面展示的变化。确认前，你仍可以返回修改或直接取消。</p>
+      <div className="correction-preview"><span>{kindLabel}</span><strong>{preview.explanation}</strong><p>{preview.confirmationPrompt}</p></div>
+      <div className="ink-dialog-note"><span>确认后</span><strong>不消耗回合 · 不推进时间 · 保留原有纪事</strong></div>
+    </> : <>
+      <p>这里用于纠正已经记录错误的事实，不是发起新的行动。系统会先生成一份明确预览，只有再次确认后才会写入命卷。</p>
+      <label className="credential-field correction-field">需要纠正的内容<textarea autoFocus disabled={isBusy} maxLength={500} onChange={(event) => setInstruction(event.currentTarget.value)} placeholder="例如：林霜三年前已经离世，不应再次作为活人出现。" rows={5} value={instruction} /><small>{instruction.trim().length}/500</small></label>
+    </>}
+    {error && <ProblemNotice compact problem={error} />}
+    {preview ? <div className="ink-dialog-actions correction-actions">
+      <button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">取消修正</button>
+      <button className="ink-dialog-cancel" disabled={isBusy} onClick={onEdit} type="button">返回修改</button>
+      <button className="ink-dialog-confirm" disabled={isBusy} onClick={onConfirm} type="button">{isBusy ? "正在写入…" : "确认写入命卷"}</button>
+    </div> : <div className="ink-dialog-actions">
+      <button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">暂不修正</button>
+      <button className="ink-dialog-confirm" disabled={isBusy || instruction.trim().length < 2} onClick={() => onPreview(instruction.trim())} type="button">{isBusy ? "正在核对…" : "生成修正预览"}</button>
+    </div>}
+  </section></div>;
+}
+
+function QuickSettingsPanel({ theme, fontSize, generation, aiSettings, email, passwordConfigured, isBusy, legacyReadOnly = false, showLegacyArchive = false, onClose, onTheme, onFontSize, onPlatform, onAiSettings, onCorrection, onPasswordSettings, onSaves, onReset, onLogout, onDeleteAccount }: { theme: ThemeMode; fontSize: FontSizeMode; generation: StoryGenerationSettings | null; aiSettings: AiSettings | null; email: string; passwordConfigured: boolean; isBusy: boolean; legacyReadOnly?: boolean; showLegacyArchive?: boolean; onClose: () => void; onTheme: (value: ThemeMode) => void; onFontSize: (value: FontSizeMode) => void; onPlatform: () => void; onAiSettings: () => void; onCorrection?: () => void; onPasswordSettings: () => void; onSaves: () => void; onReset: () => void; onLogout: () => void; onDeleteAccount: () => void }) {
   const personalProvider = generation?.personalProviders.find((item) => item.code === generation.selectedPersonalProvider);
   const personalModel = personalProvider?.models.find((item) => item.code === generation?.selectedPersonalModel);
   const personalReady = generation?.mode === "PERSONAL" && personalProvider?.credentialConfigured && personalProvider.credentialStatus === "ACTIVE";
   return <div className="quick-settings-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}><aside aria-modal="true" className="quick-settings-panel" role="dialog"><header><div><p className="eyebrow">READING & ACCOUNT</p><h2>设置</h2></div><button aria-label="关闭设置" onClick={onClose} type="button"><Cross2Icon /></button></header>
     <section><h3>阅读外观</h3><p>只改变当前设备的阅读效果，不会影响命卷。</p><div className="theme-switch">{([['system','跟随系统'],['paper','宣纸'],['night','月夜']] as Array<[ThemeMode,string]>).map(([id,label]) => <button aria-pressed={theme === id} data-selected={theme === id} key={id} onClick={() => onTheme(id)} type="button">{label}</button>)}</div><div className="font-size-setting"><div><strong>字体大小</strong><span>调整剧情、选项与档案正文。</span></div><div className="theme-switch">{([['compact','小字'],['standard','标准'],['large','大字']] as Array<[FontSizeMode,string]>).map(([id,label]) => <button aria-pressed={fontSize === id} data-selected={fontSize === id} key={id} onClick={() => onFontSize(id)} type="button">{label}</button>)}</div></div></section>
     <section><h3>剧情生成</h3>{generation ? <><p>{generation.mode === "PERSONAL" ? personalReady ? `正在使用自己的${personalProvider ? ` ${personalProvider.name}` : ""}密钥${personalModel ? ` · ${personalModel.name}` : ""}。` : "自己的推演密钥当前不可用；行动会暂停，不会自动消耗平台回合。" : `正在使用平台推演，还可行动 ${generation.platform.remainingTurns} 回。平台使用的供应商和模型由游戏统一维护。`}</p><div className="theme-switch"><button aria-pressed={generation.mode === "PLATFORM"} data-selected={generation.mode === "PLATFORM"} disabled={isBusy} onClick={onPlatform} type="button">平台推演</button><button aria-pressed={generation.mode === "PERSONAL"} data-selected={generation.mode === "PERSONAL"} disabled={isBusy || generation.personalProviders.length === 0} onClick={onAiSettings} type="button">自己的密钥</button></div></> : <><p>{!aiSettings ? "生成设置暂未同步。" : aiSettings.usingCustomApi ? `正在使用自己的密钥，尾号 ${aiSettings.maskedSuffix ?? "已隐藏"}。` : `正在使用平台推演，还可行动 ${aiSettings.remainingTurns} 回。`}</p><button className="secondary-setting-button" disabled={!aiSettings?.customApiEnabled} onClick={onAiSettings} type="button">{aiSettings?.credentialConfigured ? "管理自己的密钥" : "接入自己的密钥"}</button></>}</section>
+    {onCorrection && <section><h3>命卷事实</h3><p>若人物生死、持有物、地点或世界设定被记错，可以先预览再确认修正。修正不会代替角色行动。</p><button className="secondary-setting-button correction-entry-button" disabled={isBusy} onClick={onCorrection} type="button">修正当前命卷</button></section>}
     <section><h3>账号与命卷</h3><p>{email || "当前账号"}<br />{passwordConfigured ? "登录密码已设置。" : "请为旧账号设置登录密码。"}</p><div className="settings-action-grid"><button onClick={onPasswordSettings} type="button">{passwordConfigured ? "修改密码" : "设置密码"}</button><button onClick={onSaves} type="button">{legacyReadOnly ? "旧版命卷" : "我的命卷"}</button>{showLegacyArchive && <button className="settings-wide-action" onClick={() => navigateEdition("v013")} type="button"><ReaderIcon />V0.13 旧版命卷档案</button>}{legacyReadOnly && <button className="settings-wide-action" onClick={() => navigateEdition()} type="button"><ArrowRightIcon />返回当前命卷</button>}</div></section>
     <section className="settings-danger-zone"><h3>命卷管理</h3><p>{legacyReadOnly ? "旧版命卷只读封存；退出账号不会删除档案。" : "重开只影响当前角色；退出账号不会删除存档。"}</p><div className="settings-action-grid">{!legacyReadOnly && <button onClick={onReset} type="button"><ReloadIcon />重开此世</button>}<button onClick={onLogout} type="button">退出账号</button></div>{!legacyReadOnly && <button className="delete-account-button" onClick={onDeleteAccount} type="button">注销账号与全部命卷</button>}</section>
   </aside></div>;
@@ -1017,6 +1045,8 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [generationSettings, setGenerationSettings] = useState<StoryGenerationSettings | null>(null);
   const [cleanupTarget, setCleanupTarget] = useState<CleanupTarget | null>(null);
+  const [showCorrection, setShowCorrection] = useState(false);
+  const [correctionPreview, setCorrectionPreview] = useState<StoryCorrectionPreview | null>(null);
 
   const game = snapshot?.state ?? null;
   const choices = snapshot?.choices ?? game?.choices ?? [];
@@ -1266,10 +1296,11 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
         setSyncMode("server");
         return;
       }
-      if (caught instanceof ApiError && caught.code === "STATE_CONFLICT" && snapshot?.state.saveId) {
+      if (caught instanceof ApiError && ["STATE_CONFLICT", "CORRECTION_REVISION_CONFLICT", "CORRECTION_PREVIEW_EXPIRED"].includes(caught.code ?? "") && snapshot?.state.saveId) {
         try {
           const refreshed = await loadSave(snapshot.state.saveId);
           storeSnapshot(refreshed);
+          if (showCorrection) setCorrectionPreview(null);
         } catch {
           // 保留原始冲突提示；刷新失败时不覆盖真正的原因。
         }
@@ -1453,6 +1484,29 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
     setCleanupTarget(null);
     setToast(target.kind === "item" ? "物品已移出当前行囊，旧事仍保留" : "人物已移出当前关注，旧事仍保留");
   });
+
+  const previewCorrection = (instruction: string) => runBusy(async () => {
+    if (!v014 || !game || !snapshot) return;
+    const preview = await gameApi.storyCorrectionPreview(game.saveId, instruction, snapshot.revision);
+    setCorrectionPreview(preview);
+  });
+
+  const confirmCorrection = () => runBusy(async () => {
+    if (!v014 || !game || !snapshot || !correctionPreview) return;
+    const response = await gameApi.storyCorrectionConfirm(game.saveId, correctionPreview.proposalToken, snapshot.revision);
+    storeSnapshot(storySnapshotView(response));
+    await refreshSaves();
+    setCorrectionPreview(null);
+    setShowCorrection(false);
+    setToast("命卷事实已修正，原有纪事仍然保留");
+  });
+
+  const closeCorrection = () => {
+    if (isBusy) return;
+    setCorrectionPreview(null);
+    setShowCorrection(false);
+    setError(null);
+  };
 
   const dismissResolution = () => {
     setSnapshot((current) => current ? {
@@ -1658,7 +1712,8 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
         : <LegacyAiCredentialDialog error={error} isBusy={isBusy} onCancel={() => setShowAiSettings(false)} onDelete={() => void deleteAiCredential()} onSave={(key) => void saveAiCredential(key)} settings={aiSettings} />)}
       {showPasswordSettings && <PasswordDialog configured={auth?.passwordConfigured ?? false} mandatory={auth?.authenticated === true && !auth.passwordConfigured} error={error} isBusy={isBusy} onCancel={() => setShowPasswordSettings(false)} onSave={(current, next) => void savePassword(current, next)} />}
       {showDeleteAccount && <DeleteAccountDialog isBusy={isBusy} onCancel={() => setShowDeleteAccount(false)} onConfirm={() => void deleteAccount()} />}
-      {showQuickSettings && <QuickSettingsPanel aiSettings={aiSettings} email={email} fontSize={fontSize} generation={v014 ? generationSettings : null} isBusy={isBusy} legacyReadOnly={legacyReadOnly} onAiSettings={() => { setShowQuickSettings(false); setShowAiSettings(true); }} onClose={() => setShowQuickSettings(false)} onDeleteAccount={() => { setShowQuickSettings(false); setShowDeleteAccount(true); }} onFontSize={setFontSize} onLogout={() => { setShowQuickSettings(false); void logout(); }} onPasswordSettings={() => { setShowQuickSettings(false); setShowPasswordSettings(true); }} onPlatform={() => void usePlatformGeneration()} onReset={() => { setShowQuickSettings(false); resetGame(); }} onSaves={() => { setShowQuickSettings(false); setStage("saves"); }} onTheme={setTheme} passwordConfigured={auth?.passwordConfigured ?? false} showLegacyArchive={v014} theme={theme} />}
+      {showCorrection && <StoryCorrectionDialog error={error} isBusy={isBusy} onCancel={closeCorrection} onConfirm={() => void confirmCorrection()} onEdit={() => { setCorrectionPreview(null); setError(null); }} onPreview={(instruction) => void previewCorrection(instruction)} preview={correctionPreview} />}
+      {showQuickSettings && <QuickSettingsPanel aiSettings={aiSettings} email={email} fontSize={fontSize} generation={v014 ? generationSettings : null} isBusy={isBusy} legacyReadOnly={legacyReadOnly} onAiSettings={() => { setShowQuickSettings(false); setShowAiSettings(true); }} onClose={() => setShowQuickSettings(false)} onCorrection={v014 && game?.phase === "playing" && !legacyReadOnly ? () => { setShowQuickSettings(false); setCorrectionPreview(null); setError(null); setShowCorrection(true); } : undefined} onDeleteAccount={() => { setShowQuickSettings(false); setShowDeleteAccount(true); }} onFontSize={setFontSize} onLogout={() => { setShowQuickSettings(false); void logout(); }} onPasswordSettings={() => { setShowQuickSettings(false); setShowPasswordSettings(true); }} onPlatform={() => void usePlatformGeneration()} onReset={() => { setShowQuickSettings(false); resetGame(); }} onSaves={() => { setShowQuickSettings(false); setStage("saves"); }} onTheme={setTheme} passwordConfigured={auth?.passwordConfigured ?? false} showLegacyArchive={v014} theme={theme} />}
       {isBusy && (stage === "create" || stage === "fate" || stage === "talent") && <DestinyLoadingOverlay stage={stage} />}
       {toast && <div className="save-toast" role="status"><span className="agent-dot" />{toast}</div>}
     </div>

@@ -1390,6 +1390,7 @@
 .settings-action-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .settings-action-grid button { display:flex; min-height:44px; align-items:center; justify-content:center; gap:7px; color:var(--celadon-dark); background:var(--celadon-pale); border:1px solid var(--line); font-family:var(--display); }
 .settings-action-grid .settings-wide-action { grid-column:1 / -1; }
+.correction-entry-button { width: 100%; min-height: 44px; }
 .legacy-archive-link { width:100%; min-height:48px; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:12px; color:var(--celadon-dark); background:var(--celadon-pale); border:1px solid var(--line); font-family:var(--display); }
 .legacy-readonly-notice { margin:0 0 22px; padding:16px 18px; color:var(--ink-soft); background:var(--celadon-pale); border-left:3px solid var(--celadon); }
 .legacy-readonly-notice strong { color:var(--celadon-dark); font-family:var(--display); font-size:18px; }
@@ -1701,7 +1702,14 @@
 .credential-dialog > p:not(.eyebrow):not(.credential-warning) { color: var(--ink-soft); line-height: 1.75; }
 .credential-field { display: grid; gap: 8px; margin: 20px 0; color: var(--ink-soft); font-size: 13px; }
 .credential-field label { display: grid; gap: 8px; }
-.credential-field input, .credential-field select { width: 100%; min-height: 48px; box-sizing: border-box; border: 1px solid var(--line); background: rgba(247, 243, 232, .74); color: var(--ink); padding: 0 14px; font: inherit; }
+.credential-field input, .credential-field select, .credential-field textarea { width: 100%; min-height: 48px; box-sizing: border-box; border: 1px solid var(--line); background: rgba(247, 243, 232, .74); color: var(--ink); padding: 0 14px; font: inherit; }
+.credential-field textarea { min-height: 132px; padding: 13px 14px; line-height: 1.75; resize: vertical; }
+.correction-field small { justify-self: end; color: var(--ink-faint); }
+.correction-preview { display: grid; gap: 10px; margin: 18px 0; padding: 16px; background: rgba(87, 128, 107, .09); border: 1px solid var(--line); }
+.correction-preview > span { width: max-content; padding: 3px 8px; color: var(--celadon-dark); background: var(--celadon-pale); font-size: 11px; letter-spacing: .08em; }
+.correction-preview > strong { font-family: var(--display); font-size: 18px; line-height: 1.6; }
+.correction-preview > p { margin: 0; color: var(--ink-soft); line-height: 1.75; }
+.correction-actions { grid-template-columns: .8fr .8fr 1.25fr; }
 .credential-warning { padding: 12px; border-left: 3px solid var(--cinnabar); background: rgba(156, 63, 54, .1); color: var(--cinnabar); line-height: 1.6; }
 .credential-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; }
 .credential-actions > button { min-width: 112px; flex: 1 1 auto; }
@@ -1709,9 +1717,11 @@
 .ink-dialog-confirm.destructive { background: var(--cinnabar); }
 .game-shell[data-theme="night"] .ai-settings-card { background: rgba(20, 28, 25, .88); }
 .game-shell[data-theme="night"] .secondary-setting-button { color: var(--celadon); }
-.game-shell[data-theme="night"] .credential-field input, .game-shell[data-theme="night"] .credential-field select { background: rgba(10, 17, 15, .82); }
+.game-shell[data-theme="night"] .credential-field input, .game-shell[data-theme="night"] .credential-field select, .game-shell[data-theme="night"] .credential-field textarea { background: rgba(10, 17, 15, .82); }
+.game-shell[data-theme="night"] .correction-preview { background: rgba(127, 181, 154, .09); }
 .game-shell[data-theme="night"] .problem-notice { background: rgba(54, 31, 29, .92); border-color: rgba(212, 134, 119, .44); }
 .game-shell[data-theme="night"] .problem-notice[data-category="SYSTEM"] { background: rgba(27, 44, 38, .94); border-color: rgba(133, 181, 157, .48); }
+@media (max-width: 420px) { .correction-actions { grid-template-columns: 1fr; } }
 .login-mode-switch { display: grid; grid-template-columns: 1fr 1fr; margin: 20px 0 8px; border: 1px solid var(--line); }
 .login-mode-switch button { min-height: 44px; border: 0; background: transparent; color: var(--ink-soft); font: inherit; }
 .login-mode-switch button[aria-selected="true"] { background: var(--celadon); color: #f7f3e8; }
