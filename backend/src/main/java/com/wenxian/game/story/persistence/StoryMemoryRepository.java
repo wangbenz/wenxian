@@ -22,12 +22,12 @@ public class StoryMemoryRepository {
     public List<StoredMemory> recentActive(String saveId, int maximum) {
         int limit = Math.max(1, Math.min(maximum, 80));
         return jdbc.query("""
-                select id,title,summary,occurred_turn,world_time,importance
+                select id,memory_type,title,summary,occurred_turn,world_time,importance
                 from story_memory where save_id=? and status='ACTIVE'
                 order by occurred_turn desc,created_at desc limit ?
-                """, (row, index) -> new StoredMemory(row.getString("id"), row.getString("title"),
-                row.getString("summary"), row.getInt("occurred_turn"), row.getLong("world_time"),
-                row.getString("importance")), saveId, limit).reversed();
+                """, (row, index) -> new StoredMemory(row.getString("id"), row.getString("memory_type"),
+                row.getString("title"), row.getString("summary"), row.getInt("occurred_turn"),
+                row.getLong("world_time"), row.getString("importance")), saveId, limit).reversed();
     }
 
     public boolean exists(String saveId, String memoryId) {
@@ -40,12 +40,12 @@ public class StoryMemoryRepository {
         jdbc.update("""
                 insert into story_memory(
                     id,save_id,memory_type,importance,title,summary,occurred_turn,world_time,status,created_at
-                ) values (?,?,'EVENT',?,?,?,?,?,'ACTIVE',?)
-                """, memory.id(), saveId, memory.importance(), memory.title(), memory.summary(),
+                ) values (?,?,?,?,?,?,?,?,'ACTIVE',?)
+                """, memory.id(), saveId, memory.memoryType(), memory.importance(), memory.title(), memory.summary(),
                 memory.occurredTurn(), memory.worldTime(), Timestamp.from(Instant.now()));
     }
 
     /** 运行时读取的有效记忆事实。 */
-    public record StoredMemory(String id, String title, String summary, int occurredTurn,
+    public record StoredMemory(String id, String memoryType, String title, String summary, int occurredTurn,
                                long worldTime, String importance) {}
 }

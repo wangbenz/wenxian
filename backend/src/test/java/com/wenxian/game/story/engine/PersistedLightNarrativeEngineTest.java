@@ -63,7 +63,7 @@ class PersistedLightNarrativeEngineTest {
             attributes.put("inPossession", true);
             entities.insert(new Entity("entity-token", "story-v014-test", "ITEM", "青纹令", "随身携带",
                     true, "来自旧识的令牌", attributes, 0, 3, Instant.now(), Instant.now()));
-            memories.insert("story-v014-test", new StoredMemory("memory-origin", "此生来处", "山村少年",
+            memories.insert("story-v014-test", new StoredMemory("memory-origin", "EVENT", "此生来处", "山村少年",
                     0, 0, "KEY"));
             jdbc.update("""
                     insert into story_conversation(save_id,rolling_summary,summarized_through_turn,

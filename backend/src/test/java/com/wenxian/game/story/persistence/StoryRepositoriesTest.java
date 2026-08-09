@@ -95,6 +95,24 @@ class StoryRepositoriesTest {
         }
     }
 
+    @Test
+    void memoryRepositoryPreservesItsDomainType() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            new StorySaveRepository(jdbc, mapper).insert(newSave("story-save-memory"));
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            memories.insert("story-save-memory", new StoryMemoryRepository.StoredMemory(
+                    "memory-promise", "PROMISE", "三年之约", "答应三年后重返山门。", 2, 120, "KEY"));
+
+            var stored = memories.recentActive("story-save-memory", 10).getFirst();
+            assertEquals("PROMISE", stored.memoryType());
+            assertEquals("三年之约", stored.title());
+        } finally {
+            database.shutdown();
+        }
+    }
+
     private EmbeddedDatabase database() {
         EmbeddedDatabase database = new EmbeddedDatabaseBuilder().setType(EmbeddedDatabaseType.H2)
                 .addScript("schema-h2.sql").build();

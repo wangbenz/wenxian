@@ -531,7 +531,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
     private void appendNewMemories(String saveId, V014State state) {
         for (V014State.Memory memory : state.memories()) {
             if (!memories.exists(saveId, memory.id())) {
-                memories.insert(saveId, new StoredMemory(memory.id(), memory.title(), memory.summary(),
+                memories.insert(saveId, new StoredMemory(memory.id(), "EVENT", memory.title(), memory.summary(),
                         state.turnNumber(), memory.worldTimeMinutes(), normalizeImportance(memory.importance())));
             }
         }
