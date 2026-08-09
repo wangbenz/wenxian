@@ -2,6 +2,7 @@ package com.wenxian.game.story.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wenxian.game.story.agent.StoryCorrectionAgent;
+import com.wenxian.game.story.agent.PromptContextAssembler;
 import com.wenxian.game.story.application.CorrectionProposalTokenCodec;
 import com.wenxian.game.story.application.StoryCorrectionWorkflow;
 import com.wenxian.game.story.persistence.StoryProjectionPersistenceMapper;
@@ -20,6 +21,11 @@ import java.time.Duration;
  */
 @Configuration
 public class StoryTrustConfiguration {
+    @Bean
+    public PromptContextAssembler promptContextAssembler() {
+        return new PromptContextAssembler();
+    }
+
     @Bean
     public StoryProjectionPersistenceMapper storyProjectionPersistenceMapper(ObjectMapper mapper) {
         return new StoryProjectionPersistenceMapper(mapper);
