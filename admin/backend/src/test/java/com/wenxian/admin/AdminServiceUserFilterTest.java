@@ -150,7 +150,7 @@ class AdminServiceUserFilterTest {
                 """);
         jdbc.update("""
                 insert into story_save(id,user_id,status,state_json,turn_number,updated_at)
-                values ('save-high','user-high','ACTIVE','{"turn":18,"player":{"name":"高回合","realm":"引气"}}',18,current_timestamp)
+                values ('save-high','user-high','ACTIVE','{"turnNumber":18,"protagonist":{"name":"高回合","realm":"引气","race":"人族"}}',18,current_timestamp)
                 """);
         jdbc.update("""
                 insert into story_save(id,user_id,status,state_json,turn_number,updated_at)
@@ -163,6 +163,17 @@ class AdminServiceUserFilterTest {
         assertEquals("user-high", ranking.getFirst().get("userId"));
         assertEquals(18, ranking.getFirst().get("turn"));
         assertEquals("高回合", ranking.getFirst().get("playerName"));
+        assertEquals("引气", ranking.getFirst().get("realm"));
+
+        List<Map<String, Object>> users = service.users("", "", "", "", "", 0, 20);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) users.get(1).get("rows");
+        Map<String, Object> canonical = rows.stream()
+                .filter(row -> "user-high".equals(row.get("userId")))
+                .findFirst().orElseThrow();
+        assertEquals("高回合", canonical.get("playerName"));
+        assertEquals("引气", canonical.get("realm"));
+        assertEquals("人族", canonical.get("race"));
     }
 
     private void insertUser(String id, String email, String date, int hour) {

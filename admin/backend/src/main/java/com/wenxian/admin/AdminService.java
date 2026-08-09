@@ -559,7 +559,7 @@ public class AdminService {
             String realm = "";
             try {
                 JsonNode state = mapper.readTree(row.getString("state_json"));
-                JsonNode player = state.path("player");
+                JsonNode player = protagonist(state);
                 playerName = player.path("name").asText("");
                 realm = player.path("realm").asText("");
             } catch (Exception ignored) { }
@@ -918,7 +918,11 @@ public class AdminService {
             String like = "%" + searchValue + "%";
             where.append("""
                      AND (u.email LIKE ? OR u.id LIKE ? OR coalesce(gs.id, '') LIKE ?
-                          OR coalesce(JSON_UNQUOTE(JSON_EXTRACT(gs.state_json, '$.player.name')), '') LIKE ?)
+                          OR coalesce(
+                              JSON_UNQUOTE(JSON_EXTRACT(gs.state_json, '$.protagonist.name')),
+                              JSON_UNQUOTE(JSON_EXTRACT(gs.state_json, '$.player.name')),
+                              ''
+                          ) LIKE ?)
                     """);
             args.add(like); args.add(like); args.add(like); args.add(like);
         }
@@ -934,7 +938,13 @@ public class AdminService {
             args.add(difficultyFilter);
         }
         if (!realmFilterValue.isBlank()) {
-            where.append(" AND coalesce(JSON_UNQUOTE(JSON_EXTRACT(gs.state_json, '$.player.realm')), '') = ? ");
+            where.append("""
+                     AND coalesce(
+                         JSON_UNQUOTE(JSON_EXTRACT(gs.state_json, '$.protagonist.realm')),
+                         JSON_UNQUOTE(JSON_EXTRACT(gs.state_json, '$.player.realm')),
+                         ''
+                     ) = ?
+                    """);
             args.add(realmFilterValue);
         }
         if (!registeredDateValue.isBlank()) {
@@ -997,7 +1007,7 @@ public class AdminService {
             int turnCount = 0;
             try {
                 JsonNode state = mapper.readTree(row.getString("state_json"));
-                JsonNode player = state.path("player");
+                JsonNode player = protagonist(state);
                 playerName = player.path("name").asText("");
                 realm = player.path("realm").asText("");
                 race = player.path("race").asText("");
@@ -1054,8 +1064,9 @@ public class AdminService {
             int turn = 0;
             try {
                 JsonNode state = mapper.readTree(row.getString("state_json"));
-                playerName = state.path("player").path("name").asText("");
-                realm = state.path("player").path("realm").asText("");
+                JsonNode player = protagonist(state);
+                playerName = player.path("name").asText("");
+                realm = player.path("realm").asText("");
                 turn = Math.max(row.getInt("turn_number"), state.path("turn").asInt(0));
             } catch (Exception ignored) { }
             Map<String, Object> item = new LinkedHashMap<>();
@@ -1290,7 +1301,7 @@ public class AdminService {
         life.put("endingDetail", "");
         try {
             JsonNode state = mapper.readTree(stateJson);
-            JsonNode player = state.path("player");
+            JsonNode player = protagonist(state);
             life.put("playerName", player.path("name").asText("尚未择定"));
             life.put("realm", player.path("realm").asText(""));
             life.put("race", player.path("race").asText(""));
@@ -1679,7 +1690,7 @@ public class AdminService {
             item.put("email", row.getString("email"));
             String playerName = "";
             try {
-                playerName = mapper.readTree(row.getString("state_json")).path("player").path("name").asText("");
+                playerName = protagonist(mapper.readTree(row.getString("state_json"))).path("name").asText("");
             } catch (Exception ignored) { }
             item.put("playerName", playerName);
             item.put("at", displayTime(row.getTimestamp("created_at")));
@@ -1851,6 +1862,14 @@ public class AdminService {
     private static String displayTime(Timestamp timestamp) {
         if (timestamp == null) return null;
         return timestamp.toLocalDateTime().atZone(ZoneId.of("Asia/Shanghai")).toInstant().toString();
+    }
+
+    /**
+     * 读取统一命卷主角信息；新命卷以 protagonist 为权威字段，player 仅用于兼容旧状态快照。
+     */
+    private static JsonNode protagonist(JsonNode state) {
+        JsonNode current = state.path("protagonist");
+        return current.isObject() ? current : state.path("player");
     }
 
     private static String suffix(String secret) {

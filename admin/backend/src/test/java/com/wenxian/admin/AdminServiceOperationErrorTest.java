@@ -62,7 +62,12 @@ class AdminServiceOperationErrorTest {
 
     @Test
     void resolvesLegacyErrorThroughUnifiedSaveSourceId() {
-        jdbc.update("update story_save set id='story-save-1', source_save_id='save-1' where id='save-1'");
+        jdbc.update("""
+                update story_save
+                set id='story-save-1', source_save_id='save-1',
+                    state_json='{"protagonist":{"name":"林渊","realm":"引气"}}'
+                where id='save-1'
+                """);
 
         List<Map<String, Object>> rows = service.operationErrors("player@example.com", "RESOURCE", 100);
         assertEquals(1, rows.size());
