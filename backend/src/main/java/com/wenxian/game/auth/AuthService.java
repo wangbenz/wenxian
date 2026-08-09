@@ -29,7 +29,7 @@ public class AuthService {
     private static final Duration LOGIN_FAILURE_WINDOW = Duration.ofMinutes(10);
     private static final int DEFAULT_REGISTRATION_MAX_USERS = 1000;
     private static final String DEFAULT_REGISTRATION_LIMIT_MESSAGE = "当前系统试玩人数较多，暂时停止新账号注册。";
-    private static final String DEFAULT_REGISTRATION_CONTACT = "如需参与测试或反馈问题，请加入QQ群：1092478336。";
+    private static final String DEFAULT_REGISTRATION_CONTACT = "如需参与测试或反馈问题，请加入《问仙录》二群：532549329。";
 
     private final JdbcTemplate jdbcTemplate;
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);

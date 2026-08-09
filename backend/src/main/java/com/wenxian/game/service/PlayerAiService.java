@@ -35,7 +35,7 @@ public class PlayerAiService {
     private static final String CUSTOM_API_KEY = "custom_api_enabled";
     private static final String CONTACT_TEXT_KEY = "registration_contact_text";
     private static final String DEFAULT_LIMIT_MESSAGE = "本账号获赠的推演回合已经用完。你可以前往「世界」接入自己的推演密钥继续游玩。";
-    private static final String DEFAULT_CONTACT_TEXT = "如需参与测试或反馈问题，请加入QQ群：1092478336。";
+    private static final String DEFAULT_CONTACT_TEXT = "如需参与测试或反馈问题，请加入《问仙录》二群：532549329。";
     private static final Pattern SUPPORT_GROUP_PATTERN = Pattern.compile("(?<!\\d)(\\d{5,12})(?!\\d)");
     private static final ZoneId QUOTA_ZONE = ZoneId.of("Asia/Shanghai");
 
