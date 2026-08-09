@@ -46,6 +46,7 @@ class StoryCorrectionWorkflowTest {
                 preview.proposalToken(), projection());
 
         assertEquals(1, calls.get(), "确认阶段不得重新调用模型");
+        assertEquals("当前地点应为北门", confirmed.instruction());
         assertEquals("青岐城北门", confirmed.projection().coreState().location());
         assertEquals(120, confirmed.projection().worldTimeMinutes(), "修正不能推进世界时间");
         assertEquals(StoryCorrectionProposal.CorrectionKind.FACT, preview.kind());

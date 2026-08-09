@@ -25,10 +25,11 @@ class CorrectionProposalTokenCodecTest {
         CorrectionProposalTokenCodec codec = codec(NOW);
         StoryCorrectionProposal proposal = proposal();
 
-        String token = codec.issue("user-1", "story-save-1", 12, proposal);
+        String token = codec.issue("user-1", "story-save-1", 12, "当前地点应为北门", proposal);
         CorrectionProposalTokenCodec.VerifiedProposal verified = codec.verify(
                 token, "user-1", "story-save-1", 12);
 
+        assertEquals("当前地点应为北门", verified.instruction());
         assertEquals(proposal, verified.proposal());
         assertEquals(NOW.plus(Duration.ofMinutes(10)), verified.expiresAt());
         assertTrue(token.startsWith("c1."));
@@ -37,7 +38,7 @@ class CorrectionProposalTokenCodecTest {
     @Test
     void rejectsTamperingAndWrongOwnershipOrRevision() {
         CorrectionProposalTokenCodec codec = codec(NOW);
-        String token = codec.issue("user-1", "story-save-1", 12, proposal());
+        String token = codec.issue("user-1", "story-save-1", 12, "修正地点", proposal());
         String tampered = token.substring(0, token.length() - 1)
                 + (token.endsWith("A") ? "B" : "A");
 
@@ -49,7 +50,7 @@ class CorrectionProposalTokenCodecTest {
 
     @Test
     void rejectsExpiredProposalWithoutReinterpretingIt() {
-        String token = codec(NOW).issue("user-1", "story-save-1", 12, proposal());
+        String token = codec(NOW).issue("user-1", "story-save-1", 12, "修正地点", proposal());
         CorrectionProposalTokenCodec expiredCodec = codec(NOW.plus(Duration.ofMinutes(11)));
 
         assertInvalid(() -> expiredCodec.verify(token, "user-1", "story-save-1", 12));

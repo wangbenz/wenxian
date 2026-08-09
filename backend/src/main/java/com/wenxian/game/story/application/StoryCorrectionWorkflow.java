@@ -39,7 +39,7 @@ public final class StoryCorrectionWorkflow {
                            StoryPromptContext context, StoryModelRoute route) {
         StoryCorrectionAgent.Generated generated = agent.propose(context, instruction, route);
         StoryCorrectionProposal proposal = generated.proposal();
-        String proposalToken = tokens.issue(userId, saveId, expectedRevision, proposal);
+        String proposalToken = tokens.issue(userId, saveId, expectedRevision, instruction, proposal);
         return new Preview(proposal.kind(), proposal.explanation(), proposal.confirmationPrompt(),
                 proposalToken, generated.modelResult());
     }
@@ -51,7 +51,7 @@ public final class StoryCorrectionWorkflow {
         CorrectionProposalTokenCodec.VerifiedProposal verified = tokens.verify(
                 proposalToken, userId, saveId, expectedRevision);
         StoryCorrectionReducer.Applied applied = reducer.apply(currentProjection, verified.proposal(), true);
-        return new Confirmed(applied.projection(), applied.acceptedProposal());
+        return new Confirmed(verified.instruction(), applied.projection(), applied.acceptedProposal());
     }
 
     public record Preview(
@@ -63,6 +63,7 @@ public final class StoryCorrectionWorkflow {
     ) {}
 
     public record Confirmed(
+            String instruction,
             StoryProjection projection,
             StoryCorrectionProposal acceptedProposal
     ) {}

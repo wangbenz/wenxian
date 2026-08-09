@@ -19,8 +19,8 @@ import java.util.Base64;
 /**
  * 为两阶段修正签发和验证短时有效的认证加密令牌。
  *
- * <p>令牌绑定账号、命卷、命卷 revision、完整修正提案和失效时间。H5 只能原样回传，无法读取密钥或
- * 修改提案。该组件不写数据库；同一令牌首次提交后 revision 会递增，因此重复提交不能再次生效。</p>
+ * <p>令牌绑定账号、命卷、命卷 revision、玩家原始修正说明、完整修正提案和失效时间。H5 只能原样回传，
+ * 无法读取密钥或修改提案。该组件不写数据库；同一令牌首次提交后 revision 会递增，因此重复提交不能再次生效。</p>
  */
 public final class CorrectionProposalTokenCodec {
     private static final String VERSION = "c1";
@@ -53,12 +53,16 @@ public final class CorrectionProposalTokenCodec {
         this.validator = validator == null ? new StoryCorrectionValidator() : validator;
     }
 
-    public String issue(String userId, String saveId, long expectedRevision, StoryCorrectionProposal proposal) {
+    public String issue(String userId, String saveId, long expectedRevision, String instruction,
+                        StoryCorrectionProposal proposal) {
         requireIdentity(userId, saveId, expectedRevision);
+        if (instruction == null || instruction.isBlank()) {
+            throw new IllegalArgumentException("修正令牌缺少玩家原始说明");
+        }
         validator.validate(proposal);
         Instant expiresAt = clock.instant().plus(lifetime);
         TokenPayload payload = new TokenPayload(VERSION, userId.strip(), saveId.strip(), expectedRevision,
-                expiresAt.getEpochSecond(), proposal);
+                expiresAt.getEpochSecond(), instruction.strip(), proposal);
         try {
             byte[] iv = new byte[IV_LENGTH];
             random.nextBytes(iv);
@@ -92,8 +96,10 @@ public final class CorrectionProposalTokenCodec {
                     || payload.expiresAtEpochSecond() <= clock.instant().getEpochSecond()) {
                 throw invalid(null);
             }
+            if (payload.instruction() == null || payload.instruction().isBlank()) throw invalid(null);
             validator.validate(payload.proposal());
-            return new VerifiedProposal(payload.proposal(), Instant.ofEpochSecond(payload.expiresAtEpochSecond()));
+            return new VerifiedProposal(payload.instruction(), payload.proposal(),
+                    Instant.ofEpochSecond(payload.expiresAtEpochSecond()));
         } catch (IllegalArgumentException error) {
             if ("修正提案无效或已经过期".equals(error.getMessage())) throw error;
             throw invalid(error);
@@ -133,8 +139,13 @@ public final class CorrectionProposalTokenCodec {
             String saveId,
             long expectedRevision,
             long expiresAtEpochSecond,
+            String instruction,
             StoryCorrectionProposal proposal
     ) {}
 
-    public record VerifiedProposal(StoryCorrectionProposal proposal, Instant expiresAt) {}
+    public record VerifiedProposal(
+            String instruction,
+            StoryCorrectionProposal proposal,
+            Instant expiresAt
+    ) {}
 }
