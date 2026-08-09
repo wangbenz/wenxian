@@ -1642,17 +1642,29 @@ public class AdminService {
         String keyword = search == null ? "" : search.strip();
         String normalizedCategory = category == null ? "" : category.strip().toUpperCase();
         int limit = Math.max(1, Math.min(requestedLimit, 300));
-        List<Map<String, Object>> candidates = jdbc.query("""
+        StringBuilder where = new StringBuilder(" where (? = '' or e.category = ?) ");
+        List<Object> args = new ArrayList<>(List.of(normalizedCategory, normalizedCategory));
+        if (!keyword.isBlank()) {
+            String like = "%" + keyword + "%";
+            where.append("""
+                    and (e.reference_id like ? or e.error_code like ? or e.save_id like ?
+                         or coalesce(u.email,'') like ?
+                         or coalesce(s.state_json,'') like ?)
+                    """);
+            args.add(like); args.add(like); args.add(like); args.add(like); args.add(like);
+        }
+        args.add(limit);
+        return jdbc.query("""
                 select e.reference_id, e.save_id, e.operation, e.category, e.error_code,
                        e.http_status, e.public_message, e.diagnostic, e.created_at,
                        coalesce(u.email, '') email, s.state_json
                 from operation_error e
                 left join story_save s on s.id = e.save_id
                 left join app_user u on u.id = s.user_id
-                where (? = '' or e.category = ?)
+                %s
                 order by e.created_at desc
                 limit ?
-                """, (row, idx) -> {
+                """.formatted(where), (row, idx) -> {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("referenceId", row.getString("reference_id"));
             item.put("saveId", row.getString("save_id"));
@@ -1670,12 +1682,36 @@ public class AdminService {
             item.put("playerName", playerName);
             item.put("at", displayTime(row.getTimestamp("created_at")));
             return item;
-        }, normalizedCategory, normalizedCategory, 300);
-        if (keyword.isBlank()) return candidates.subList(0, Math.min(limit, candidates.size()));
-        String lower = keyword.toLowerCase();
-        return candidates.stream().filter(item -> item.values().stream()
-                        .anyMatch(value -> value != null && String.valueOf(value).toLowerCase().contains(lower)))
-                .limit(limit).toList();
+        }, args.toArray());
+    }
+
+    /**
+     * 汇总近期最终操作错误，供运营先识别高频系统故障，再下钻单条问题。
+     * 只读取错误事实和统一命卷归属，不修改玩家状态，也不读取剧情正文。
+     */
+    public List<Map<String, Object>> operationErrorSummary(int requestedDays, int requestedLimit) {
+        int days = Math.max(1, Math.min(requestedDays, 30));
+        int limit = Math.max(1, Math.min(requestedLimit, 30));
+        Timestamp from = Timestamp.from(Instant.now().minus(Duration.ofDays(days)));
+        return jdbc.query("""
+                select e.category, e.error_code, max(e.http_status) highest_status,
+                       count(*) occurrence_count, count(distinct s.user_id) affected_players,
+                       max(e.created_at) latest_at, max(e.public_message) sample_message
+                from operation_error e
+                left join story_save s on s.id=e.save_id
+                where e.created_at>=?
+                group by e.category, e.error_code
+                order by (max(e.http_status)>=500) desc, count(*) desc, max(e.created_at) desc
+                limit ?
+                """, (row, index) -> Map.<String, Object>of(
+                "category", row.getString("category"),
+                "code", row.getString("error_code"),
+                "highestStatus", row.getInt("highest_status"),
+                "count", row.getLong("occurrence_count"),
+                "affectedPlayers", row.getLong("affected_players"),
+                "latestAt", displayTime(row.getTimestamp("latest_at")),
+                "message", row.getString("sample_message") == null ? "" : row.getString("sample_message")
+        ), from, limit);
     }
 
     public Map<String, Object> accessControl() {

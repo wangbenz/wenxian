@@ -292,6 +292,11 @@ td small { display: block; max-width: 220px; margin-top: 3px; overflow: hidden; 
 .problem-queue > button b small { display: inline; margin-left: 3px; }
 .severity { width: 28px; height: 28px; display: grid; place-items: center; color: #b25e09; background: #fff4e5; border-radius: 50%; font-size: 11px; font-weight: 700; }
 .severity-high { color: #b42318; background: #fee4e2; }
+.health-notes { display: grid; }
+.health-notes p { min-height: 70px; display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 18px; align-items: center; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.health-notes p:last-child { border-bottom: 0; }
+.health-notes strong { color: #344054; }
+.health-notes span { color: var(--muted); line-height: 1.65; }
 .attention-list { display: grid; padding: 4px 14px; }
 .attention-list article { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 13px 2px; border-bottom: 1px solid #eaecf0; }
 .attention-list article:last-child { border-bottom: 0; }
@@ -597,6 +602,7 @@ td small { display: block; max-width: 220px; margin-top: 3px; overflow: hidden; 
   .pager { justify-content: space-between; padding: 12px; }
   .pager-pages { width: 100%; overflow-x: auto; }
   .problem-queue, .growth-funnel { grid-template-columns: 1fr; }
+  .health-notes p { grid-template-columns: 1fr; gap: 5px; }
   .sensitive-actions > div:last-child { grid-template-columns: 1fr; }
   .login-shell { padding: 14px; }
   .login-card { padding: 26px 22px; }

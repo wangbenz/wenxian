@@ -53,5 +53,10 @@ class AdminServiceOperationErrorTest {
 
         assertEquals(1, service.operationErrors("player@example.com", "RESOURCE", 100).size());
         assertEquals(0, service.operationErrors("player@example.com", "SYSTEM", 100).size());
+
+        List<Map<String, Object>> summary = service.operationErrorSummary(7, 10);
+        assertEquals(1, summary.size());
+        assertEquals("CURRENCY_INSUFFICIENT", summary.getFirst().get("code"));
+        assertEquals(1L, summary.getFirst().get("affectedPlayers"));
     }
 }

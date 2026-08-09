@@ -302,6 +302,13 @@ public class AdminController {
         return adminService.operationErrors(search, category, limit);
     }
 
+    @GetMapping("/operation-errors/summary")
+    public List<Map<String, Object>> operationErrorSummary(
+            @RequestParam(defaultValue = "7") int days,
+            @RequestParam(defaultValue = "12") int limit) {
+        return adminService.operationErrorSummary(days, limit);
+    }
+
     @GetMapping("/access-control")
     public Map<String, Object> accessControl() {
         return adminService.accessControl();
