@@ -209,6 +209,10 @@ V0.15 先确定以下语义，不代表数据库已经新增字段：
 
 **权威性**：当前是否持有物品、明确数量、是否掌握能力、人物生命周期、是否持续关注人物以本表为准。正文中提到但没有正式补丁的对象不能自动进入当前实体。数量未知时保持未知；一旦正式补丁确认具体数量，后续变化必须基于该数量提交。
 
+`attributes_json._trusted` 为中性事实保留区，首版只保存 `quantity`（包含 `known/value`）、
+`inPossession`、`abilityState` 和 `lifecycle`。普通实体属性与保留区在进入 Agent 上下文前必须分离；
+保留区格式损坏时停止本轮，不得从 `status/summary` 自然语言猜测恢复。
+
 **删除策略**：玩家整理记录时设置 `visible=false` 并更新状态；不物理删除，不修改历史回合。
 
 ## 8. `story_memory`：关键记忆表
@@ -241,6 +245,10 @@ V0.15 先确定以下语义，不代表数据库已经新增字段：
 | `updated_at` | 更新时间 |
 
 摘要不是权威事实；与快照、实体或回合冲突时，以后者为准。
+
+`story_save.state_json._trustedProjection` 为当前中性投影保留区，包含独立 `schemaVersion`、
+带稳定 ID 和 revision 的 `worldFacts`，以及带认知主体、对象和证据引用的 `knowledge`。
+该子结构升级使用状态映射器逐级处理，不通过产品版本号建立新表。
 
 ## 10. `story_state_correction`：修正审计表
 
