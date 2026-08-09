@@ -9,6 +9,11 @@
 - Selected visual direction: `墨卷纪事` — warm xuan-paper, restrained ink wash, celadon accents, cinnabar risk states, and literary Chinese typography.
 - The core loop must support both quick choices and free-text actions.
 - The current gameplay is a multi-world, light-state, strong-memory narrative game. Product releases do not create a new gameplay engine, API namespace, Java package, or table set by default.
+- Treat the project internally with game-production discipline, but public H5 and announcement copy should normally describe it as an “AI 修仙互动叙事” or “长线命卷体验” instead of making unsupported commercial-game claims.
+- The product promise is authoritative: the player's experiences are not forgotten, the player's decisions are not replaced, and confirmed facts are not silently rewritten by AI.
+- Worlds use a soft seed, dynamic confirmed facts, and explicit player amendments. Official worlds are starting templates, not immutable universal canon; blank areas remain open to player and Agent creation.
+- Separate objective committed events, current state projections, character knowledge/beliefs, and narrative prose. Subjective memory, summaries, and prose must never silently overwrite objective facts.
+- The Agent may complete the action the player actually authorized and its direct consequences, but must stop before a new major irreversible decision and return control to the player.
 - Agent-generated items, abilities, and important characters are allowed. Java protects identity, lifecycle, time, persistence, and security boundaries instead of imposing an incomplete combat/economy simulation.
 - Keep product documentation compact: `docs/product-direction.md` records active direction and abandoned proposals, `docs/game-design.md` defines gameplay, `docs/architecture.md` defines Agent/API/migration boundaries, and `docs/data-dictionary.md` is the single Chinese data dictionary.
 - Keep release history in `docs/version-history.md`. Every release-oriented commit must update the matching version entry for H5, admin, and backend/data changes; do not hardcode the displayed version in either frontend.
@@ -20,6 +25,7 @@
 - Treat `frontend/src/main.tsx`, `frontend/src/styles.css`, `frontend/vite.config.ts`, `frontend/worker/index.js`, and `frontend/scripts/prepare-sites-build.mjs` as runtime files. Edit them only when the requested runtime or deployment behavior requires it.
 - The old `frontend/src/mobile/` package and device assets remain only as unused template material; do not reconnect them to the app.
 - The deployed V0.14 gameplay still lives in `backend/src/main/java/com/wenxian/game/v014/` and `v014_*`; treat it as a compatibility source during migration. New long-lived work targets the neutral `story` domain described in `docs/architecture.md`. Do not add `v015_*`, `V015*`, or `/api/v1/v015/*` business structures.
+- Do not extend the V0.14 name-based reducer, regex correction rules, or static world model with more incident-specific branches. V0.15 trust work must first establish neutral `StoryPatch`, context assembly, reducer, correction semantics, and replay tests in the `story` domain.
 - `V014ModelGateway` is the model boundary. LangChain4j may implement transport/adapters, but it must not become the source of truth or bypass reducers/transactions.
 - If an intentional runtime change modifies a locked file, run `npm run update:runtime-lock`, then `npm run check:runtime`.
 
