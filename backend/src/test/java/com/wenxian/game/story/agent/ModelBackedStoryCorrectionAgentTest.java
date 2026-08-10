@@ -58,6 +58,23 @@ class ModelBackedStoryCorrectionAgentTest {
     }
 
     @Test
+    void identifiesNarrativeClarificationWithoutObjectiveChange() {
+        StoryModelGateway gateway = request -> result("""
+                {"kind":"COGNITION","explanation":"玩家尚未决定下一步。",
+                 "confirmationPrompt":"当前权威事实未记录该决定。",
+                 "coreState":{"location":null,"condition":null,"realm":null,"lifeGoal":null},
+                 "entities":[],"worldFacts":[],"knowledge":[]}
+                """);
+        ModelBackedStoryCorrectionAgent agent = new ModelBackedStoryCorrectionAgent(
+                gateway, new ObjectMapper().findAndRegisterModules());
+
+        StoryCorrectionNoChangeException error = assertThrows(StoryCorrectionNoChangeException.class,
+                () -> agent.propose(context(), "我尚未决定下一步", route()));
+
+        assertTrue(error.getMessage().contains("权威事实"));
+    }
+
+    @Test
     void validatesRouteBeforeCallingModel() {
         assertThrows(IllegalArgumentException.class,
                 () -> new StoryModelRoute("https://example.invalid", "", "DEEPSEEK",

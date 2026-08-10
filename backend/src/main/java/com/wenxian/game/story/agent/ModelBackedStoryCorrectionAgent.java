@@ -30,6 +30,10 @@ public class ModelBackedStoryCorrectionAgent implements StoryCorrectionAgent {
             COGNITION：某个主体知道、相信或误解什么，不改变客观世界；
             WORLD：玩家明确扩展或修订当前世界设定。
 
+            如果玩家只是否认 narrative 中尚未执行的打算，而 objective 本来就没有记录该决定，
+            不得伪造客观补丁。返回简明 explanation 和 confirmationPrompt，coreState 各字段为 null，
+            entities、worldFacts、knowledge 全部为空。服务端会向玩家说明“权威事实未变，无需修正”。
+
             已有实体只能使用 objective 中提供的稳定 entityId，不能凭名称猜测关联；新实体使用 CREATE 且 entityId 为 null。
             已有世界事实的修订必须使用稳定 factId 和 REVISE；新增世界设定使用 EXPAND 且 factId 为 null。
             FACT 不得夹带 worldFacts 或 knowledge；COGNITION 不得夹带 coreState、entities 或 worldFacts；
@@ -80,11 +84,30 @@ public class ModelBackedStoryCorrectionAgent implements StoryCorrectionAgent {
         try {
             StoryCorrectionProposal proposal = tolerantMapper.readValue(rawJson(result.text()),
                     StoryCorrectionProposal.class);
+            if (!hasObjectiveChange(proposal)) {
+                throw new StoryCorrectionNoChangeException(
+                        "这段说明没有改变当前权威事实；未经玩家确认的叙事打算不会作为已执行行动继承。");
+            }
             validator.validate(proposal);
             return new Generated(proposal, result);
+        } catch (StoryCorrectionNoChangeException error) {
+            throw error;
         } catch (JsonProcessingException | IllegalArgumentException error) {
             throw new IllegalArgumentException("修正说明未能形成可确认提案", error);
         }
+    }
+
+    private boolean hasObjectiveChange(StoryCorrectionProposal proposal) {
+        if (proposal == null) return false;
+        var core = proposal.coreState();
+        boolean coreChanged = core != null && (present(core.location()) || present(core.condition())
+                || present(core.realm()) || present(core.lifeGoal()));
+        return coreChanged || !proposal.entities().isEmpty() || !proposal.worldFacts().isEmpty()
+                || !proposal.knowledge().isEmpty();
+    }
+
+    private boolean present(String value) {
+        return value != null && !value.isBlank();
     }
 
     private String userPrompt(StoryPromptContext context, String instruction) {

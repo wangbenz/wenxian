@@ -37,6 +37,8 @@ class ModelBackedStoryTurnAgentTest {
             assertTrue(request.systemPrompt().contains("第二人称“你”"));
             assertTrue(request.systemPrompt().contains("decisionCheckpoint.required=true"));
             assertTrue(request.systemPrompt().contains("objective.pendingDecision"));
+            assertTrue(request.systemPrompt().contains("玩家没有在 action 中明确做出的任何后续决定"));
+            assertTrue(request.systemPrompt().contains("必须在该行动完成的静止场景结束"));
             assertTrue(request.userPrompt().contains("ability-reflection"));
             assertTrue(request.userPrompt().contains("是否接受使者提出的入门条件"));
             assertTrue(request.userPrompt().contains("施展照影诀"));

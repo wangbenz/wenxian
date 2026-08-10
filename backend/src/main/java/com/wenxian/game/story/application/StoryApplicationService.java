@@ -140,6 +140,9 @@ public class StoryApplicationService {
             case REVISION_CONFLICT -> com.wenxian.game.api.GameApiException.of(HttpStatus.CONFLICT,
                     "CORRECTION_REVISION_CONFLICT", "STATE", "命卷状态已经变化", error.getMessage(),
                     List.of("刷新当前命卷", "重新预览修正"));
+            case NO_STATE_CHANGE -> com.wenxian.game.api.GameApiException.of(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "CORRECTION_NO_STATE_CHANGE", "STATE", "当前命卷无需修改", error.getMessage(),
+                    List.of("直接输入你真正要做的下一步", "如需改动客观事实，请明确说明地点、物品、能力或人物状态"));
             case PROPOSAL_INVALID -> com.wenxian.game.api.GameApiException.of(HttpStatus.CONFLICT,
                     "CORRECTION_PREVIEW_EXPIRED", "STATE", "修正预览已经失效", error.getMessage(),
                     List.of("重新预览修正"));

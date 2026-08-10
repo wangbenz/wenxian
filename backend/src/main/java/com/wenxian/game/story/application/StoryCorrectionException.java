@@ -27,6 +27,7 @@ public final class StoryCorrectionException extends RuntimeException {
         SAVE_NOT_FOUND,
         SAVE_NOT_ACTIVE,
         REVISION_CONFLICT,
+        NO_STATE_CHANGE,
         PREVIEW_FAILED,
         PROPOSAL_INVALID,
         PROPOSAL_REJECTED

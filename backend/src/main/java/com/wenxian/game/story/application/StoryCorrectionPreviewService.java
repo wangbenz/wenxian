@@ -5,6 +5,7 @@ import com.wenxian.game.story.agent.PromptContextAssembler.ContextRequest;
 import com.wenxian.game.story.agent.PromptContextAssembler.ContextSelection;
 import com.wenxian.game.story.agent.PromptContextAssembler.KnowledgeRef;
 import com.wenxian.game.story.agent.StoryModelRouteResolver;
+import com.wenxian.game.story.agent.StoryCorrectionNoChangeException;
 import com.wenxian.game.story.agent.StoryPromptContext;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.persistence.StoryConversationRepository;
@@ -74,6 +75,9 @@ public class StoryCorrectionPreviewService {
         var route = routes.resolve(userId);
         try {
             return workflow.preview(userId, saveId, expectedRevision, instruction, snapshot.context(), route);
+        } catch (StoryCorrectionNoChangeException error) {
+            throw new StoryCorrectionException(StoryCorrectionException.Reason.NO_STATE_CHANGE,
+                    error.getMessage(), error);
         } catch (StoryCorrectionException error) {
             throw error;
         } catch (RuntimeException error) {

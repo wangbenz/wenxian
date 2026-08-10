@@ -1,6 +1,8 @@
 package com.wenxian.game.service;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -14,9 +16,17 @@ public class GameVersionService {
     public static final String DEFAULT_VERSION = "V0.14";
 
     private final JdbcTemplate jdbc;
+    private final String versionOverride;
+
+    @Autowired
+    public GameVersionService(JdbcTemplate jdbc,
+                              @Value("${wenxian.game.version-override:}") String versionOverride) {
+        this.jdbc = jdbc;
+        this.versionOverride = versionOverride == null ? "" : versionOverride.strip();
+    }
 
     public GameVersionService(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+        this(jdbc, "");
     }
 
     @PostConstruct
@@ -32,6 +42,7 @@ public class GameVersionService {
     }
 
     public String current() {
+        if (!versionOverride.isBlank()) return versionOverride;
         return jdbc.query("select config_value from gameplay_config where config_key=?",
                 (row, ignored) -> row.getString(1), CONFIG_KEY)
                 .stream().findFirst().filter(value -> !value.isBlank()).orElse(DEFAULT_VERSION);

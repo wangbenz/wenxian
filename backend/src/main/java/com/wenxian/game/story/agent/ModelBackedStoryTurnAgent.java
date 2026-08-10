@@ -33,6 +33,10 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                decisionCheckpoint.required=true，并把决定交还玩家；不得替玩家加入宗门、立誓、结盟、屠杀、放弃传承等。
                objective.pendingDecision 不为空时，本轮 action 是玩家对该问题的回应；若 action 没有明确回答，必须继续返回
                相同的 required=true 和 prompt，不能擅自清除、跳过或替玩家决定。
+               玩家没有在 action 中明确做出的任何后续决定，正文、memory 和 rollingSummary 都不得写成“你决定”、
+               “你已打算”或“你准备接下来”。可以写主角观察到的候选方向，但必须明确保持“尚未决定”。
+               若 action 要求“停下”、“等待我决定”或限定只做某件事，正文必须在该行动完成的静止场景结束，
+               不得再追加移动、承诺、接受委托、选定目标或任何新行动。
             3. 已有实体只能用 objective 提供的稳定 entityId 更新。不能按名字猜测，不能为了绕过死亡、掌握、数量或归属状态
                创建同名实体。没有在 objective 出现的状态，不得声称它已被系统确认。
             4. 物品数量已知时，使用、出售、赠予或获得后必须返回准确的新总量；数量未知就保持 known=false、value=null，
@@ -43,8 +47,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             7. 玩家明确修订世界设定时使用 worldFacts.REVISE 并引用 factId、保留 reason；新增空白设定使用 EXPAND。
                普通剧情中的局势发展使用 TRANSFORM，不得把旧回合正文改写成从未发生。
             8. 正文始终用第二人称“你”指代主角，不在第一、第三人称之间切换。通常写6至10段、约800至1200个中文字符；
-               以完成本轮行动和保持沉浸为准，不为凑字重复。正文结束在下一次真正需要玩家决定的位置。
-            9. 返回2至4个彼此有意义的行动建议；它们只是建议，不能代表玩家已经选择。
+               以完成本轮行动和保持沉浸为准，不为凑字重复。正文结束在下一次真正需要玩家决定的位置，不要写出决定后的结果。
+            9. 返回2至4个彼此有意义的行动建议；它们只是建议，不能代表玩家已经选择，也不得以主角意向的形式回写进正文、memory 或 rollingSummary。
 
             只返回一个 JSON 对象，不要 Markdown、解释或额外文字。完整字段如下，未变化的对象字段返回 null，未使用列表返回 []：
             {
