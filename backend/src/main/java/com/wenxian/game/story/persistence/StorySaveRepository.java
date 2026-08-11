@@ -97,7 +97,7 @@ public class StorySaveRepository {
     public void logicalDelete(String userId, String saveId) {
         int changed = jdbc.update("""
                 update story_save
-                set active_slot_no=null, deleted_at=?, deleted_by='PLAYER', delete_reason='PLAYER_DELETE',
+                set status='ARCHIVED', active_slot_no=null, deleted_at=?, deleted_by='PLAYER', delete_reason='PLAYER_DELETE',
                     revision=revision+1, updated_at=?
                 where id=? and user_id=? and status in ('ACTIVE','ENDED') and deleted_at is null
                 """, Timestamp.from(Instant.now()), Timestamp.from(Instant.now()), saveId, userId);

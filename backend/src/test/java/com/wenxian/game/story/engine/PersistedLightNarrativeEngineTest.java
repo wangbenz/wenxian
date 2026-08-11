@@ -174,6 +174,9 @@ class PersistedLightNarrativeEngineTest {
             engine.deleteSave(USER, "story-v014-test");
             assertTrue(engine.list(USER).isEmpty());
             assertThrows(GameApiException.class, () -> engine.get(USER, "story-v014-test"));
+            assertEquals("ARCHIVED", jdbc.queryForObject(
+                    "select status from story_save where id='story-v014-test'", String.class),
+                    "逻辑删除同时保留旧后端可识别的封存状态，防止被旧版计入存活命卷");
         } finally {
             database.shutdown();
         }

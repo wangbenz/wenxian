@@ -10,7 +10,7 @@ alter table story_save
 -- 旧封存记录转为逻辑删除；旧死亡状态转成长期可理解的自然终局状态。
 update story_save
 set deleted_at=coalesce(deleted_at,updated_at), deleted_by='SYSTEM', delete_reason='LEGACY_ARCHIVED',
-    status='ACTIVE', active_slot_no=null
+    active_slot_no=null
 where status='ARCHIVED';
 
 update story_save set status='ENDED' where status='DEAD';

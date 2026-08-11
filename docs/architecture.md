@@ -305,7 +305,7 @@ H5 只读取当前未删除命卷，不根据 `source_edition` 分叉页面或�
 ### 删除命卷
 
 `DELETE /api/v1/story/saves/{saveId}` 执行逻辑删除：服务端校验账号归属与命卷可用状态，写入
-`deleted_at/deleted_by/delete_reason`、释放 `active_slot_no` 并递增 `revision`。命卷、回合、实体和记忆不会物理删除；玩家列表、读取和推进接口统一排除 `deleted_at is not null`。删除成功后 H5 始终返回“我的命卷”列表，不自动进入剩余角色。
+`deleted_at/deleted_by/delete_reason`、释放 `active_slot_no`、写入兼容状态 `ARCHIVED` 并递增 `revision`。命卷、回合、实体和记忆不会物理删除；新代码以 `deleted_at` 为权威删除边界，兼容状态只用于防止尚未切换的旧后端误计存活命卷。删除成功后 H5 始终返回“我的命卷”列表，不自动进入剩余角色。
 
 API 路径中的 `v1` 是接口契约主版本，只有出现无法兼容的请求/响应格式时才升级到 `v2`，与产品 V0.15 无关。
 
