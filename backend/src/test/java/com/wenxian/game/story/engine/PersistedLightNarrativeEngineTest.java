@@ -18,9 +18,11 @@ import com.wenxian.game.story.application.StoryTurnPreparationService;
 import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryActionContract;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
+import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
 import com.wenxian.game.story.domain.StoryPatch.DecisionCheckpoint;
 import com.wenxian.game.story.domain.StoryPatch.EntityOperation;
 import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
+import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleValue;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
@@ -105,6 +107,20 @@ class PersistedLightNarrativeEngineTest {
             unknownAttributes.set("_trusted", trusted);
             entities.insert(new Entity("entity-unknown", "story-v014-test", "ITEM", "一包散碎灵材", "未清点",
                     true, "尚未逐件清点", unknownAttributes, 1, 3, Instant.now(), Instant.now()));
+            ObjectNode storedElsewhereAttributes = mapper.createObjectNode();
+            storedElsewhereAttributes.put("itemType", "信物");
+            storedElsewhereAttributes.put("source", "故事所得");
+            storedElsewhereAttributes.put("quantity", 1);
+            storedElsewhereAttributes.put("inPossession", false);
+            ObjectNode storedElsewhereTrusted = mapper.createObjectNode();
+            storedElsewhereTrusted.set("quantity", mapper.valueToTree(new QuantityValue(true, 1)));
+            storedElsewhereTrusted.put("inPossession", false);
+            storedElsewhereTrusted.set("custody", mapper.valueToTree(
+                    new CustodyValue(HolderType.LOCATION, "青岐山门")));
+            storedElsewhereAttributes.set("_trusted", storedElsewhereTrusted);
+            entities.insert(new Entity("entity-elsewhere", "story-v014-test", "ITEM", "山门石碑", "留在山门",
+                    true, "由地点保管的历史物品事实", storedElsewhereAttributes,
+                    1, 3, Instant.now(), Instant.now()));
             memories.insert("story-v014-test", new StoredMemory("memory-origin", "EVENT", "此生来处", "山村少年",
                     0, 0, "KEY"));
             jdbc.update("""
@@ -126,6 +142,9 @@ class PersistedLightNarrativeEngineTest {
             assertFalse(unknown.quantityKnown());
             assertEquals(0, unknown.quantity());
             assertTrue(unknown.inPossession());
+            assertFalse(result.state().inventory().stream()
+                    .anyMatch(item -> "entity-elsewhere".equals(item.id())),
+                    "由地点保管的历史物品不应出现在当前行囊");
             assertEquals("此生来处", result.state().memories().getFirst().title());
 
             StoryTurnRepository turns = new StoryTurnRepository(jdbc, mapper);

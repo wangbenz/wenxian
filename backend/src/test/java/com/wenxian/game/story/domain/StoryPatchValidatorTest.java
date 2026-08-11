@@ -48,11 +48,30 @@ class StoryPatchValidatorTest {
 
         StoryPatch invented = patch(new StoryPatch.TimePassage(10, COMPLETE, null),
                 List.of(new StoryPatch.EntityPatch(CREATE, null, "ITEM", "未知灵材",
-                        "随身携带", null, null, new StoryPatch.QuantityValue(false, 1),
+                        "随身携带", "尚未清点的灵材。", null, new StoryPatch.QuantityValue(false, 1),
                         true, null, null)), List.of());
         IllegalArgumentException quantity = assertThrows(IllegalArgumentException.class,
                 () -> validator.validate(invented));
         assertEquals("未知数量不能伪造具体值", quantity.getMessage());
+    }
+
+    @Test
+    void rejectsNewEntityBeforePersistenceWhenRequiredDatabaseFactsAreMissing() {
+        StoryPatch missingStatus = patch(new StoryPatch.TimePassage(10, COMPLETE, null),
+                List.of(new StoryPatch.EntityPatch(CREATE, null, "LANDMARK", "周山矮屋",
+                        null, "周山居住的矮屋。", null, null,
+                        null, null, null)), List.of());
+        IllegalArgumentException status = assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(missingStatus));
+        assertEquals("新实体必须包含当前状态", status.getMessage());
+
+        StoryPatch missingSummary = patch(new StoryPatch.TimePassage(10, COMPLETE, null),
+                List.of(new StoryPatch.EntityPatch(CREATE, null, "LANDMARK", "周山矮屋",
+                        "屋舍稳固", null, null, null,
+                        null, null, null)), List.of());
+        IllegalArgumentException summary = assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(missingSummary));
+        assertEquals("新实体必须包含事实摘要", summary.getMessage());
     }
 
     @Test

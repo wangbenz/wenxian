@@ -20,6 +20,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StoryActionContractValidatorTest {
     private final StoryActionContractValidator validator = new StoryActionContractValidator();
@@ -108,6 +109,30 @@ class StoryActionContractValidatorTest {
 
         assertDoesNotThrow(() -> validator.validate(
                 projection(new CustodyValue(HolderType.PLAYER, null)), contract));
+    }
+
+    @Test
+    void acceptsLandmarkReferenceWithoutTreatingItAsInventory() {
+        StoryActionContract contract = new StoryActionContract("观察水井", false,
+                List.of(new EntityReference("水井", ReferenceResolution.NEW, null,
+                        "LANDMARK", "水井", "MENTION", null)),
+                List.of(), List.of(), "留在井边", new Conflict(false, "", ""));
+
+        assertDoesNotThrow(() -> validator.validate(
+                projection(new CustodyValue(HolderType.PLAYER, null)), contract));
+    }
+
+    @Test
+    void rejectsCustodyOnNonItemReference() {
+        StoryActionContract contract = new StoryActionContract("观察水井", false,
+                List.of(new EntityReference("水井", ReferenceResolution.NEW, null,
+                        "LANDMARK", "水井", "MENTION",
+                        new CustodyValue(HolderType.LOCATION, "村中"))),
+                List.of(), List.of(), "", new Conflict(false, "", ""));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(projection(new CustodyValue(HolderType.PLAYER, null)), contract));
+        assertTrue(error.getMessage().contains("只有可转移物品"));
     }
 
     private StoryActionContract contract(CustodyValue from, CustodyValue target) {

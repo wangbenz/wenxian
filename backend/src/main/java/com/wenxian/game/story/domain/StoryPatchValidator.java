@@ -70,6 +70,8 @@ public final class StoryPatchValidator {
         if (patch.operation() == EntityOperation.CREATE) {
             require(!present(patch.entityId()), "新实体的正式ID必须由服务端分配");
             require(present(patch.name()), "新实体必须包含名称");
+            require(present(patch.status()), "新实体必须包含当前状态");
+            require(present(patch.summary()), "新实体必须包含事实摘要");
         } else {
             require(present(patch.entityId()), "更新已有实体必须引用稳定ID");
         }

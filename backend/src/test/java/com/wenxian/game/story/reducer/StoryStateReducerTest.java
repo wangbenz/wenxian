@@ -169,7 +169,8 @@ class StoryStateReducerTest {
     private EntityPatch entityPatch(EntityOperation operation, String id, String type, String name,
                                     String status, QuantityValue quantity, Boolean inPossession,
                                     AbilityState abilityState, LifecycleValue lifecycle) {
-        return new EntityPatch(operation, id, type, name, status, null, null,
+        String summary = operation == EntityOperation.CREATE ? name + "的当前事实。" : null;
+        return new EntityPatch(operation, id, type, name, status, summary, null,
                 quantity, inPossession, abilityState, lifecycle);
     }
 

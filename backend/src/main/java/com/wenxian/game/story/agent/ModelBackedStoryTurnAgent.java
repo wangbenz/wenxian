@@ -51,6 +51,13 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                factContract.references 中 resolution=EXISTING 的实体只能使用给定 entityId；resolution=NEW 且
                expectedCustody 非空的物品必须以 canonicalName 创建唯一 ITEM 实体，并写入相同 custody；
                不得把玩家提到的新对象替换成名称或含义不同的历史实体。
+               每个 CREATE 实体都必须填写非空的 name、status 和 summary；其中 summary 只记录需要跨回合保持的
+               当前事实，不要复制整段正文。UPDATE 未变化的字段才可以返回 null。
+               同一处场景及其普通组成部分不得在一回合拆成多个重复 LANDMARK；例如观察一间屋舍的屋檐时，
+               最多保留屋舍或屋檐中的一个长期地标。只有各自会被后续行动独立引用时才允许分别建档。
+               普通观察得到的屋檐、门框、墙角、路面等组成部分默认只属于当前地点或已有父 LANDMARK 的叙事细节，
+               不得仅因本轮提到就 CREATE 新 LANDMARK。只有玩家明确要求长期标记，或它在本轮成为可独立前往、
+               交互并影响后续事件的地点时，才允许单独建档。
                objective.currentInventory 是当前行囊的完整权威清单：complete=true 时，不在 items 中的物品不得被写成
                当前携带、可用或可交易。entityIndex 中 visible=false、inPossession=false 或已知数量为0的物品只是
                历史引用；memory、rollingSummary 和 previousTurn 提到旧物品也不能覆盖当前清单。
@@ -79,7 +86,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
               "title":"本回合标题","narrative":"第二人称剧情正文",
               "time":{"elapsedMinutes":0,"resolution":"COMPLETE","interruptionReason":null},
               "coreState":{"location":null,"condition":null,"realm":null,"lifeGoal":null},
-              "entities":[{"operation":"CREATE|UPDATE|HIDE|RESTORE","entityId":null,"entityType":"ITEM|ABILITY|CHARACTER或上下文已有类型",
+              "entities":[{"operation":"CREATE|UPDATE|HIDE|RESTORE","entityId":null,"entityType":"ITEM|ABILITY|CHARACTER|LANDMARK或上下文已有类型",
                 "name":null,"status":null,"summary":null,"attributes":null,
                 "quantity":{"known":true,"value":1},"inPossession":true,
                 "custody":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null},
@@ -123,8 +130,11 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             facts 是提交前的权威事实，action 是玩家本轮唯一授权，proposed 是尚未提交的候选结果。
 
             必须逐项完成六类检查，不能因为发现第一处问题就跳过其余类别：
-            1. reference：action 中明确提到的物品、人物、能力是否都被 factContract.references 覆盖；玩家原话、标准名称、
+            1. reference：action 中明确提到的物品、人物、能力或需要跨回合追踪的场景地标是否都被
+               factContract.references 覆盖；玩家原话、标准名称、
                EXISTING/NEW/UNRESOLVED 解析和稳定 ID 是否对应，是否把新瓦片之类对象误绑成历史石子、玉简等其他实体。
+               水井、屋舍、石桥、山门等无法随身携带的场景对象必须是 LANDMARK 或不持久化，不得当作 ITEM、
+               不得进入 currentInventory；只有玩家取得或可被人物、地点保管的可转移对象才是 ITEM。
             2. inventory：候选是否使用、持有、赠送、出售或获得了 facts 未支持的物品；数量和处置是否一致。
             3. authorization：候选是否忽略 action、替玩家做选择，或擅自追加修炼、移动、询问、承诺、交易、战斗等行动。
                当 action 使用“只、仅、不要、不做其他事情、仍停在原地”等限定时，主角获授权的主动行为是闭集；候选
@@ -135,6 +145,10 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                NPC 对当前请求的回应、环境直接反应和已授权行动的必然结果不算替玩家决定。
             5. time：开场时刻、经过时长、结束时刻与 action 的时间契约是否一致，是否跳过明确要求叙述的过程。
             6. state：地点、境界、能力掌握、人物生死、待确认决定及 proposed 的结构化变化是否前后一致。
+               同一处场景及其普通组成部分若被拆成多个重复 LANDMARK，也必须判定失败；普通观察最多形成一个
+               有长期引用价值的场景实体。
+               若候选仅因观察而把屋檐、门框、墙角、路面等现有地点组成部分新建为 LANDMARK，且玩家没有明确
+               要求标记、该对象也没有成为可独立前往或影响后续事件的地点，必须判定失败。
 
             proposed.coreState 等结构是“变化补丁”，字段为 null 表示保持 facts 原值，不得据此判定缺失或冲突。
             action 的直接自然后果可以通过，例如完整休息后疲惫缓解；只有候选追加了新的主动行为、重大决定或无依据事实时才拒绝。
@@ -157,11 +171,18 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             可由服务端校验的稳定实体引用和前置条件。facts 是本轮开始前的唯一权威事实。
 
             规则：
+            0. facts.coreState 包含玩家本轮开始时已确认的地点与状态。action 只是观察当前地点、
+               建筑、水井、道路或景物时，不得因 entityIndex 中没有单独实体就报 UNRESOLVED，也不得把它创建成 ITEM。
+               只有确实需要在以后回合稳定引用该场景对象时才返回 NEW LANDMARK；普通观察可不返回 reference。
+               屋檐、门框、墙角、路面等当前地点或已有 LANDMARK 的普通组成部分，玩家仅观察时不得返回 NEW；
+               只有玩家明确要求长期标记，或它已经成为可独立前往、交互并影响后续事件的地点时才可返回 NEW LANDMARK。
             1. action 中每一个作为独立剧情对象被查看、使用、取得或处置的物品、人物或能力都必须放入 references，
                查看但不消耗也不能省略。mention 必须保留玩家原话中的对象短语，canonicalName 是解析后的标准名称。
                “放入行囊、拿在手中、留在屋内/地面”等语句里的容器、身体部位和普通方位只表达保管关系，
                不是新剧情实体；除非 facts 已有稳定实体，或玩家明确把它本身作为独立对象取得/处置，否则不要为
                行囊、手、衣袖、地面、屋内等创建 reference，更不能标成 NEW ITEM。
+               需要跨回合追踪的水井、屋舍、石桥、山门等场景对象使用 LANDMARK；不需要跨回合追踪的普通环境细节可以不返回 reference。
+               LANDMARK 不是物品，expectedCustody 必须为 null，不得进入 itemTransitions；只有可被取得、携带、消耗或转交的对象才是 ITEM。
             2. resolution=EXISTING 仅用于 facts.entityIndex 中能唯一对应的实体，必须复制稳定 entityId、entityType 和名称；
                resolution=NEW 仅用于玩家在本轮明确遇见、拾取或创造的新对象，entityId=null；玩家把不存在的对象当成
                当前已持有或已认识时使用 UNRESOLVED，并令 conflict.present=true。绝不能按类别相近把瓦片绑定成石子或玉简。
@@ -199,7 +220,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                 "mention":"玩家原话中的对象短语",
                 "resolution":"EXISTING|NEW|UNRESOLVED",
                 "entityId":null,
-                "entityType":"ITEM|CHARACTER|ABILITY",
+                "entityType":"ITEM|CHARACTER|ABILITY|LANDMARK",
                 "canonicalName":"标准名称",
                 "role":"SOURCE|TARGET|MENTION",
                 "expectedCustody":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null}
@@ -405,6 +426,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
 
     private String actionContractPayload(StoryPromptContext context) {
         Map<String, Object> facts = new LinkedHashMap<>();
+        facts.put("worldClock", context.objective().worldClock());
+        facts.put("coreState", context.objective().protagonist());
         facts.put("protagonist", context.objective().protagonist());
         facts.put("currentInventory", context.objective().currentInventory());
         facts.put("entityIndex", context.objective().entityIndex());

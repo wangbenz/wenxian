@@ -23,6 +23,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -89,6 +90,16 @@ class TrustedStoryActionContractRealModelTest {
         assertThrows(StoryActionPreconditionException.class,
                 () -> validator.validate(projection, missingTile.contract()));
         print("missing-tile", missingTile);
+
+        StoryTurnAgent.ResolvedAction observeWell = agent.resolveAction(
+                context("我只观察村中水井是否安全，不打水、不下井，也不离开井边。"), route,
+                new StoryTurnAgent.InvocationContext("contract-landmark-not-item", 1));
+        assertDoesNotThrow(() -> validator.validate(projection, observeWell.contract()));
+        assertFalse(observeWell.contract().itemActionDetected());
+        assertEquals(0, observeWell.contract().references().stream()
+                .filter(reference -> "ITEM".equalsIgnoreCase(reference.entityType())).count(),
+                "水井等场景地标不得被解析为背包物品");
+        print("landmark-not-item", observeWell);
     }
 
     private StoryProjection projection() {

@@ -516,13 +516,18 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         for (Entity entity : entities.listVisible(saved.id())) {
             JsonNode attributes = entity.attributes();
             switch (entity.type()) {
-                case "ITEM" -> inventory.add(new V014State.Item(entity.id(), entity.name(),
-                        attributes.path("itemType").asText("物品"), entity.summary(), entity.status(),
-                        attributes.path("source").asText("故事所得"),
-                        trustedQuantityKnown(attributes)
-                                ? Math.max(0, trustedQuantityValue(attributes)) : 0,
-                        trustedQuantityKnown(attributes),
-                        attributes.path("inPossession").asBoolean(true)));
+                case "ITEM" -> {
+                    // 旧版 H5 的 inventory 是“当前行囊”视图，不是所有历史物品实体。
+                    // 赠予人物、留在地点、已消耗或整理的物品仍保留在可追溯事实中，但不应出现在玩家行囊。
+                    if (isCurrentlyHeldByPlayer(attributes)) {
+                        inventory.add(new V014State.Item(entity.id(), entity.name(),
+                                attributes.path("itemType").asText("物品"), entity.summary(), entity.status(),
+                                attributes.path("source").asText("故事所得"),
+                                trustedQuantityKnown(attributes)
+                                        ? Math.max(0, trustedQuantityValue(attributes)) : 0,
+                                trustedQuantityKnown(attributes), true));
+                    }
+                }
                 case "ABILITY" -> abilities.add(new V014State.Ability(entity.id(), entity.name(),
                         attributes.path("abilityType").asText("能力"), entity.summary(), entity.status(),
                         attributes.path("source").asText("故事所得")));
@@ -850,6 +855,20 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
             return quantity.path("value").asInt(0);
         }
         return attributes.path("quantity").asInt(0);
+    }
+
+    /** 优先使用可信保管关系，旧数据才回退到 inPossession；无字段的老存档继续视为持有。 */
+    private boolean isCurrentlyHeldByPlayer(JsonNode attributes) {
+        JsonNode trusted = attributes.path("_trusted");
+        JsonNode custody = trusted.path("custody");
+        if (custody.isObject() && custody.hasNonNull("holderType")) {
+            if (!"PLAYER".equalsIgnoreCase(custody.path("holderType").asText())) return false;
+        } else if (trusted.has("inPossession")) {
+            if (!trusted.path("inPossession").asBoolean(false)) return false;
+        } else if (attributes.has("inPossession") && !attributes.path("inPossession").asBoolean(false)) {
+            return false;
+        }
+        return !trustedQuantityKnown(attributes) || trustedQuantityValue(attributes) > 0;
     }
 
     private String normalizeImportance(String value) {

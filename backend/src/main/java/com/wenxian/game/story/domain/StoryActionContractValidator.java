@@ -57,6 +57,9 @@ public final class StoryActionContractValidator {
         if (blank(reference.mention())) throw new IllegalArgumentException("行动契约实体引用缺少玩家原始提及");
         if (blank(reference.entityType())) throw new IllegalArgumentException("行动契约实体引用缺少实体类型");
         if (blank(reference.canonicalName())) throw new IllegalArgumentException("行动契约实体引用缺少标准名称");
+        if (reference.expectedCustody() != null && !"ITEM".equalsIgnoreCase(reference.entityType())) {
+            throw new IllegalArgumentException("只有可转移物品可以声明保管关系：" + reference.canonicalName());
+        }
         switch (reference.resolution()) {
             case EXISTING -> {
                 EntityState existing = require(projection, reference.entityId(), reference.entityType());

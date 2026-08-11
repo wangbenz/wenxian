@@ -41,6 +41,8 @@ class ModelBackedStoryTurnAgentTest {
             assertTrue(request.systemPrompt().contains("必须在该行动完成的静止场景结束"));
             assertTrue(request.systemPrompt().contains("最终停止位置"));
             assertTrue(request.systemPrompt().contains("currentInventory"));
+            assertTrue(request.systemPrompt().contains("不得在一回合拆成多个重复 LANDMARK"));
+            assertTrue(request.systemPrompt().contains("不得仅因本轮提到就 CREATE 新 LANDMARK"));
             assertTrue(request.userPrompt().contains("ability-reflection"));
             assertTrue(request.userPrompt().contains("是否接受使者提出的入门条件"));
             assertTrue(request.userPrompt().contains("施展照影诀"));
@@ -195,6 +197,8 @@ class ModelBackedStoryTurnAgentTest {
             assertTrue(request.systemPrompt().contains("必须逐项完成六类检查"));
             assertTrue(request.systemPrompt().contains("把新瓦片之类对象误绑成历史石子、玉简"));
             assertTrue(request.systemPrompt().contains("理由、意图、目标、计划、立场或承诺"));
+            assertTrue(request.systemPrompt().contains("普通观察最多形成一个"));
+            assertTrue(request.systemPrompt().contains("仅因观察而把屋檐、门框、墙角、路面"));
             assertTrue(request.userPrompt().contains("currentInventory"));
             assertTrue(request.userPrompt().contains("proposed"));
             assertFalse(request.userPrompt().contains("你来到石门前。"), "独立审阅不应重复发送上一回正文");
@@ -246,6 +250,10 @@ class ModelBackedStoryTurnAgentTest {
             assertTrue(request.systemPrompt().contains("行动事实解析 Agent"));
             assertTrue(request.userPrompt().contains("ability-reflection"));
             assertTrue(request.userPrompt().contains("施展照影诀"));
+            assertTrue(request.userPrompt().contains("\"coreState\""));
+            assertTrue(request.userPrompt().contains("石门前"),
+                    "行动契约必须知道玩家当前场景，否则地标会被误判为新物品");
+            assertTrue(request.systemPrompt().contains("普通组成部分，玩家仅观察时不得返回 NEW"));
             return result("""
                     {"intentSummary":"施展已有能力观察石门","itemActionDetected":false,
                      "references":[{"mention":"照影诀","resolution":"EXISTING","entityId":"ability-reflection",
