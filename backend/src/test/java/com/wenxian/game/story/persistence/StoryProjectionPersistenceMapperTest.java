@@ -4,8 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
 import com.wenxian.game.story.domain.StoryPatch.DecisionCheckpoint;
+import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
+import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
+import com.wenxian.game.story.domain.StoryPatch.RelationshipValue;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
@@ -80,6 +83,93 @@ class StoryProjectionPersistenceMapperTest {
         assertEquals(new QuantityValue(true, 2), loaded.entities().get("item-known").quantity());
         assertNull(loaded.entities().get("item-unknown").quantity(),
                 "缺少数量时不能沿用旧逻辑伪造为1");
+    }
+
+    @Test
+    void legacyCharacterLifecycleBecomesUnknownWithoutReadingStatusKeywords() {
+        ObjectNode attributes = json.createObjectNode().put("relationship", "旧识");
+        StoryProjection loaded = mapper.load(save(baseState()), List.of(
+                new Entity("character-legacy", "story-save-1", "CHARACTER", "旧识", "仍在村中",
+                        true, "没有结构化生死记录", attributes, 1, 1,
+                        Instant.EPOCH, Instant.EPOCH)), List.of());
+
+        assertEquals(LifecycleState.UNKNOWN, loaded.entities().get("character-legacy").lifecycle());
+        assertEquals("旧识", loaded.entities().get("character-legacy").relationship().label());
+    }
+
+    @Test
+    void hiddenLegacyItemCannotRemainPossessedInTrustedProjection() {
+        ObjectNode attributes = json.createObjectNode().put("quantity", 1).put("inPossession", true);
+        Entity hidden = new Entity("item-hidden", "story-save-1", "ITEM", "旧干粮", "已移出行囊",
+                false, "只保留历史记录", attributes, 1, 2, Instant.EPOCH, Instant.EPOCH);
+
+        StoryProjection loaded = mapper.load(save(baseState()), List.of(hidden), List.of());
+
+        assertFalse(loaded.entities().get("item-hidden").inPossession());
+    }
+
+    @Test
+    void roundTripsCharacterCustodyWithoutAddingDatabaseColumns() {
+        EntityState gifted = new EntityState("item-gifted", "ITEM", "断剑尖", "交给老妇保管", "赠物",
+                json.createObjectNode(), true, new QuantityValue(true, 1), false,
+                new CustodyValue(HolderType.CHARACTER, "character-old-woman"), null, null);
+        StoryProjection projection = new StoryProjection(120,
+                new StoryProjection.CoreState("村口", "平静", "凡俗", "问道"),
+                Map.of(gifted.id(), gifted), Map.of(), Map.of(), List.of());
+
+        List<Entity> stored = mapper.writeEntities("story-save-1", projection, List.of(), 2, Instant.EPOCH);
+        StoryProjection loaded = mapper.load(save(baseState()), stored, List.of());
+
+        assertFalse(loaded.entities().get(gifted.id()).inPossession());
+        assertEquals(HolderType.CHARACTER, loaded.entities().get(gifted.id()).custody().holderType());
+        assertEquals("character-old-woman", loaded.entities().get(gifted.id()).custody().holderRef());
+    }
+
+    @Test
+    void roundTripsTrustedRelationshipWithoutAddingDatabaseColumns() {
+        EntityState character = new EntityState("character-friend", "CHARACTER", "阿禾", "同行", "共同脱险",
+                json.createObjectNode(), true, null, null, null, null, LifecycleState.ACTIVE,
+                new RelationshipValue("生死之交", "共同逃出矿洞"));
+        StoryProjection projection = new StoryProjection(120,
+                new StoryProjection.CoreState("村口", "平静", "凡俗", "问道"),
+                Map.of(character.id(), character), Map.of(), Map.of(), List.of());
+
+        List<Entity> stored = mapper.writeEntities("story-save-1", projection, List.of(), 2, Instant.EPOCH);
+        StoryProjection loaded = mapper.load(save(baseState()), stored, List.of());
+
+        assertEquals("生死之交", loaded.entities().get(character.id()).relationship().label());
+        assertEquals("共同逃出矿洞", loaded.entities().get(character.id()).relationship().changeReason());
+        assertFalse(loaded.entities().get(character.id()).attributes()
+                .has(StoryProjectionPersistenceMapper.TRUSTED_ENTITY));
+    }
+
+    @Test
+    void incrementalCharacterUpdateCannotEraseConfirmedProfileAttributes() {
+        ObjectNode existingAttributes = json.createObjectNode()
+                .put("tier", "KNOWN")
+                .put("identity", "石溪村村民")
+                .put("relationship", "旧识")
+                .put("lastKnownLocation", "石溪村村尾");
+        Entity existing = new Entity("character-old-woman", "story-save-1", "CHARACTER", "老妇人",
+                "居住村尾", true, "曾收留主角", existingAttributes,
+                1, 1, Instant.EPOCH, Instant.EPOCH);
+        EntityState changedRelationship = new EntityState(existing.id(), "CHARACTER", "老妇人",
+                "已应允结交", "曾收留主角", json.createObjectNode().put("relationship", "忘年之交"),
+                true, null, false, new CustodyValue(HolderType.UNKNOWN, null), AbilityState.UNKNOWN,
+                LifecycleState.UNKNOWN, new RelationshipValue("忘年之交", "双方明确应允"));
+        StoryProjection projection = new StoryProjection(120,
+                new StoryProjection.CoreState("村尾", "平静", "凡俗", "问道"),
+                Map.of(changedRelationship.id(), changedRelationship), Map.of(), Map.of(), List.of());
+
+        Entity stored = mapper.writeEntities("story-save-1", projection, List.of(existing), 2, Instant.EPOCH)
+                .getFirst();
+
+        assertEquals("石溪村村民", stored.attributes().path("identity").asText());
+        assertEquals("石溪村村尾", stored.attributes().path("lastKnownLocation").asText());
+        assertEquals("忘年之交", stored.attributes().path("relationship").asText());
+        assertFalse(stored.attributes().has("inPossession"), "人物不应保存物品持有字段");
+        assertNull(stored.attributes().path(StoryProjectionPersistenceMapper.TRUSTED_ENTITY)
+                .get("abilityState"), "人物不应保存能力掌握字段");
     }
 
     @Test

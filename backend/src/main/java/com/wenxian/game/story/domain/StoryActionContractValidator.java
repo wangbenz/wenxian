@@ -1,0 +1,188 @@
+package com.wenxian.game.story.domain;
+
+import com.wenxian.game.story.domain.StoryActionContract.CharacterPrecondition;
+import com.wenxian.game.story.domain.StoryActionContract.EntityReference;
+import com.wenxian.game.story.domain.StoryActionContract.ItemTransition;
+import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
+import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
+import com.wenxian.game.story.domain.StoryPatch.HolderType;
+import com.wenxian.game.story.domain.StoryProjection.EntityState;
+
+/**
+ * 用权威投影校验模型已经结构化的行动前提。
+ *
+ * <p>本类不理解“赠送、取回、出售”等自然语言，也不判断剧情合理性；自然语言语义由行动契约 Agent
+ * 提取，本类只比较稳定 ID、实体类型、人物生命周期和物品保管者。</p>
+ */
+public final class StoryActionContractValidator {
+
+    public void validate(StoryProjection projection, StoryActionContract contract) {
+        if (projection == null) throw new IllegalArgumentException("行动契约缺少当前事实投影");
+        if (contract == null) throw new IllegalArgumentException("行动契约不能为空");
+        if (contract.conflict().present()) {
+            throw new StoryActionPreconditionException(contract.conflict().reason(),
+                    contract.conflict().correction());
+        }
+        boolean createsTrackedItem = contract.references().stream().anyMatch(this::createsTrackedItem);
+        if (contract.itemActionDetected() && contract.itemTransitions().isEmpty() && !createsTrackedItem) {
+            throw new IllegalArgumentException("行动契约识别到物品处置，但没有返回物品归属变化");
+        }
+        contract.references().forEach(reference -> validateReference(projection, contract, reference));
+        for (ItemTransition transition : contract.itemTransitions()) validateItem(projection, transition);
+        for (CharacterPrecondition condition : contract.characterPreconditions()) {
+            EntityState character = require(projection, condition.characterId(), "CHARACTER");
+            if (condition.requiredLifecycle() != null
+                    && character.lifecycle() != condition.requiredLifecycle()) {
+                throw new StoryActionPreconditionException(
+                        "当前人物“" + character.name() + "”的状态不满足这次行动。",
+                        "请先确认人物当前状态，或改为调查其下落与状况。");
+            }
+            if (condition.requiredRelationship() != null && !condition.requiredRelationship().isBlank()) {
+                String actual = character.relationship() == null || character.relationship().label() == null
+                        ? "" : character.relationship().label().strip();
+                if (!actual.equals(condition.requiredRelationship().strip())) {
+                    throw new StoryActionPreconditionException(
+                            "你与人物“" + character.name() + "”当前确认的关系是“"
+                                    + (actual.isBlank() ? "尚未确认" : actual) + "”。",
+                            "请按当前关系重新描述行动，或先通过剧情改变双方关系。");
+                }
+            }
+        }
+    }
+
+    private void validateReference(StoryProjection projection, StoryActionContract contract,
+                                   EntityReference reference) {
+        if (reference == null) throw new IllegalArgumentException("行动契约实体引用不能为空");
+        if (reference.resolution() == null) throw new IllegalArgumentException("行动契约实体引用缺少解析类型");
+        if (blank(reference.mention())) throw new IllegalArgumentException("行动契约实体引用缺少玩家原始提及");
+        if (blank(reference.entityType())) throw new IllegalArgumentException("行动契约实体引用缺少实体类型");
+        if (blank(reference.canonicalName())) throw new IllegalArgumentException("行动契约实体引用缺少标准名称");
+        switch (reference.resolution()) {
+            case EXISTING -> {
+                EntityState existing = require(projection, reference.entityId(), reference.entityType());
+                if (!existing.name().strip().equals(reference.canonicalName().strip())) {
+                    throw new IllegalArgumentException("行动契约标准名称与稳定ID不一致：" + reference.entityId());
+                }
+                if (reference.expectedCustody() != null && "ITEM".equalsIgnoreCase(reference.entityType())) {
+                    CustodyValue expected = normalized(reference.expectedCustody());
+                    if (expected == null || !same(normalizedCustody(existing), expected)) {
+                        throw new StoryActionPreconditionException(
+                                "“" + existing.name() + "”当前" + holderDescription(projection, normalizedCustody(existing))
+                                        + "，不满足本轮行动依赖的保管状态。",
+                                "请按当前物品归属重新描述行动，或先调查物品实际去向。");
+                    }
+                }
+            }
+            case NEW -> {
+                if (!blank(reference.entityId())) throw new IllegalArgumentException("新实体引用不能绑定已有稳定ID");
+                if (reference.expectedCustody() != null) {
+                    CustodyValue target = normalized(reference.expectedCustody());
+                    if (target == null || target.holderType() == HolderType.UNKNOWN) {
+                        throw new IllegalArgumentException("新实体的预期保管者不能未知");
+                    }
+                    validateHolderReference(projection, target);
+                }
+            }
+            case UNRESOLVED -> {
+                if (!contract.conflict().present()) {
+                    throw new StoryActionPreconditionException(
+                            "当前命卷中无法确认玩家提到的“" + reference.mention().strip() + "”。",
+                            "请先在剧情中确认该对象，或改为操作当前已经记录的实体。");
+                }
+            }
+        }
+    }
+
+    private boolean createsTrackedItem(EntityReference reference) {
+        return reference != null && reference.resolution() == ReferenceResolution.NEW
+                && "ITEM".equalsIgnoreCase(reference.entityType()) && reference.expectedCustody() != null;
+    }
+
+    private boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private void validateItem(StoryProjection projection, ItemTransition transition) {
+        if (transition == null) throw new IllegalArgumentException("物品归属变化不能为空");
+        EntityState item = require(projection, transition.itemId(), "ITEM");
+        CustodyValue actual = normalizedCustody(item);
+        CustodyValue expected = normalized(transition.expectedFrom());
+        CustodyValue target = normalized(transition.target());
+        if (expected == null || target == null) {
+            throw new IllegalArgumentException("物品归属变化必须同时声明原保管者和目标保管者");
+        }
+        if (!same(actual, expected)) {
+            throw new StoryActionPreconditionException(
+                    "“" + item.name() + "”当前" + holderDescription(projection, actual)
+                            + "，并非" + holderDescription(projection, expected) + "。",
+                    "请按当前物品归属重新描述行动，或先调查物品实际去向。");
+        }
+        validateHolderReference(projection, target);
+        if (transition.quantity() != null && transition.quantity() < 1) {
+            throw new IllegalArgumentException("本轮处置的物品数量必须大于0");
+        }
+        if (transition.quantity() != null && item.quantity() != null && item.quantity().known()
+                && item.quantity().value() != null && transition.quantity() > item.quantity().value()) {
+            throw new StoryActionPreconditionException(
+                    "“" + item.name() + "”当前数量不足，不能按本次描述处置。",
+                    "请减少数量，或先确认实际持有数量。");
+        }
+    }
+
+    private EntityState require(StoryProjection projection, String entityId, String expectedType) {
+        if (entityId == null || entityId.isBlank()) throw new IllegalArgumentException("行动契约缺少稳定实体ID");
+        EntityState entity = projection.entities().get(entityId);
+        if (entity == null) {
+            throw new StoryActionPreconditionException("当前命卷中没有找到这项已确认记录。",
+                    "请刷新命卷后重试，或先在剧情中确认对应对象。");
+        }
+        if (expectedType == null || expectedType.isBlank()
+                || !expectedType.equalsIgnoreCase(entity.entityType())) {
+            throw new IllegalArgumentException("行动契约实体类型与稳定ID不一致：" + entityId);
+        }
+        return entity;
+    }
+
+    private void validateHolderReference(StoryProjection projection, CustodyValue custody) {
+        if (custody.holderType() == HolderType.CHARACTER) {
+            require(projection, custody.holderRef(), "CHARACTER");
+        }
+        if ((custody.holderType() == HolderType.CHARACTER || custody.holderType() == HolderType.LOCATION)
+                && (custody.holderRef() == null || custody.holderRef().isBlank())) {
+            throw new IllegalArgumentException("人物或地点保管关系必须带稳定引用");
+        }
+    }
+
+    public static CustodyValue normalizedCustody(EntityState item) {
+        CustodyValue explicit = normalized(item.custody());
+        if (explicit != null) return explicit;
+        if (Boolean.TRUE.equals(item.inPossession())) return new CustodyValue(HolderType.PLAYER, null);
+        return new CustodyValue(HolderType.UNKNOWN, null);
+    }
+
+    private static CustodyValue normalized(CustodyValue value) {
+        if (value == null || value.holderType() == null) return null;
+        String ref = value.holderRef() == null || value.holderRef().isBlank() ? null : value.holderRef().strip();
+        return new CustodyValue(value.holderType(), ref);
+    }
+
+    private boolean same(CustodyValue left, CustodyValue right) {
+        return left.holderType() == right.holderType()
+                && java.util.Objects.equals(left.holderRef(), right.holderRef());
+    }
+
+    private String holderDescription(StoryProjection projection, CustodyValue value) {
+        return switch (value.holderType()) {
+            case PLAYER -> "仍由你保管";
+            case CHARACTER -> "由人物“" + displayName(projection, value.holderRef()) + "”保管";
+            case LOCATION -> "留在地点“" + value.holderRef() + "”";
+            case NONE -> "已经消耗或不再存在";
+            case UNKNOWN -> "去向尚未确认";
+        };
+    }
+
+    private String displayName(StoryProjection projection, String entityId) {
+        EntityState entity = projection.entities().get(entityId);
+        return entity == null || entity.name() == null || entity.name().isBlank() ? "未知人物" : entity.name();
+    }
+}

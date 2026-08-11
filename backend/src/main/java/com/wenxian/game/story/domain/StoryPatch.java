@@ -60,9 +60,28 @@ public record StoryPatch(
             JsonNode attributes,
             QuantityValue quantity,
             Boolean inPossession,
+            CustodyValue custody,
             AbilityState abilityState,
-            LifecycleValue lifecycle
-    ) {}
+            LifecycleValue lifecycle,
+            RelationshipValue relationship
+    ) {
+        /** 兼容尚未显式提供持有者的旧提案和测试；新模型提案应优先填写 custody。 */
+        public EntityPatch(EntityOperation operation, String entityId, String entityType, String name,
+                           String status, String summary, JsonNode attributes, QuantityValue quantity,
+                           Boolean inPossession, AbilityState abilityState, LifecycleValue lifecycle) {
+            this(operation, entityId, entityType, name, status, summary, attributes, quantity,
+                    inPossession, null, abilityState, lifecycle, null);
+        }
+
+        /** 兼容已经显式提供物品保管关系、但尚未提供人物关系字段的调用方。 */
+        public EntityPatch(EntityOperation operation, String entityId, String entityType, String name,
+                           String status, String summary, JsonNode attributes, QuantityValue quantity,
+                           Boolean inPossession, CustodyValue custody, AbilityState abilityState,
+                           LifecycleValue lifecycle) {
+            this(operation, entityId, entityType, name, status, summary, attributes, quantity,
+                    inPossession, custody, abilityState, lifecycle, null);
+        }
+    }
 
     public enum EntityOperation {
         CREATE,
@@ -73,6 +92,20 @@ public record StoryPatch(
 
     /** `known=false` 表示只确认持有但数量未知，此时 value 必须为空。 */
     public record QuantityValue(boolean known, Integer value) {}
+
+    /**
+     * 物品当前由谁实际保管。PLAYER 不需要 holderRef；CHARACTER、LOCATION 必须引用稳定实体或地点标识。
+     * UNKNOWN 只用于兼容无法还原保管人的旧记录，不能作为一次新交易的目标。
+     */
+    public record CustodyValue(HolderType holderType, String holderRef) {}
+
+    public enum HolderType {
+        PLAYER,
+        CHARACTER,
+        LOCATION,
+        NONE,
+        UNKNOWN
+    }
 
     /** 能力是否仍然掌握与能否临时施展分开表达，不再从自然语言状态猜测。 */
     public enum AbilityState {
@@ -92,6 +125,12 @@ public record StoryPatch(
         DEAD,
         UNKNOWN
     }
+
+    /**
+     * 主角与重要人物当前已经确认的关系。label 保持叙事自由，不引入好感度数值；已有关系发生改变时，
+     * changeReason 必须说明本轮发生了什么，供独立审阅与回放使用。
+     */
+    public record RelationshipValue(String label, String changeReason) {}
 
     /** 世界扩展、世界内转变与玩家显式修订使用同一审计契约。 */
     public record WorldFactPatch(

@@ -1,0 +1,76 @@
+package com.wenxian.game.story.domain;
+
+import com.wenxian.game.story.domain.StoryActionContract.ItemTransition;
+import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
+import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
+import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
+import com.wenxian.game.story.domain.StoryPatch.HolderType;
+
+import java.util.Objects;
+
+/**
+ * 检查候选 StoryPatch 是否真正实现了生成前已确认的行动事实契约。
+ *
+ * <p>该校验只比较稳定 ID 与结构化保管关系，不从正文关键词反推状态。缺少对应补丁时整轮进入一次
+ * 语义修复，修复后仍不一致则拒绝提交。</p>
+ */
+public final class StoryActionContractPatchValidator {
+
+    public void validate(StoryActionContract contract, StoryPatch patch) {
+        if (contract == null || patch == null) throw new IllegalArgumentException("行动契约校验缺少候选提案");
+        for (ItemTransition transition : contract.itemTransitions()) validateTransition(transition, patch);
+        contract.references().stream()
+                .filter(value -> value != null && value.resolution() == ReferenceResolution.NEW)
+                .filter(value -> "ITEM".equalsIgnoreCase(value.entityType()) && value.expectedCustody() != null)
+                .forEach(value -> validateNewItem(value, patch));
+    }
+
+    private void validateNewItem(StoryActionContract.EntityReference reference, StoryPatch patch) {
+        var matches = patch.entities().stream()
+                .filter(value -> value != null && value.operation() == StoryPatch.EntityOperation.CREATE)
+                .filter(value -> "ITEM".equalsIgnoreCase(value.entityType()))
+                .filter(value -> reference.canonicalName().equals(value.name()))
+                .toList();
+        if (matches.size() != 1) {
+            throw new IllegalArgumentException("本轮新增物品没有形成唯一状态记录：" + reference.canonicalName());
+        }
+        CustodyValue actual = patchCustody(matches.getFirst());
+        CustodyValue expected = normalized(reference.expectedCustody());
+        if (actual == null || expected == null || !same(actual, expected)) {
+            throw new IllegalArgumentException("新增物品没有写入行动契约中的保管者：" + reference.canonicalName());
+        }
+    }
+
+    private void validateTransition(ItemTransition transition, StoryPatch patch) {
+        EntityPatch entityPatch = patch.entities().stream()
+                .filter(value -> value != null && transition.itemId().equals(value.entityId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "本轮物品行动没有写入对应状态变化：" + transition.itemId()));
+        CustodyValue actual = patchCustody(entityPatch);
+        CustodyValue expected = normalized(transition.target());
+        if (actual == null || expected == null || !same(actual, expected)) {
+            throw new IllegalArgumentException("物品状态补丁没有落实行动契约中的目标保管者："
+                    + transition.itemId());
+        }
+    }
+
+    private CustodyValue patchCustody(EntityPatch patch) {
+        CustodyValue explicit = normalized(patch.custody());
+        if (explicit != null) return explicit;
+        if (patch.inPossession() == null) return null;
+        return Boolean.TRUE.equals(patch.inPossession())
+                ? new CustodyValue(HolderType.PLAYER, null)
+                : new CustodyValue(HolderType.UNKNOWN, null);
+    }
+
+    private CustodyValue normalized(CustodyValue value) {
+        if (value == null || value.holderType() == null) return null;
+        String ref = value.holderRef() == null || value.holderRef().isBlank() ? null : value.holderRef().strip();
+        return new CustodyValue(value.holderType(), ref);
+    }
+
+    private boolean same(CustodyValue left, CustodyValue right) {
+        return left.holderType() == right.holderType() && Objects.equals(left.holderRef(), right.holderRef());
+    }
+}

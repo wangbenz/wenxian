@@ -14,6 +14,7 @@ import com.wenxian.game.story.agent.StoryModelFailureException;
 import com.wenxian.game.story.agent.StoryModelRoute;
 import com.wenxian.game.story.application.StoryTurnCommitService;
 import com.wenxian.game.story.application.StoryTurnPreparationService;
+import com.wenxian.game.story.domain.StoryActionPreconditionException;
 import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.model.StoryApiModels.Ability;
 import com.wenxian.game.story.model.StoryApiModels.BootstrapResponse;
@@ -362,6 +363,14 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
             StoryModelFailureException modelFailure = findModelFailure(error);
             if (modelFailure != null) {
                 throw playerSafeModelFailure(modelFailure, resolvedRoute.hasCustomCredential());
+            }
+            if (error instanceof StoryActionPreconditionException conflict) {
+                List<String> suggestions = conflict.correction().isBlank()
+                        ? List.of("刷新命卷后重新描述行动") : List.of(conflict.correction());
+                throw new GameApiException(HttpStatus.CONFLICT, "ACTION_PRECONDITION_FAILED", "STATE",
+                        "这次行动的前提与命卷不一致", conflict.getMessage(), suggestions,
+                        false, false, false, Map.of("correction", conflict.correction()),
+                        "story action fact contract rejected", conflict);
             }
             if (error instanceof IllegalArgumentException) {
                 throw GameApiException.temporary("STORY_PATCH_REJECTED", "这一轮没有形成一致结果",

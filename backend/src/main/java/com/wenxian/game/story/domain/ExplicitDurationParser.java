@@ -12,12 +12,12 @@ import java.util.regex.Pattern;
  */
 public final class ExplicitDurationParser {
     private static final Pattern DURATION = Pattern.compile(
-            "(?:闭关|修炼|参悟|等待|等候|休息|休整|歇息|养伤|赶路|行路|旅行|游历)[^，。；;\\n]{0,16}?"
-                    + "(半|\\d+|[零〇一二两三四五六七八九十百千万]+)(?:个)?"
+            "(?:闭关|修炼|参悟|等待|等候|守候|休息|休整|歇息|养伤|静立|站立|打坐|停留|赶路|行路|旅行|游历)[^，。；;\\n]{0,16}?"
+                    + "(?<!第)(半|\\d+|[零〇一二两三四五六七八九十百千万]+)(?:个)?"
                     + "(年|月|天|日|时辰|小时|刻钟|分钟)");
     private static final Pattern UNTIL_DAWN = Pattern.compile(
             "(?:休息|休整|歇息|养伤|等待|等候|留宿|过夜|住下)[^，。；;\\n]{0,20}"
-                    + "(?:(?:一|整)(?:夜|晚)|到(?:明日|次日)?(?:清晨|天亮|黎明))");
+                    + "(?:(?:一|整)(?:夜|晚)|到(?:(?:明日|次日|第二天))?(?:清晨|天亮|黎明))");
     private static final Map<Character, Integer> DIGITS = Map.ofEntries(
             Map.entry('零', 0), Map.entry('〇', 0), Map.entry('一', 1), Map.entry('二', 2),
             Map.entry('两', 2), Map.entry('三', 3), Map.entry('四', 4), Map.entry('五', 5),

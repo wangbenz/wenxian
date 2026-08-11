@@ -56,7 +56,25 @@ class PromptContextAssemblerTest {
         assertEquals(previous, context.narrative().previousTurn());
         assertEquals("是否接受使者提出的入门条件？", context.objective().pendingDecision().prompt());
         assertEquals("施展照影诀查看天门旧痕", context.action().playerAction());
+        assertEquals(null, context.action().explicitDurationMinutes());
+        assertEquals(null, context.action().expectedEndClock());
+        assertEquals("第9日 13:45（下午）", context.objective().worldClock().display());
+        assertEquals("下午", context.objective().worldClock().phase());
         assertTrue(context.system().invariants().stream().anyMatch(value -> value.contains("重大不可逆决定")));
+        assertTrue(context.objective().currentInventory().complete());
+        assertEquals(List.of("item-herbs"), context.objective().currentInventory().items().stream()
+                .map(StoryPromptContext.EntityIndexEntry::id).toList());
+        assertEquals(List.of("item-sold-sword"), context.objective().currentInventory().historicalItems().stream()
+                .map(StoryPromptContext.EntityIndexEntry::id).toList());
+    }
+
+    @Test
+    void exposesServerAuthorizedDurationAndExpectedEndClock() {
+        StoryPromptContext context = assembler.assemble(projection(), new ContextRequest(
+                "休息到第二天清晨", List.of(), ContextSelection.empty(), "", null, null, 975L));
+
+        assertEquals(975L, context.action().explicitDurationMinutes());
+        assertEquals("第10日 06:00（清晨）", context.action().expectedEndClock().display());
     }
 
     @Test
@@ -84,6 +102,8 @@ class PromptContextAssemblerTest {
         assertEquals("item-sold-sword", context.objective().relatedEntities().getFirst().id());
         assertFalse(context.objective().relatedEntities().getFirst().visible());
         assertFalse(context.objective().relatedEntities().getFirst().inPossession());
+        assertFalse(context.objective().currentInventory().items().stream()
+                .anyMatch(value -> "item-sold-sword".equals(value.id())));
     }
 
     @Test

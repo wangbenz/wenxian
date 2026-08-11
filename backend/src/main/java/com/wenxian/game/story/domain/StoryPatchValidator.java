@@ -74,8 +74,19 @@ public final class StoryPatchValidator {
             require(present(patch.entityId()), "更新已有实体必须引用稳定ID");
         }
         validateQuantity(patch.quantity());
+        if (patch.custody() != null) {
+            require(patch.custody().holderType() != null, "物品保管关系必须包含保管者类型");
+            if (patch.custody().holderType() == StoryPatch.HolderType.CHARACTER
+                    || patch.custody().holderType() == StoryPatch.HolderType.LOCATION) {
+                require(present(patch.custody().holderRef()), "人物或地点保管关系必须包含稳定引用");
+            }
+        }
         if (patch.lifecycle() != null) {
             require(patch.lifecycle().state() != null, "人物生命周期变化必须包含目标状态");
+        }
+        if (patch.relationship() != null) {
+            require("CHARACTER".equalsIgnoreCase(patch.entityType()), "只有人物实体可以记录关系变化");
+            require(present(patch.relationship().label()), "人物关系必须包含当前关系名称");
         }
     }
 

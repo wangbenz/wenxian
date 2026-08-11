@@ -5,8 +5,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
+import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
+import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.DecisionCheckpoint;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
+import com.wenxian.game.story.domain.StoryPatch.RelationshipValue;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
@@ -148,40 +151,118 @@ public final class StoryProjectionPersistenceMapper {
     private EntityState entity(Entity entity) {
         JsonNode attributes = entity.attributes();
         JsonNode trusted = attributes == null ? mapper.createObjectNode() : attributes.path(TRUSTED_ENTITY);
+        boolean item = "ITEM".equalsIgnoreCase(entity.type());
+        boolean abilityEntity = "ABILITY".equalsIgnoreCase(entity.type());
+        boolean character = "CHARACTER".equalsIgnoreCase(entity.type());
         QuantityValue quantity = trusted.has("quantity")
                 ? trustedQuantity(trusted.get("quantity")) : legacyQuantity(attributes);
         Boolean possession = trusted.has("inPossession") ? booleanValue(trusted.get("inPossession"))
                 : attributes != null && attributes.has("inPossession")
                 ? booleanValue(attributes.get("inPossession")) : null;
+        CustodyValue custody = trusted.has("custody")
+                ? trustedCustody(trusted.get("custody")) : legacyCustody(possession, entity.visible(), entity.type());
+        // 历史版本的“整理记录”只隐藏了物品，未同步清除持有标记。统一投影以当前可见性兜底归一，
+        // 避免 H5 已经移出行囊、Agent 却仍收到 inPossession=true 的互相冲突事实。
+        if ("ITEM".equalsIgnoreCase(entity.type()) && !entity.visible()) {
+            possession = false;
+            custody = new CustodyValue(HolderType.NONE, null);
+        }
         AbilityState ability = enumValue(trusted.get("abilityState"), AbilityState.class);
         LifecycleState lifecycle = enumValue(trusted.get("lifecycle"), LifecycleState.class);
+        RelationshipValue relationship = trusted.has("relationship")
+                ? trustedRelationship(trusted.get("relationship")) : legacyRelationship(attributes, entity.type());
+        // 通用模型契约为不同实体共用一套字段，但跨类型字段不是权威事实。
+        // 例如人物不存在“是否放在行囊”，物品也不存在“人物关系”。
+        if (!item) {
+            quantity = null;
+            possession = null;
+            custody = null;
+        }
+        if (!abilityEntity) ability = null;
+        if (!character) {
+            lifecycle = null;
+            relationship = null;
+        }
+        // 旧 V0.14 人物没有独立生命周期字段。只能归一为 UNKNOWN，不能根据“居住、失踪、已故”等
+        // 自然语言状态猜测；后续由已提交的新回合或玩家修正逐步形成明确事实。
+        if ("CHARACTER".equalsIgnoreCase(entity.type()) && lifecycle == null) {
+            lifecycle = LifecycleState.UNKNOWN;
+        }
         JsonNode publicAttributes = attributes == null ? null : attributes.deepCopy();
         if (publicAttributes instanceof ObjectNode object) object.remove(TRUSTED_ENTITY);
         return new EntityState(entity.id(), entity.type(), entity.name(), entity.status(), entity.summary(),
-                publicAttributes, entity.visible(), quantity, possession,
-                ability, lifecycle);
+                publicAttributes, entity.visible(), quantity, possession, custody,
+                ability, lifecycle, relationship);
     }
 
     private Entity writeEntity(String saveId, EntityState value, Entity previous, int changedTurn, Instant now) {
-        ObjectNode attributes = value.attributes() instanceof ObjectNode object
+        // 写边界再做一次增量合并：一次关系或归属更新没有携带 identity、
+        // lastKnownLocation 等旧属性时，不能把已确认事实整块覆盖掉。
+        ObjectNode attributes = previous != null && previous.attributes() instanceof ObjectNode object
                 ? object.deepCopy() : mapper.createObjectNode();
+        if (value.attributes() instanceof ObjectNode next) attributes.setAll(next);
+        attributes.remove(TRUSTED_ENTITY);
+        boolean item = "ITEM".equalsIgnoreCase(value.entityType());
+        boolean character = "CHARACTER".equalsIgnoreCase(value.entityType());
         ObjectNode trusted = mapper.createObjectNode();
-        if (value.quantity() != null) trusted.set("quantity", mapper.valueToTree(value.quantity()));
-        if (value.inPossession() != null) trusted.put("inPossession", value.inPossession());
-        if (value.abilityState() != null) trusted.put("abilityState", value.abilityState().name());
-        if (value.lifecycle() != null) trusted.put("lifecycle", value.lifecycle().name());
+        if (item && value.quantity() != null) trusted.set("quantity", mapper.valueToTree(value.quantity()));
+        if (item && value.inPossession() != null) trusted.put("inPossession", value.inPossession());
+        if (item && value.custody() != null) trusted.set("custody", mapper.valueToTree(value.custody()));
+        if ("ABILITY".equalsIgnoreCase(value.entityType()) && value.abilityState() != null) {
+            trusted.put("abilityState", value.abilityState().name());
+        }
+        if (character && value.lifecycle() != null) trusted.put("lifecycle", value.lifecycle().name());
+        if (character && value.relationship() != null) {
+            trusted.set("relationship", mapper.valueToTree(value.relationship()));
+        }
         attributes.set(TRUSTED_ENTITY, trusted);
 
         // 兼容当前角色页读取，不能把未知数量伪造为1。
-        if (value.quantity() != null && value.quantity().known()) {
+        if (item && value.quantity() != null && value.quantity().known()) {
             attributes.put("quantity", value.quantity().value());
         } else {
             attributes.remove("quantity");
         }
-        if (value.inPossession() != null) attributes.put("inPossession", value.inPossession());
+        if (item && value.inPossession() != null) attributes.put("inPossession", value.inPossession());
+        else attributes.remove("inPossession");
+        if (character && value.relationship() != null) attributes.put("relationship", value.relationship().label());
+        else if (!character) attributes.remove("relationship");
         return new Entity(value.id(), saveId, value.entityType(), value.name(), value.status(), value.visible(),
                 value.summary(), attributes, previous == null ? changedTurn : previous.firstTurn(), changedTurn,
                 previous == null ? now : previous.createdAt(), now);
+    }
+
+    private CustodyValue trustedCustody(JsonNode value) {
+        if (value == null || !value.isObject()) throw new IllegalStateException("统一实体可信保管关系格式错误");
+        CustodyValue custody = mapper.convertValue(value, CustodyValue.class);
+        if (custody.holderType() == null) throw new IllegalStateException("统一实体可信保管关系缺少类型");
+        if ((custody.holderType() == HolderType.CHARACTER || custody.holderType() == HolderType.LOCATION)
+                && (custody.holderRef() == null || custody.holderRef().isBlank())) {
+            throw new IllegalStateException("人物或地点保管关系缺少稳定引用");
+        }
+        return custody;
+    }
+
+    private RelationshipValue trustedRelationship(JsonNode value) {
+        if (value == null || !value.isObject()) throw new IllegalStateException("统一实体可信人物关系格式错误");
+        RelationshipValue relationship = mapper.convertValue(value, RelationshipValue.class);
+        if (relationship.label() == null || relationship.label().isBlank()) {
+            throw new IllegalStateException("统一实体可信人物关系缺少关系名称");
+        }
+        return new RelationshipValue(relationship.label().strip(), relationship.changeReason());
+    }
+
+    private RelationshipValue legacyRelationship(JsonNode attributes, String entityType) {
+        if (!"CHARACTER".equalsIgnoreCase(entityType) || attributes == null) return null;
+        String label = attributes.path("relationship").asText("").strip();
+        return label.isBlank() ? null : new RelationshipValue(label, "旧存档关系导入");
+    }
+
+    private CustodyValue legacyCustody(Boolean possession, boolean visible, String entityType) {
+        if (!"ITEM".equalsIgnoreCase(entityType)) return null;
+        if (!visible) return new CustodyValue(HolderType.NONE, null);
+        if (Boolean.TRUE.equals(possession)) return new CustodyValue(HolderType.PLAYER, null);
+        return new CustodyValue(HolderType.UNKNOWN, null);
     }
 
     private QuantityValue legacyQuantity(JsonNode attributes) {

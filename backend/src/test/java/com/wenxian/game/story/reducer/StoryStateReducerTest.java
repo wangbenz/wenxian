@@ -4,9 +4,12 @@ import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
 import com.wenxian.game.story.domain.StoryPatch.EntityOperation;
 import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
+import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
+import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleValue;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
+import com.wenxian.game.story.domain.StoryPatch.RelationshipValue;
 import com.wenxian.game.story.domain.StoryPatch.TimePassage;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
@@ -85,6 +88,27 @@ class StoryStateReducerTest {
     }
 
     @Test
+    void rejectsSilentRelationshipRewriteAndAcceptsAuditedChange() {
+        EntityState character = new EntityState("character-companion", "CHARACTER", "阿禾", "同行",
+                "曾共同脱险", null, true, null, null, null, null, LifecycleState.ACTIVE,
+                new RelationshipValue("同行者", "共同脱险后确认"));
+        StoryProjection before = projection(Map.of(character.id(), character), Map.of());
+        EntityPatch silent = new EntityPatch(EntityOperation.UPDATE, character.id(), "CHARACTER", null,
+                "反目", null, null, null, null, null, null, null,
+                new RelationshipValue("仇敌", null));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> reducer.reduce(before, patch(List.of(silent), List.of())));
+        assertEquals("人物关系发生变化时必须记录明确原因", error.getMessage());
+
+        EntityPatch audited = new EntityPatch(EntityOperation.UPDATE, character.id(), "CHARACTER", null,
+                "因背叛而反目", null, null, null, null, null, null, null,
+                new RelationshipValue("仇敌", "本轮亲眼确认对方出卖行踪"));
+        StoryProjection after = reducer.reduce(before, patch(List.of(audited), List.of())).projection();
+        assertEquals("仇敌", after.entities().get(character.id()).relationship().label());
+    }
+
+    @Test
     void revisesWorldFactWithoutChangingItsStableIdentity() {
         WorldFactState fact = new WorldFactState("world-fact-ascension", "世人认为天门已绝",
                 1, true, WorldFactOperation.EXPAND, "世界起点");
@@ -111,6 +135,23 @@ class StoryStateReducerTest {
 
         assertTrue(applied.projection().entities().containsKey("item-generated"));
         assertEquals("item-generated", applied.acceptedPatch().entities().getFirst().entityId());
+    }
+
+    @Test
+    void recordsCharacterCustodyWithoutPretendingGiftedItemWasDestroyed() {
+        EntityState item = entity("item-sword-tip", "ITEM", "断剑尖",
+                new QuantityValue(true, 1), true, null, null);
+        EntityPatch gifted = new EntityPatch(EntityOperation.UPDATE, item.id(), "ITEM", null,
+                "已交给老妇保管", null, null, new QuantityValue(true, 1), false,
+                new CustodyValue(HolderType.CHARACTER, "character-old-woman"), null, null);
+
+        StoryProjection after = reducer.reduce(projection(Map.of(item.id(), item), Map.of()),
+                patch(List.of(gifted), List.of())).projection();
+
+        assertFalse(after.entities().get(item.id()).inPossession());
+        assertEquals(HolderType.CHARACTER, after.entities().get(item.id()).custody().holderType());
+        assertEquals("character-old-woman", after.entities().get(item.id()).custody().holderRef());
+        assertEquals(1, after.entities().get(item.id()).quantity().value());
     }
 
     private StoryProjection projection(Map<String, EntityState> entities,

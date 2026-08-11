@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
+import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
+import com.wenxian.game.story.domain.StoryPatch.RelationshipValue;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
 
 import java.util.List;
@@ -44,9 +46,28 @@ public record StoryProjection(
             boolean visible,
             QuantityValue quantity,
             Boolean inPossession,
+            CustodyValue custody,
             AbilityState abilityState,
-            LifecycleState lifecycle
-    ) {}
+            LifecycleState lifecycle,
+            RelationshipValue relationship
+    ) {
+        /** 兼容旧投影构造；持有者会在持久化映射或 Reducer 中由 inPossession 补齐。 */
+        public EntityState(String id, String entityType, String name, String status, String summary,
+                           JsonNode attributes, boolean visible, QuantityValue quantity,
+                           Boolean inPossession, AbilityState abilityState, LifecycleState lifecycle) {
+            this(id, entityType, name, status, summary, attributes, visible, quantity,
+                    inPossession, null, abilityState, lifecycle, null);
+        }
+
+        /** 兼容已包含物品保管关系、但尚未包含可信人物关系的投影构造。 */
+        public EntityState(String id, String entityType, String name, String status, String summary,
+                           JsonNode attributes, boolean visible, QuantityValue quantity,
+                           Boolean inPossession, CustodyValue custody, AbilityState abilityState,
+                           LifecycleState lifecycle) {
+            this(id, entityType, name, status, summary, attributes, visible, quantity,
+                    inPossession, custody, abilityState, lifecycle, null);
+        }
+    }
 
     public record WorldFactState(
             String id,

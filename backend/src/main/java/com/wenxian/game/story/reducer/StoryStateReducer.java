@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryPatch.EntityOperation;
 import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
+import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
+import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
@@ -87,9 +89,11 @@ public final class StoryStateReducer {
     private EntityPatch applyEntity(Map<String, EntityState> entities, EntityPatch patch) {
         if (patch.operation() == EntityOperation.CREATE) {
             String id = idFactory.apply(entityPrefix(patch.entityType()));
+            CustodyValue custody = normalizedCustody(patch.custody(), patch.inPossession());
             EntityState created = new EntityState(id, normalizedType(patch.entityType()), patch.name(), patch.status(),
-                    patch.summary(), copy(patch.attributes()), true, patch.quantity(), patch.inPossession(),
-                    patch.abilityState(), patch.lifecycle() == null ? null : patch.lifecycle().state());
+                    patch.summary(), copy(patch.attributes()), true, patch.quantity(), possession(custody, patch.inPossession()), custody,
+                    patch.abilityState(), patch.lifecycle() == null ? null : patch.lifecycle().state(),
+                    patch.relationship());
             validateEntitySemantics(created, null, patch);
             if (entities.putIfAbsent(id, created) != null) throw new IllegalArgumentException("服务端生成了重复实体ID");
             return withEntityId(patch, id);
@@ -105,13 +109,17 @@ public final class StoryStateReducer {
             case RESTORE -> true;
             default -> previous.visible();
         };
+        CustodyValue custody = patch.custody() == null
+                ? normalizedCustody(previous.custody(), previous.inPossession())
+                : normalizedCustody(patch.custody(), patch.inPossession());
         EntityState updated = new EntityState(previous.id(), previous.entityType(),
                 text(patch.name(), previous.name()), text(patch.status(), previous.status()),
                 text(patch.summary(), previous.summary()), merge(previous.attributes(), patch.attributes()), visible,
                 patch.quantity() == null ? previous.quantity() : patch.quantity(),
-                patch.inPossession() == null ? previous.inPossession() : patch.inPossession(),
+                possession(custody, patch.inPossession() == null ? previous.inPossession() : patch.inPossession()), custody,
                 patch.abilityState() == null ? previous.abilityState() : patch.abilityState(),
-                patch.lifecycle() == null ? previous.lifecycle() : patch.lifecycle().state());
+                patch.lifecycle() == null ? previous.lifecycle() : patch.lifecycle().state(),
+                patch.relationship() == null ? previous.relationship() : patch.relationship());
         validateEntitySemantics(updated, previous, patch);
         entities.put(updated.id(), updated);
         return patch;
@@ -120,15 +128,17 @@ public final class StoryStateReducer {
     private void validateEntitySemantics(EntityState next, EntityState previous, EntityPatch patch) {
         String type = normalizedType(next.entityType());
         if ("ITEM".equals(type)) {
-            if (patch.operation() == EntityOperation.CREATE && next.inPossession() == null) {
-                throw new IllegalArgumentException("新增长期物品必须明确当前是否持有");
+            if (patch.operation() == EntityOperation.CREATE && next.custody() == null) {
+                throw new IllegalArgumentException("新增长期物品必须明确当前保管者");
             }
+            validateCustody(next.custody());
             QuantityValue quantity = next.quantity();
             if (quantity != null && quantity.known() && quantity.value() == 0 && Boolean.TRUE.equals(next.inPossession())) {
                 throw new IllegalArgumentException("数量为0的物品不能同时标记为仍持有");
             }
-            if (quantity != null && quantity.known() && quantity.value() > 0 && Boolean.FALSE.equals(next.inPossession())) {
-                throw new IllegalArgumentException("仍有明确数量的物品不能同时标记为已失去");
+            if (quantity != null && quantity.known() && quantity.value() > 0
+                    && next.custody() != null && next.custody().holderType() == HolderType.NONE) {
+                throw new IllegalArgumentException("仍有明确数量的物品不能标记为已经不存在");
             }
         }
         if ("ABILITY".equals(type) && patch.operation() == EntityOperation.CREATE && next.abilityState() == null) {
@@ -143,6 +153,26 @@ public final class StoryStateReducer {
                     && (patch.lifecycle() == null || !present(patch.lifecycle().changeReason()))) {
                 throw new IllegalArgumentException("已死亡人物改变生命周期必须记录明确依据");
             }
+            validateRelationship(previous, next, patch);
+        }
+    }
+
+    private void validateRelationship(EntityState previous, EntityState next, EntityPatch patch) {
+        if (patch.attributes() != null && patch.attributes().has("relationship")) {
+            String attributeLabel = patch.attributes().path("relationship").asText("").strip();
+            String trustedLabel = patch.relationship() == null || patch.relationship().label() == null
+                    ? "" : patch.relationship().label().strip();
+            if (!attributeLabel.equals(trustedLabel)) {
+                throw new IllegalArgumentException("人物关系不能只通过自由属性静默改写");
+            }
+        }
+        if (next.relationship() == null || !present(next.relationship().label())) return;
+        if (previous == null || previous.relationship() == null) return;
+        String before = previous.relationship().label() == null ? "" : previous.relationship().label().strip();
+        String after = next.relationship().label().strip();
+        if (!before.equals(after)
+                && (patch.relationship() == null || !present(patch.relationship().changeReason()))) {
+            throw new IllegalArgumentException("人物关系发生变化时必须记录明确原因");
         }
     }
 
@@ -173,7 +203,38 @@ public final class StoryStateReducer {
 
     private EntityPatch withEntityId(EntityPatch patch, String id) {
         return new EntityPatch(patch.operation(), id, patch.entityType(), patch.name(), patch.status(), patch.summary(),
-                patch.attributes(), patch.quantity(), patch.inPossession(), patch.abilityState(), patch.lifecycle());
+                patch.attributes(), patch.quantity(), patch.inPossession(), patch.custody(),
+                patch.abilityState(), patch.lifecycle(), patch.relationship());
+    }
+
+    private CustodyValue normalizedCustody(CustodyValue custody, Boolean inPossession) {
+        if (custody != null && custody.holderType() != null) {
+            String ref = present(custody.holderRef()) ? custody.holderRef().strip() : null;
+            CustodyValue normalized = new CustodyValue(custody.holderType(), ref);
+            Boolean derived = possession(normalized, inPossession);
+            if (inPossession != null && !inPossession.equals(derived)) {
+                throw new IllegalArgumentException("物品保管者与是否随身持有相互矛盾");
+            }
+            return normalized;
+        }
+        if (Boolean.TRUE.equals(inPossession)) return new CustodyValue(HolderType.PLAYER, null);
+        if (Boolean.FALSE.equals(inPossession)) return new CustodyValue(HolderType.UNKNOWN, null);
+        return null;
+    }
+
+    private Boolean possession(CustodyValue custody, Boolean fallback) {
+        if (custody == null || custody.holderType() == null) return fallback;
+        return custody.holderType() == HolderType.PLAYER;
+    }
+
+    private void validateCustody(CustodyValue custody) {
+        if (custody == null || custody.holderType() == null) {
+            throw new IllegalArgumentException("物品保管关系必须包含保管者类型");
+        }
+        if ((custody.holderType() == HolderType.CHARACTER || custody.holderType() == HolderType.LOCATION)
+                && !present(custody.holderRef())) {
+            throw new IllegalArgumentException("人物或地点保管关系必须包含稳定引用");
+        }
     }
 
     private String knowledgeKey(String subjectRef, String topicRef) {

@@ -1,6 +1,8 @@
 package com.wenxian.game.story.persistence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.story.persistence.StoryPersistenceModels.Entity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -66,10 +68,24 @@ public class StoryEntityRepository {
     }
 
     public int hide(String saveId, String entityId, int changedTurn, String status) {
+        Entity current = jdbc.query("select * from story_entity where id=? and save_id=? and visible=true",
+                (row, index) -> map(row), entityId, saveId).stream().findFirst().orElse(null);
+        if (current == null) return 0;
+        ObjectNode attributes = current.attributes() instanceof ObjectNode object
+                ? object.deepCopy() : JsonNodeFactory.instance.objectNode();
+        ObjectNode trusted = attributes.path(StoryProjectionPersistenceMapper.TRUSTED_ENTITY) instanceof ObjectNode object
+                ? object.deepCopy() : JsonNodeFactory.instance.objectNode();
+        if ("ITEM".equalsIgnoreCase(current.type())) {
+            attributes.put("inPossession", false);
+            trusted.put("inPossession", false);
+        } else if ("CHARACTER".equalsIgnoreCase(current.type())) {
+            attributes.put("tracked", false);
+        }
+        attributes.set(StoryProjectionPersistenceMapper.TRUSTED_ENTITY, trusted);
         return jdbc.update("""
-                update story_entity set visible=false, status=?, last_changed_turn=?, updated_at=?
+                update story_entity set visible=false, status=?, attributes_json=?, last_changed_turn=?, updated_at=?
                 where id=? and save_id=? and visible=true
-                """, status, changedTurn, Timestamp.from(Instant.now()), entityId, saveId);
+                """, status, json.write(attributes), changedTurn, Timestamp.from(Instant.now()), entityId, saveId);
     }
 
     private Entity map(java.sql.ResultSet row) throws java.sql.SQLException {

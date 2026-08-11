@@ -11,7 +11,11 @@ import com.wenxian.game.story.agent.StoryPromptContext;
 import com.wenxian.game.story.agent.StoryPromptContext.PendingDecision;
 import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.domain.StoryProjection;
+import com.wenxian.game.story.domain.StoryActionContractValidator;
+import com.wenxian.game.story.domain.StoryActionContractPatchValidator;
 import com.wenxian.game.story.domain.ExplicitDurationParser;
+import com.wenxian.game.story.domain.StoryNarrativeFreshnessValidator;
+import com.wenxian.game.story.domain.StoryNarrativeFreshnessException;
 import com.wenxian.game.story.persistence.StoryConversationRepository;
 import com.wenxian.game.story.persistence.StoryEntityRepository;
 import com.wenxian.game.story.persistence.StoryMemoryRepository;
@@ -49,6 +53,9 @@ public class StoryTurnPreparationService {
     private final PromptContextAssembler contexts;
     private final StoryTurnAgent agent;
     private final StoryStateReducer reducer;
+    private final StoryActionContractValidator actionContracts = new StoryActionContractValidator();
+    private final StoryActionContractPatchValidator contractPatches = new StoryActionContractPatchValidator();
+    private final StoryNarrativeFreshnessValidator narrativeFreshness = new StoryNarrativeFreshnessValidator();
 
     public StoryTurnPreparationService(
             StoryEntityRepository entities,
@@ -77,21 +84,40 @@ public class StoryTurnPreparationService {
         StoryProjection before = projections.load(saved, existingEntities,
                 memories.recentActive(saved.id(), RECENT_MEMORY_LIMIT));
         var checkpoint = projections.loadDecisionCheckpoint(saved.state());
+        StoryPromptContext.PreviousTurn previous = previousTurn(saved.id());
+        Long explicitDurationMinutes = explicitDuration(playerAction, before.worldTimeMinutes());
         StoryPromptContext context = contexts.assemble(before, new ContextRequest(playerAction,
                 worldSeedRules(saved.state()), selection(before, existingEntities), conversations.summary(saved.id()),
-                previousTurn(saved.id()), checkpoint == null ? null : new PendingDecision(checkpoint.prompt())));
+                previous, checkpoint == null ? null : new PendingDecision(checkpoint.prompt()),
+                explicitDurationMinutes));
         StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
                 saved.id(), saved.turnNumber() + 1);
-        Long explicitDurationMinutes = explicitDuration(playerAction, before.worldTimeMinutes());
+        StoryTurnAgent.ResolvedAction resolvedAction = agent.resolveAction(context, route, invocation);
+        actionContracts.validate(before, resolvedAction.contract());
+        context = context.withActionContract(resolvedAction.contract());
         StoryTurnAgent.Generated generation = agent.generate(context, route, invocation);
+        generation = prependModelResults(resolvedAction.modelResults(), generation);
         StoryStateReducer.Applied applied;
         try {
+            rejectRepeatedNarrative(previous, generation.patch());
+            StoryTurnAgent.Review review = agent.review(context, route, invocation, generation.patch());
+            generation = appendReview(generation, review);
+            rejectReview(review);
+            contractPatches.validate(resolvedAction.contract(), generation.patch());
             applied = reducer.reduce(before, generation.patch(), explicitDurationMinutes);
         } catch (IllegalArgumentException rejected) {
-            StoryTurnAgent.Generated repaired = agent.repairRejected(context, route, invocation,
-                    generation.patch(), rejected.getMessage());
+            StoryTurnAgent.Generated repaired = rejected instanceof StoryNarrativeFreshnessException
+                    ? agent.regenerateFreshNarrative(context, route, invocation,
+                            generation.patch(), rejected.getMessage())
+                    : agent.repairRejected(context, route, invocation,
+                            generation.patch(), rejected.getMessage());
             generation = combine(generation, repaired);
             try {
+                rejectRepeatedNarrative(previous, repaired.patch());
+                StoryTurnAgent.Review review = agent.review(context, route, invocation, repaired.patch());
+                generation = appendReview(generation, review);
+                rejectReview(review);
+                contractPatches.validate(resolvedAction.contract(), repaired.patch());
                 applied = reducer.reduce(before, repaired.patch(), explicitDurationMinutes);
             } catch (IllegalArgumentException failedAgain) {
                 failedAgain.addSuppressed(rejected);
@@ -99,6 +125,17 @@ public class StoryTurnPreparationService {
             }
         }
         return new Prepared(before, applied, existingEntities, generation);
+    }
+
+    /**
+     * 完整复用上一回正文表示模型没有处理本轮行动，不能作为一个新回合提交。
+     *
+     * <p>这里只比较文本新鲜度，不根据修炼、战斗等业务词汇判断剧情结果。首次命中后仍允许模型按本轮
+     * 行动做一次精简语义修复；修复结果再次重复时整轮失败，不推进回合或时间。</p>
+     */
+    private void rejectRepeatedNarrative(StoryPromptContext.PreviousTurn previous, com.wenxian.game.story.domain.StoryPatch patch) {
+        if (previous == null || patch == null) return;
+        narrativeFreshness.validate(previous.narrative(), patch.narrative());
     }
 
     private Long explicitDuration(String playerAction, long worldTimeMinutes) {
@@ -110,6 +147,27 @@ public class StoryTurnPreparationService {
         List<StoryModelGateway.Result> attempts = new ArrayList<>(first.modelResults());
         attempts.addAll(repaired.modelResults());
         return new StoryTurnAgent.Generated(repaired.patch(), attempts);
+    }
+
+    private StoryTurnAgent.Generated appendReview(StoryTurnAgent.Generated generated, StoryTurnAgent.Review review) {
+        if (review == null || review.modelResults().isEmpty()) return generated;
+        List<StoryModelGateway.Result> attempts = new ArrayList<>(generated.modelResults());
+        attempts.addAll(review.modelResults());
+        return new StoryTurnAgent.Generated(generated.patch(), attempts);
+    }
+
+    private StoryTurnAgent.Generated prependModelResults(List<StoryModelGateway.Result> earlier,
+                                                          StoryTurnAgent.Generated generated) {
+        if (earlier == null || earlier.isEmpty()) return generated;
+        List<StoryModelGateway.Result> attempts = new ArrayList<>(earlier);
+        attempts.addAll(generated.modelResults());
+        return new StoryTurnAgent.Generated(generated.patch(), attempts);
+    }
+
+    private void rejectReview(StoryTurnAgent.Review review) {
+        if (review != null && !review.accepted()) {
+            throw new IllegalArgumentException("独立回合审阅未通过：" + review.problem());
+        }
     }
 
     private ContextSelection selection(StoryProjection projection, List<Entity> existing) {

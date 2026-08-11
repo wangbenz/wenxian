@@ -6,6 +6,7 @@ import com.wenxian.game.story.agent.StoryPromptContext.CognitionContext;
 import com.wenxian.game.story.agent.StoryPromptContext.EntityDetail;
 import com.wenxian.game.story.agent.StoryPromptContext.EntityIndexEntry;
 import com.wenxian.game.story.agent.StoryPromptContext.KnowledgeView;
+import com.wenxian.game.story.agent.StoryPromptContext.InventoryView;
 import com.wenxian.game.story.agent.StoryPromptContext.MemoryContext;
 import com.wenxian.game.story.agent.StoryPromptContext.MemoryView;
 import com.wenxian.game.story.agent.StoryPromptContext.NarrativeContext;
@@ -38,6 +39,7 @@ public final class PromptContextAssembler {
             "玩家已经经历的已提交事件不能被摘要或新正文静默抹除。",
             "只执行玩家本轮授权的行动及其直接后果，并在下一项重大不可逆决定前停止。",
             "客观事实、人物认知、历史叙事和玩家输入属于不同层级，不能相互冒充。",
+            "currentInventory 是当前行囊的完整权威清单；历史正文和隐藏实体不能证明仍然持有物品。",
             "已有实体只能通过上下文提供的稳定ID更新；名称相似不能作为覆盖依据。",
             "模型输出只是变化提案，只有服务端归并并提交后的结果才成为事实。"
     );
@@ -63,6 +65,17 @@ public final class PromptContextAssembler {
                 .sorted(Comparator.comparing(EntityState::id))
                 .map(this::toDetail)
                 .toList();
+        List<EntityIndexEntry> currentInventory = projection.entities().values().stream()
+                .filter(this::isCurrentInventoryItem)
+                .sorted(Comparator.comparing(EntityState::id))
+                .map(this::toIndex)
+                .toList();
+        List<EntityIndexEntry> historicalInventory = projection.entities().values().stream()
+                .filter(value -> value != null && "ITEM".equalsIgnoreCase(value.entityType()))
+                .filter(value -> !isCurrentInventoryItem(value))
+                .sorted(Comparator.comparing(EntityState::id))
+                .map(this::toIndex)
+                .toList();
         List<WorldFactView> worldFacts = clean(selection.worldFactIds()).stream()
                 .map(id -> requireWorldFact(projection, id))
                 .sorted(Comparator.comparing(WorldFactState::id))
@@ -86,13 +99,26 @@ public final class PromptContextAssembler {
 
         return new StoryPromptContext(
                 new SystemContext(TRUST_INVARIANTS, cleanRules(request.engineRules())),
-                new ObjectiveContext(projection.worldTimeMinutes(), projection.coreState(), worldFacts, index, details,
-                        request.pendingDecision()),
+                new ObjectiveContext(projection.worldTimeMinutes(), StoryPromptContext.WorldClock.from(projection.worldTimeMinutes()),
+                        projection.coreState(), worldFacts, index, details,
+                        new InventoryView(true, currentInventory, historicalInventory), request.pendingDecision()),
                 new CognitionContext(cognition),
                 new MemoryContext(memories),
                 new NarrativeContext(blank(request.rollingSummary()), request.previousTurn()),
-                new ActionContext(request.playerAction().strip())
+                new ActionContext(request.playerAction().strip(), request.explicitDurationMinutes(),
+                        expectedEndClock(projection.worldTimeMinutes(), request.explicitDurationMinutes()))
         );
+    }
+
+    private StoryPromptContext.WorldClock expectedEndClock(long currentMinutes, Long elapsedMinutes) {
+        if (elapsedMinutes == null || elapsedMinutes < 0) return null;
+        long end;
+        try {
+            end = Math.addExact(currentMinutes, elapsedMinutes);
+        } catch (ArithmeticException ignored) {
+            end = Long.MAX_VALUE;
+        }
+        return StoryPromptContext.WorldClock.from(end);
     }
 
     private EntityState requireEntity(StoryProjection projection, String id) {
@@ -130,14 +156,22 @@ public final class PromptContextAssembler {
 
     private EntityIndexEntry toIndex(EntityState value) {
         return new EntityIndexEntry(value.id(), value.entityType(), value.name(), value.status(), value.visible(),
-                value.quantity(), value.inPossession(), value.abilityState(), value.lifecycle());
+                value.quantity(), value.inPossession(), value.custody(), value.abilityState(), value.lifecycle(),
+                value.relationship());
     }
 
     private EntityDetail toDetail(EntityState value) {
         JsonNode attributes = value.attributes() == null ? null : value.attributes().deepCopy();
         return new EntityDetail(value.id(), value.entityType(), value.name(), value.status(), value.summary(),
-                attributes, value.visible(), value.quantity(), value.inPossession(), value.abilityState(),
-                value.lifecycle());
+                attributes, value.visible(), value.quantity(), value.inPossession(), value.custody(),
+                value.abilityState(), value.lifecycle(), value.relationship());
+    }
+
+    private boolean isCurrentInventoryItem(EntityState value) {
+        if (value == null || !"ITEM".equalsIgnoreCase(value.entityType())) return false;
+        if (!value.visible() || !Boolean.TRUE.equals(value.inPossession())) return false;
+        return value.quantity() == null || !value.quantity().known() || value.quantity().value() == null
+                || value.quantity().value() > 0;
     }
 
     private Set<String> clean(Set<String> values) {
@@ -173,11 +207,18 @@ public final class PromptContextAssembler {
             ContextSelection selection,
             String rollingSummary,
             PreviousTurn previousTurn,
-            StoryPromptContext.PendingDecision pendingDecision
+            StoryPromptContext.PendingDecision pendingDecision,
+            Long explicitDurationMinutes
     ) {
         public ContextRequest(String playerAction, List<String> engineRules, ContextSelection selection,
                               String rollingSummary, PreviousTurn previousTurn) {
-            this(playerAction, engineRules, selection, rollingSummary, previousTurn, null);
+            this(playerAction, engineRules, selection, rollingSummary, previousTurn, null, null);
+        }
+
+        public ContextRequest(String playerAction, List<String> engineRules, ContextSelection selection,
+                              String rollingSummary, PreviousTurn previousTurn,
+                              StoryPromptContext.PendingDecision pendingDecision) {
+            this(playerAction, engineRules, selection, rollingSummary, previousTurn, pendingDecision, null);
         }
 
         public ContextRequest {

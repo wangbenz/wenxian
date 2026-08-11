@@ -16,6 +16,7 @@ import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.application.StoryTurnCommitService;
 import com.wenxian.game.story.application.StoryTurnPreparationService;
 import com.wenxian.game.story.domain.StoryPatch;
+import com.wenxian.game.story.domain.StoryActionContract;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
 import com.wenxian.game.story.domain.StoryPatch.DecisionCheckpoint;
 import com.wenxian.game.story.domain.StoryPatch.EntityOperation;
@@ -23,6 +24,7 @@ import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleValue;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
+import com.wenxian.game.story.domain.StoryPatch.RelationshipValue;
 import com.wenxian.game.story.domain.StoryPatch.TimePassage;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
@@ -139,6 +141,11 @@ class PersistedLightNarrativeEngineTest {
             assertEquals(2, removed.revision());
             assertEquals(List.of("entity-unknown"), removed.state().inventory().stream()
                     .map(com.wenxian.game.story.model.StoryApiModels.Item::id).toList());
+            Entity removedEntity = entities.listAll("story-v014-test").stream()
+                    .filter(value -> "entity-token".equals(value.id())).findFirst().orElseThrow();
+            assertFalse(removedEntity.visible());
+            assertFalse(removedEntity.attributes().path("inPossession").asBoolean(true));
+            assertFalse(removedEntity.attributes().path("_trusted").path("inPossession").asBoolean(true));
 
             var corrected = engine.correct(USER, "story-v014-test",
                     new CorrectionRequest("地点应为青岐山门", 2));
@@ -297,12 +304,12 @@ class PersistedLightNarrativeEngineTest {
     void trustedTurnsPersistDeadCharacterAcrossLaterNarrativeAndApiReload() {
         ObjectNode attributes = mapper.createObjectNode();
         attributes.put("identity", "旧日引路人");
-        attributes.put("relationship", "故人");
         attributes.put("lastKnownLocation", "青岐山旧居");
         StoryPatch death = turnPatch("山崩之后", "山崩过后，你只找到闻溪留下的旧物。", 60,
                 List.of(new EntityPatch(EntityOperation.CREATE, null, "CHARACTER", "闻溪", "已经身亡",
-                        "闻溪死于山崩，只留下旧物。", attributes, null, null, null,
-                        new LifecycleValue(LifecycleState.DEAD, "死于山崩"))), List.of(),
+                        "闻溪死于山崩，只留下旧物。", attributes, null, null, null, null,
+                        new LifecycleValue(LifecycleState.DEAD, "死于山崩"),
+                        new RelationshipValue("故人", "曾是旧日引路人"))), List.of(),
                 new DecisionCheckpoint(false, null));
         StoryPatch revisit = turnPatch("重返旧居", "多年后你重返旧居，故人并未凭空归来。", 120,
                 List.of(new EntityPatch(EntityOperation.UPDATE, "character-trusted-test", "CHARACTER", null,
@@ -473,10 +480,10 @@ class PersistedLightNarrativeEngineTest {
                         AbilityState.MASTERED, null));
             } else if (turn == 3) {
                 ObjectNode attributes = mapper.createObjectNode();
-                attributes.put("relationship", "同行者");
                 entityPatches.add(new EntityPatch(EntityOperation.CREATE, null, "CHARACTER", "闻溪",
-                        "结伴同行", "在山道相识的同行者。", attributes, null, null, null,
-                        new LifecycleValue(LifecycleState.ACTIVE, null)));
+                        "结伴同行", "在山道相识的同行者。", attributes, null, null, null, null,
+                        new LifecycleValue(LifecycleState.ACTIVE, null),
+                        new RelationshipValue("同行者", "本轮在山道结伴")));
             } else if (turn == 10) {
                 entityPatches.add(new EntityPatch(EntityOperation.UPDATE, "item-trusted-test", "ITEM",
                         null, "剩余四枚", null, null, new QuantityValue(true, 4), true,
@@ -625,6 +632,147 @@ class PersistedLightNarrativeEngineTest {
     }
 
     @Test
+    void trustedTurnRepairsNarrativeThatHighlyRepeatsPreviousTurn() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            StringBuilder repeatedBody = new StringBuilder();
+            for (int index = 0; index < 45; index++) {
+                repeatedBody.append("你检查院墙第").append(index).append("处痕迹，确认四周平静后仍留在原地。");
+            }
+            String firstNarrative = "夜色渐深。" + repeatedBody + "你停在院外等待。";
+            StoryPatch first = turnPatch("院外停步", firstNarrative, 5,
+                    List.of(), List.of(), new DecisionCheckpoint(false, null));
+            StoryPatch repeated = turnPatch("妄念骤起", "月上中天。" + repeatedBody + "你仍停在院外等待。", 0,
+                    List.of(), List.of(), new DecisionCheckpoint(false, null));
+            StoryPatch repaired = turnPatch("妄念未成", "你察觉这个念头远超当前境界，只让它从心中掠过，并未获得任何力量。", 1,
+                    List.of(), List.of(), new DecisionCheckpoint(false, null));
+            AtomicInteger generations = new AtomicInteger();
+            AtomicInteger repairs = new AtomicInteger();
+            AtomicInteger freshRegenerations = new AtomicInteger();
+            StoryTurnAgent freshnessAgent = new StoryTurnAgent() {
+                @Override
+                public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+                    StoryPatch patch = generations.getAndIncrement() == 0 ? first : repeated;
+                    return generated(patch, "generation");
+                }
+
+                @Override
+                public Generated repairRejected(StoryPromptContext context, StoryModelRoute route,
+                                                InvocationContext invocation, StoryPatch proposal,
+                                                String problem) {
+                    repairs.incrementAndGet();
+                    throw new AssertionError("正文重复不应进入一般语义修复");
+                }
+
+                @Override
+                public Generated regenerateFreshNarrative(StoryPromptContext context, StoryModelRoute route,
+                                                          InvocationContext invocation, StoryPatch proposal,
+                                                          String problem) {
+                    freshRegenerations.incrementAndGet();
+                    assertTrue(problem.contains("正文与上一回合高度重复"));
+                    return generated(repaired, "freshness-repair");
+                }
+
+                private Generated generated(StoryPatch patch, String responseId) {
+                    return new Generated(patch, List.of(
+                            new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                                    "{}", responseId, "test-model", 40, 90, 20)));
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    freshnessAgent, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            engine.takeTurn(USER, created.saveId(),
+                    new TurnRequest("在院外停下", "request-freshness-first", 1));
+            var current = engine.get(USER, created.saveId());
+            var response = engine.takeTurn(USER, created.saveId(),
+                    new TurnRequest("尝试凭空突破", "request-freshness-second", current.revision()));
+
+            assertEquals(0, repairs.get());
+            assertEquals(1, freshRegenerations.get());
+            assertEquals(2, response.state().turnNumber());
+            assertEquals(repaired.narrative(), response.state().narrative());
+            assertEquals(repaired.narrative(), jdbc.queryForObject("""
+                    select narrative_text from story_turn where save_id=? and turn_number=2
+                    """, String.class, created.saveId()));
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
+    void trustedTurnRepairsOneIndependentReviewRejectionAndPersistsAllUsage() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            StoryPatch overstepped = turnPatch("问安之后", "你问过屋顶，又擅自追问了古战场。", 15,
+                    List.of(), List.of(), new DecisionCheckpoint(false, null));
+            StoryPatch repaired = turnPatch("只问屋顶", "你只询问屋顶是否漏雨，确认无恙后停在院外。", 15,
+                    List.of(), List.of(), new DecisionCheckpoint(false, null));
+            AtomicInteger reviews = new AtomicInteger();
+            AtomicInteger repairs = new AtomicInteger();
+            StoryTurnAgent reviewedAgent = new StoryTurnAgent() {
+                @Override
+                public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+                    return generated(overstepped, "initial", 100, 180);
+                }
+
+                @Override
+                public Review review(StoryPromptContext context, StoryModelRoute route,
+                                     InvocationContext invocation, StoryPatch proposed) {
+                    int attempt = reviews.getAndIncrement();
+                    var result = new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                            "{}", "review-" + attempt, "test-model", 10, 8, 5);
+                    return attempt == 0
+                            ? new Review(false, "正文擅自追问了玩家未授权的古战场", List.of(result))
+                            : new Review(true, "", List.of(result));
+                }
+
+                @Override
+                public Generated repairRejected(StoryPromptContext context, StoryModelRoute route,
+                                                InvocationContext invocation, StoryPatch proposal,
+                                                String problem) {
+                    repairs.incrementAndGet();
+                    assertTrue(problem.contains("擅自追问"));
+                    return generated(repaired, "repair", 40, 90);
+                }
+
+                private Generated generated(StoryPatch patch, String responseId, int input, int output) {
+                    return new Generated(patch, List.of(
+                            new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                                    "{}", responseId, "test-model", input, output, 20)));
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    reviewedAgent, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            var response = engine.takeTurn(USER, created.saveId(),
+                    new TurnRequest("只询问屋顶是否漏雨", "request-review-repair", 1));
+
+            assertEquals(2, reviews.get());
+            assertEquals(1, repairs.get());
+            assertEquals(repaired.narrative(), response.state().narrative());
+            assertEquals(160, jdbc.queryForObject(
+                    "select prompt_tokens from story_turn where save_id=?", Integer.class, created.saveId()));
+            assertEquals(286, jdbc.queryForObject(
+                    "select completion_tokens from story_turn where save_id=?", Integer.class, created.saveId()));
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
     void trustedTurnRejectsSecondInvalidProposalWithoutChangingSaveOrQuota() {
         EmbeddedDatabase database = database();
         try {
@@ -678,6 +826,53 @@ class PersistedLightNarrativeEngineTest {
             assertEquals(0, jdbc.queryForObject(
                     "select coalesce(sum(used_count), 0) from user_daily_quota where user_id=?",
                     Integer.class, USER.userId()));
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
+    void trustedTurnReturnsActionConflictBeforeNarrativeGenerationAndKeepsTurn() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            AtomicInteger generations = new AtomicInteger();
+            StoryTurnAgent contractRejectingAgent = new StoryTurnAgent() {
+                @Override
+                public ResolvedAction resolveAction(StoryPromptContext context, StoryModelRoute route,
+                                                    InvocationContext invocation) {
+                    StoryActionContract contract = new StoryActionContract("取回未曾交付的旧物", true,
+                            List.of(), List.of(), List.of(), "",
+                            new StoryActionContract.Conflict(true,
+                                    "断剑尖仍在你的行囊，并未交给老妇。", "可以直接检查行囊，或重新描述要做的事。"));
+                    return new ResolvedAction(contract, List.of());
+                }
+
+                @Override
+                public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+                    generations.incrementAndGet();
+                    throw new AssertionError("前提冲突时不应调用正文生成");
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    contractRejectingAgent, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            GameApiException error = assertThrows(GameApiException.class, () -> engine.takeTurn(USER,
+                    created.saveId(), new TurnRequest("取回之前交给老妇的断剑尖", "request-contract-conflict", 1)));
+
+            assertEquals("ACTION_PRECONDITION_FAILED", error.code());
+            assertEquals(0, generations.get());
+            assertFalse(error.retryable());
+            assertFalse(error.turnConsumed());
+            assertFalse(error.stateChanged());
+            assertEquals(0, saves.findOwned(USER.userId(), created.saveId()).orElseThrow().turnNumber());
+            assertEquals(0, jdbc.queryForObject("select count(*) from story_turn where save_id=?",
+                    Integer.class, created.saveId()));
         } finally {
             database.shutdown();
         }

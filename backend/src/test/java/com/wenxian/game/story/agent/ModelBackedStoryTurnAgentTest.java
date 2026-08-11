@@ -39,6 +39,8 @@ class ModelBackedStoryTurnAgentTest {
             assertTrue(request.systemPrompt().contains("objective.pendingDecision"));
             assertTrue(request.systemPrompt().contains("玩家没有在 action 中明确做出的任何后续决定"));
             assertTrue(request.systemPrompt().contains("必须在该行动完成的静止场景结束"));
+            assertTrue(request.systemPrompt().contains("最终停止位置"));
+            assertTrue(request.systemPrompt().contains("currentInventory"));
             assertTrue(request.userPrompt().contains("ability-reflection"));
             assertTrue(request.userPrompt().contains("是否接受使者提出的入门条件"));
             assertTrue(request.userPrompt().contains("施展照影诀"));
@@ -113,6 +115,213 @@ class ModelBackedStoryTurnAgentTest {
         assertEquals("石门之后", repaired.patch().title());
         assertEquals(60, repaired.inputTokens());
         assertEquals(120, repaired.outputTokens());
+    }
+
+    @Test
+    void regeneratesRepeatedNarrativeWithoutSendingPreviousOrRejectedNarrative() throws Exception {
+        StoryModelGateway gateway = request -> {
+            assertEquals(0.7, request.temperature());
+            assertTrue(request.userPrompt().contains("从 objective 的当前状态与 action 重新构思"));
+            assertTrue(request.userPrompt().contains("ability-reflection"), "重新生成仍需保留当前稳定ID");
+            assertTrue(request.userPrompt().contains("施展照影诀"));
+            assertFalse(request.userPrompt().contains("你来到石门前。"), "不应再发送上一回正文");
+            assertFalse(request.userPrompt().contains("你运转照影诀，石门后的禁制逐层显现。"),
+                    "不应再发送被拒绝的重复正文");
+            return result(VALID_PATCH, 55, 150, 240);
+        };
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch rejected = mapper.readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Generated regenerated = agent(gateway).regenerateFreshNarrative(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-fresh-regeneration", 9), rejected,
+                "本轮正文与上一回合高度重复");
+
+        assertEquals(1, regenerated.modelResults().size());
+        assertEquals(55, regenerated.inputTokens());
+        assertEquals(150, regenerated.outputTokens());
+    }
+
+    @Test
+    void repairsMalformedFreshRegenerationOnceWithoutRestartingTheWholeTurn() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> {
+            if (calls.incrementAndGet() == 1) {
+                assertEquals(0.7, request.temperature());
+                return result("{}", 52, 8, 150);
+            }
+            assertEquals(0.1, request.temperature());
+            assertTrue(request.userPrompt().contains("只修复格式和契约字段"));
+            return result(VALID_PATCH, 31, 130, 220);
+        };
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch rejected = mapper.readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Generated regenerated = agent(gateway).regenerateFreshNarrative(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-fresh-format-repair", 9), rejected,
+                "本轮正文与上一回合高度重复");
+
+        assertEquals(2, regenerated.modelResults().size());
+        assertEquals(83, regenerated.inputTokens());
+        assertEquals(138, regenerated.outputTokens());
+    }
+
+    @Test
+    void repairsMalformedSemanticRepairOnceWithoutRestartingTheWholeTurn() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> {
+            if (calls.incrementAndGet() == 1) return result("{}", 48, 7, 140);
+            assertEquals(0.1, request.temperature());
+            assertTrue(request.userPrompt().contains("只修复格式和契约字段"));
+            return result(VALID_PATCH, 29, 125, 210);
+        };
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch rejected = mapper.readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Generated repaired = agent(gateway).repairRejected(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-semantic-format-repair", 9), rejected,
+                "只有人物实体可以记录关系变化");
+
+        assertEquals(2, repaired.modelResults().size());
+        assertEquals(77, repaired.inputTokens());
+        assertEquals(132, repaired.outputTokens());
+    }
+
+    @Test
+    void independentlyReviewsActionAuthorityAndObjectiveFacts() throws Exception {
+        StoryModelGateway gateway = request -> {
+            assertEquals(0.0, request.temperature());
+            assertEquals("deepseek-v4-flash", request.model());
+            assertTrue(request.systemPrompt().contains("独立 Flash 回合审阅"));
+            assertTrue(request.systemPrompt().contains("必须逐项完成六类检查"));
+            assertTrue(request.systemPrompt().contains("把新瓦片之类对象误绑成历史石子、玉简"));
+            assertTrue(request.systemPrompt().contains("理由、意图、目标、计划、立场或承诺"));
+            assertTrue(request.userPrompt().contains("currentInventory"));
+            assertTrue(request.userPrompt().contains("proposed"));
+            assertFalse(request.userPrompt().contains("你来到石门前。"), "独立审阅不应重复发送上一回正文");
+            return result("""
+                    {"reference":{"passed":true,"problem":""},
+                     "inventory":{"passed":true,"problem":""},
+                     "authorization":{"passed":false,"problem":"正文擅自替玩家追问了古战场"},
+                     "decision":{"passed":true,"problem":""},
+                     "time":{"passed":true,"problem":""},
+                     "state":{"passed":true,"problem":""}}
+                    """, 45, 18, 120);
+        };
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch proposed = mapper.readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Review review = agent(gateway).review(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-review", 9), proposed);
+
+        assertFalse(review.accepted());
+        assertEquals("玩家授权：正文擅自替玩家追问了古战场", review.problem());
+        assertEquals(1, review.modelResults().size());
+    }
+
+    @Test
+    void rejectsNarrativeThatBindsANewMentionToTheWrongHistoricalEntity() throws Exception {
+        StoryModelGateway gateway = request -> result("""
+                {"reference":{"passed":false,"problem":"玩家提到的是新出现的青色瓦片，候选却把它写成历史玉简"},
+                 "inventory":{"passed":true,"problem":""},
+                 "authorization":{"passed":true,"problem":""},
+                 "decision":{"passed":true,"problem":""},
+                 "time":{"passed":true,"problem":""},
+                 "state":{"passed":true,"problem":""}}
+                """, 39, 15, 91);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch proposed = mapper.readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Review review = agent(gateway).review(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-review-reference", 10), proposed);
+
+        assertFalse(review.accepted());
+        assertEquals("实体引用：玩家提到的是新出现的青色瓦片，候选却把它写成历史玉简", review.problem());
+    }
+
+    @Test
+    void resolvesItemCustodyContractWithStableReferencesBeforeGeneration() {
+        StoryModelGateway gateway = request -> {
+            assertEquals(0.0, request.temperature());
+            assertEquals("deepseek-v4-flash", request.model());
+            assertTrue(request.systemPrompt().contains("行动事实解析 Agent"));
+            assertTrue(request.userPrompt().contains("ability-reflection"));
+            assertTrue(request.userPrompt().contains("施展照影诀"));
+            return result("""
+                    {"intentSummary":"施展已有能力观察石门","itemActionDetected":false,
+                     "references":[{"mention":"照影诀","resolution":"EXISTING","entityId":"ability-reflection",
+                       "entityType":"ABILITY","canonicalName":"照影诀","role":"SOURCE","expectedCustody":null}],
+                     "itemTransitions":[],"characterPreconditions":[],"stopBoundary":"观察完成后停下",
+                     "conflict":{"present":false,"reason":"","correction":""}}
+                    """, 38, 20, 90);
+        };
+
+        StoryTurnAgent.ResolvedAction resolved = agent(gateway).resolveAction(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-contract", 9));
+
+        assertFalse(resolved.contract().itemActionDetected());
+        assertEquals("ability-reflection", resolved.contract().references().getFirst().entityId());
+        assertEquals(1, resolved.modelResults().size());
+    }
+
+    @Test
+    void usesIndependentFlashReviewerEvenWhenNarrativeUsesPro() throws Exception {
+        StoryModelGateway gateway = request -> {
+            assertEquals("deepseek-v4-flash", request.model());
+            return result("""
+                    {"reference":{"passed":true,"problem":""},
+                     "inventory":{"passed":true,"problem":""},
+                     "authorization":{"passed":true,"problem":""},
+                     "decision":{"passed":true,"problem":""},
+                     "time":{"passed":true,"problem":""},
+                     "state":{"passed":true,"problem":""}}
+                    """, 40, 10, 90);
+        };
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch proposed = mapper.readValue(VALID_PATCH, StoryPatch.class);
+        StoryModelRoute proRoute = new StoryModelRoute("https://example.invalid", "test-secret-key", "DEEPSEEK",
+                "OPENAI_COMPATIBLE", "deepseek-v4-pro", "PUBLIC");
+
+        StoryTurnAgent.Review review = agent(gateway).review(context(), proRoute,
+                new StoryTurnAgent.InvocationContext("save-review-pro", 10), proposed);
+
+        assertTrue(review.accepted());
+    }
+
+    @Test
+    void rejectsNarrativeThatInventsAnUnstatedPlayerDecision() throws Exception {
+        StoryModelGateway gateway = request -> result("""
+                {"reference":{"passed":true,"problem":""},
+                 "inventory":{"passed":true,"problem":""},
+                 "authorization":{"passed":true,"problem":""},
+                 "decision":{"passed":false,"problem":"玩家只要求说明缘由并取回物品，正文却补成已经决定前往古战场"},
+                 "time":{"passed":true,"problem":""},
+                 "state":{"passed":true,"problem":""}}
+                """, 42, 16, 95);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch proposed = mapper.readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Review review = agent(gateway).review(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-review-decision", 10), proposed);
+
+        assertFalse(review.accepted());
+        assertEquals("玩家决定：玩家只要求说明缘由并取回物品，正文却补成已经决定前往古战场", review.problem());
+    }
+
+    @Test
+    void rejectsIncompleteReviewContractInsteadOfSilentlyAccepting() throws Exception {
+        StoryModelGateway gateway = request -> result("""
+                {"reference":{"passed":true,"problem":""},
+                 "inventory":{"passed":true,"problem":""},
+                 "authorization":{"passed":true,"problem":""}}
+                """, 20, 8, 60);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch proposed = mapper.readValue(VALID_PATCH, StoryPatch.class);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> agent(gateway).review(context(), route(),
+                        new StoryTurnAgent.InvocationContext("save-review-incomplete", 11), proposed));
+
+        assertTrue(error.getMessage().contains("缺少“玩家决定”检查结果"));
     }
 
     @Test
