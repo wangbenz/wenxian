@@ -11,9 +11,12 @@ import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.TimePassage;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
+import com.wenxian.game.story.domain.StoryProjection.CoreState;
+import com.wenxian.game.story.domain.StoryProjection.EntityState;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -67,11 +70,47 @@ class StoryActionContractPatchValidatorTest {
         assertThrows(IllegalArgumentException.class, () -> validator.validate(contract, candidate));
     }
 
+    @Test
+    void acceptsPartialConsumptionWhenQuantityDropsAndRemainingStackStaysWithPlayer() {
+        StoryActionContract contract = partialContract();
+        StoryPatch candidate = patch(new EntityPatch(EntityOperation.UPDATE, "item-pill", "ITEM",
+                null, "余下两颗", null, null, new QuantityValue(true, 2), true,
+                new CustodyValue(HolderType.PLAYER, null), null, null));
+
+        assertDoesNotThrow(() -> validator.validate(projectionWithPills(), contract, candidate));
+    }
+
+    @Test
+    void rejectsPartialConsumptionWhenCandidateDoesNotDeductQuantity() {
+        StoryActionContract contract = partialContract();
+        StoryPatch candidate = patch(new EntityPatch(EntityOperation.UPDATE, "item-pill", "ITEM",
+                null, "仍有三颗", null, null, new QuantityValue(true, 3), true,
+                new CustodyValue(HolderType.PLAYER, null), null, null));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(projectionWithPills(), contract, candidate));
+    }
+
     private StoryActionContract contract() {
         return new StoryActionContract("赠送断剑尖", true, List.of(),
                 List.of(new ItemTransition("item-sword-tip", new CustodyValue(HolderType.PLAYER, null),
                         new CustodyValue(HolderType.CHARACTER, "character-old-woman"), 1)),
                 List.of(), "交付后停下", new Conflict(false, "", ""));
+    }
+
+    private StoryActionContract partialContract() {
+        CustodyValue player = new CustodyValue(HolderType.PLAYER, null);
+        return new StoryActionContract("服用一颗丹药", true, List.of(),
+                List.of(new ItemTransition("item-pill", player, player, 1)),
+                List.of(), "服用后停下", new Conflict(false, "", ""));
+    }
+
+    private StoryProjection projectionWithPills() {
+        CustodyValue player = new CustodyValue(HolderType.PLAYER, null);
+        EntityState item = new EntityState("item-pill", "ITEM", "莹白丹药", "完好", "瓷瓶内三颗",
+                null, true, new QuantityValue(true, 3), true, player, null, null);
+        return new StoryProjection(0, new CoreState("石室", "平静", "凡俗", "问仙"),
+                Map.of(item.id(), item), Map.of(), Map.of(), List.of());
     }
 
     private StoryPatch patch(EntityPatch entity) {

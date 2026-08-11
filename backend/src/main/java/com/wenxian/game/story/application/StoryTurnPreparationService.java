@@ -12,6 +12,7 @@ import com.wenxian.game.story.agent.StoryPromptContext.PendingDecision;
 import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryActionContractValidator;
+import com.wenxian.game.story.domain.StoryActionContractCanonicalizer;
 import com.wenxian.game.story.domain.StoryActionContractPatchValidator;
 import com.wenxian.game.story.domain.ExplicitDurationParser;
 import com.wenxian.game.story.domain.StoryNarrativeFreshnessValidator;
@@ -54,6 +55,7 @@ public class StoryTurnPreparationService {
     private final StoryTurnAgent agent;
     private final StoryStateReducer reducer;
     private final StoryActionContractValidator actionContracts = new StoryActionContractValidator();
+    private final StoryActionContractCanonicalizer contractCanonicalizer = new StoryActionContractCanonicalizer();
     private final StoryActionContractPatchValidator contractPatches = new StoryActionContractPatchValidator();
     private final StoryNarrativeFreshnessValidator narrativeFreshness = new StoryNarrativeFreshnessValidator();
 
@@ -93,8 +95,9 @@ public class StoryTurnPreparationService {
         StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
                 saved.id(), saved.turnNumber() + 1);
         StoryTurnAgent.ResolvedAction resolvedAction = agent.resolveAction(context, route, invocation);
-        actionContracts.validate(before, resolvedAction.contract());
-        context = context.withActionContract(resolvedAction.contract());
+        var actionContract = contractCanonicalizer.canonicalize(before, resolvedAction.contract());
+        actionContracts.validate(before, actionContract);
+        context = context.withActionContract(actionContract);
         StoryTurnAgent.Generated generation = agent.generate(context, route, invocation);
         generation = prependModelResults(resolvedAction.modelResults(), generation);
         StoryStateReducer.Applied applied;
@@ -103,7 +106,7 @@ public class StoryTurnPreparationService {
             StoryTurnAgent.Review review = agent.review(context, route, invocation, generation.patch());
             generation = appendReview(generation, review);
             rejectReview(review);
-            contractPatches.validate(resolvedAction.contract(), generation.patch());
+            contractPatches.validate(before, actionContract, generation.patch());
             applied = reducer.reduce(before, generation.patch(), explicitDurationMinutes);
         } catch (IllegalArgumentException rejected) {
             StoryTurnAgent.Generated repaired = rejected instanceof StoryNarrativeFreshnessException
@@ -117,7 +120,7 @@ public class StoryTurnPreparationService {
                 StoryTurnAgent.Review review = agent.review(context, route, invocation, repaired.patch());
                 generation = appendReview(generation, review);
                 rejectReview(review);
-                contractPatches.validate(resolvedAction.contract(), repaired.patch());
+                contractPatches.validate(before, actionContract, repaired.patch());
                 applied = reducer.reduce(before, repaired.patch(), explicitDurationMinutes);
             } catch (IllegalArgumentException failedAgain) {
                 failedAgain.addSuppressed(rejected);

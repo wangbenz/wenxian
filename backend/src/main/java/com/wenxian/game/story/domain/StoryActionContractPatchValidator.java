@@ -5,6 +5,8 @@ import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
 import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
 import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
 import com.wenxian.game.story.domain.StoryPatch.HolderType;
+import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
+import com.wenxian.game.story.domain.StoryProjection.EntityState;
 
 import java.util.Objects;
 
@@ -17,8 +19,15 @@ import java.util.Objects;
 public final class StoryActionContractPatchValidator {
 
     public void validate(StoryActionContract contract, StoryPatch patch) {
+        validate(null, contract, patch);
+    }
+
+    /**
+     * 同时依据提交前投影检查数量型物品的实际扣减，避免“保管者正确但数量没有变化”的空操作通过。
+     */
+    public void validate(StoryProjection before, StoryActionContract contract, StoryPatch patch) {
         if (contract == null || patch == null) throw new IllegalArgumentException("行动契约校验缺少候选提案");
-        for (ItemTransition transition : contract.itemTransitions()) validateTransition(transition, patch);
+        for (ItemTransition transition : contract.itemTransitions()) validateTransition(before, transition, patch);
         contract.references().stream()
                 .filter(value -> value != null && value.resolution() == ReferenceResolution.NEW)
                 .filter(value -> "ITEM".equalsIgnoreCase(value.entityType()) && value.expectedCustody() != null)
@@ -41,7 +50,7 @@ public final class StoryActionContractPatchValidator {
         }
     }
 
-    private void validateTransition(ItemTransition transition, StoryPatch patch) {
+    private void validateTransition(StoryProjection before, ItemTransition transition, StoryPatch patch) {
         EntityPatch entityPatch = patch.entities().stream()
                 .filter(value -> value != null && transition.itemId().equals(value.entityId()))
                 .findFirst()
@@ -52,6 +61,21 @@ public final class StoryActionContractPatchValidator {
         if (actual == null || expected == null || !same(actual, expected)) {
             throw new IllegalArgumentException("物品状态补丁没有落实行动契约中的目标保管者："
                     + transition.itemId());
+        }
+        validatePartialQuantity(before, transition, entityPatch);
+    }
+
+    private void validatePartialQuantity(StoryProjection before, ItemTransition transition, EntityPatch patch) {
+        if (before == null || transition.quantity() == null) return;
+        EntityState item = before.entities().get(transition.itemId());
+        if (item == null || item.quantity() == null || !item.quantity().known()
+                || item.quantity().value() == null || transition.quantity() >= item.quantity().value()) {
+            return;
+        }
+        QuantityValue actual = patch.quantity();
+        int expected = item.quantity().value() - transition.quantity();
+        if (actual == null || !actual.known() || actual.value() == null || actual.value() != expected) {
+            throw new IllegalArgumentException("物品状态补丁没有落实本轮处置数量：" + transition.itemId());
         }
     }
 
