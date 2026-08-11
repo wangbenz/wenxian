@@ -16,6 +16,7 @@ public final class StoryPersistenceModels {
             String id,
             String userId,
             int slotNo,
+            int activeSlotNo,
             String status,
             String worldCode,
             String engineCode,
@@ -37,6 +38,7 @@ public final class StoryPersistenceModels {
             String id,
             String userId,
             int slotNo,
+            int activeSlotNo,
             String status,
             String worldCode,
             String engineCode,
@@ -52,7 +54,10 @@ public final class StoryPersistenceModels {
             String createdRelease,
             String lastPlayedRelease,
             Instant createdAt,
-            Instant updatedAt
+            Instant updatedAt,
+            Instant deletedAt,
+            String deletedBy,
+            String deleteReason
     ) {}
 
     /** 成功提交后追加到回合事实表的不可变记录。 */

@@ -196,9 +196,22 @@ test("keeps restart safe and exposes the account key before entering the world",
   assert.equal(api.includes("/restart`"), true);
   assert.equal(prototype.includes("await gameApi.deleteSave(game.saveId)"), false);
   assert.equal(prototype.includes("GenerationAccessCard"), true);
-  assert.equal(prototype.includes('["saves", "create", "fate", "talent"]'), true);
+  assert.equal(prototype.includes('["create", "fate", "talent"]'), true);
   assert.equal(prototype.includes("接入自己的推演密钥"), true);
   assert.equal(prototype.includes("返回原来的命卷"), true);
+});
+
+test("shows four reusable save slots and hides legacy archive navigation", async () => {
+  const prototype = await readFile(new URL("../src/Prototype.tsx", import.meta.url), "utf8");
+  const api = await readFile(new URL("../src/game-api.ts", import.meta.url), "utf8");
+
+  assert.equal(prototype.includes("Array.from({ length: maxActiveSaves }"), true);
+  assert.equal(prototype.includes("确认删除"), true);
+  assert.equal(prototype.includes("命卷已删除，空出的命卷位可以重新使用"), true);
+  assert.equal(prototype.includes("return <LegacyPrototype v014 />"), true);
+  assert.equal(api.includes("storyDeleteSave"), true);
+  assert.equal(api.includes("storyArchive"), false);
+  assert.equal(prototype.includes("冲突项依次补到空位"), true);
 });
 
 test("requires a preview and explicit confirmation before correcting story facts", async () => {

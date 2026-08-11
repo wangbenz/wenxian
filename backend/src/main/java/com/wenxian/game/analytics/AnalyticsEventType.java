@@ -11,5 +11,6 @@ public enum AnalyticsEventType {
     TURN_SUCCEEDED,
     CORRECTION_APPLIED,
     ENTITY_REMOVED,
-    SAVE_ARCHIVED
+    SAVE_ARCHIVED,
+    SAVE_DELETED
 }

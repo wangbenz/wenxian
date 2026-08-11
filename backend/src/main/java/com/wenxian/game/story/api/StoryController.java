@@ -116,10 +116,10 @@ public class StoryController {
     }
 
     @DeleteMapping("/saves/{saveId}")
-    public void archive(
+    public void deleteSave(
             @CookieValue(name = AuthService.COOKIE_NAME, required = false) String token,
             @PathVariable @Pattern(regexp = SAVE_ID) String saveId) {
-        stories.archive(user(token), saveId);
+        stories.deleteSave(user(token), saveId);
     }
 
     @DeleteMapping("/saves/{saveId}/entities/{entityId}")

@@ -130,7 +130,7 @@ class StoryCorrectionCommitServiceTest {
                 GameVersionService.CONFIG_KEY, "V0.15", now);
 
         StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
-        saves.insert(new NewSave("story-save-1", "user-1", 1, "ACTIVE", "XUANXU",
+        saves.insert(new NewSave("story-save-1", "user-1", 1, 1, "ACTIVE", "XUANXU",
                 "LIGHT_NARRATIVE", 1, 1, "NATIVE", "V0.14", null, null,
                 baseState(), 7, "V0.14", "V0.14", NOW));
         new StoryEntityRepository(jdbc, mapper).insert(new Entity("item-token", "story-save-1", "ITEM",

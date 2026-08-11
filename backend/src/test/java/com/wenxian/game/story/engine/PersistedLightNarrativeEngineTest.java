@@ -86,7 +86,7 @@ class PersistedLightNarrativeEngineTest {
             StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
             StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
             StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
-            saves.insert(new NewSave("story-v014-test", USER.userId(), 1, "ACTIVE", "XUANXU",
+            saves.insert(new NewSave("story-v014-test", USER.userId(), 1, 1, "ACTIVE", "XUANXU",
                     "LIGHT_NARRATIVE", 1, 1, "MIGRATED_V014", "V0.14", "v014-save-test", null,
                     core(), 3, "V0.14", "V0.14", Instant.now()));
             ObjectNode attributes = mapper.createObjectNode();
@@ -171,10 +171,9 @@ class PersistedLightNarrativeEngineTest {
             assertEquals(3, corrected.revision());
             assertEquals("青岐山门", corrected.state().currentLocation());
 
-            engine.archive(USER, "story-v014-test");
-            var archived = engine.get(USER, "story-v014-test");
-            assertEquals("ARCHIVE", archived.mode());
-            assertEquals(List.of("READ"), archived.capabilities());
+            engine.deleteSave(USER, "story-v014-test");
+            assertTrue(engine.list(USER).isEmpty());
+            assertThrows(GameApiException.class, () -> engine.get(USER, "story-v014-test"));
         } finally {
             database.shutdown();
         }
@@ -198,21 +197,16 @@ class PersistedLightNarrativeEngineTest {
     }
 
     @Test
-    void createsInUnifiedTablesAndArchivedHistoryDoesNotConsumeActiveLimit() {
+    void createsFourFixedSlotsAndReusesADeletedSlot() {
         EmbeddedDatabase database = database();
         try {
             JdbcTemplate jdbc = new JdbcTemplate(database);
             StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
             StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
             StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
-            saves.insert(new NewSave("story-existing-active", USER.userId(), 1, "ACTIVE", "XUANXU",
+            saves.insert(new NewSave("story-existing-active", USER.userId(), 1, 1, "ACTIVE", "XUANXU",
                     "LIGHT_NARRATIVE", 1, 1, "NATIVE", "V0.14", null, null,
                     core(), 3, "V0.14", "V0.14", Instant.now()));
-            for (int slot = 2; slot <= 14; slot++) {
-                saves.insert(new NewSave("story-archive-" + slot, USER.userId(), slot, "ARCHIVED", "XUANXU",
-                        "LIGHT_NARRATIVE", 1, 1, "NATIVE", "V0.14", null, null,
-                        core(), slot, "V0.14", "V0.14", Instant.now()));
-            }
             PersistedLightNarrativeEngine engine = engine(database, saves, entities, memories);
             CreateSaveRequest request = new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
                     "宗门弟子", "你在山门晨钟中醒来。", "自由探索");
@@ -220,7 +214,8 @@ class PersistedLightNarrativeEngineTest {
             var created = engine.create(USER, request);
 
             assertTrue(created.saveId().startsWith("story-"));
-            assertEquals(15, saves.findOwned(USER.userId(), created.saveId()).orElseThrow().slotNo());
+            assertEquals(2, saves.findOwned(USER.userId(), created.saveId()).orElseThrow().slotNo());
+            assertEquals(2, saves.findOwned(USER.userId(), created.saveId()).orElseThrow().activeSlotNo());
             assertEquals(2, saves.countActive(USER.userId()));
             assertEquals("楚星河", created.state().protagonist().name());
             assertEquals("你在山门晨钟中醒来。", jdbc.queryForObject(
@@ -229,8 +224,18 @@ class PersistedLightNarrativeEngineTest {
             assertEquals(0, jdbc.queryForObject(
                     "select summarized_through_turn from story_conversation where save_id=?", Integer.class,
                     created.saveId()));
+            engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星月", "人族", "女",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+            engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星岚", "人族", "女",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
             GameApiException error = assertThrows(GameApiException.class, () -> engine.create(USER, request));
             assertEquals("ACTIVE_SAVE_LIMIT_REACHED", error.code());
+
+            engine.deleteSave(USER, created.saveId());
+            var reused = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星霜", "人族", "女",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+            assertEquals(2, saves.findOwned(USER.userId(), reused.saveId()).orElseThrow().activeSlotNo());
+            assertEquals(4, engine.list(USER).size());
         } finally {
             database.shutdown();
         }
@@ -1132,7 +1137,7 @@ class PersistedLightNarrativeEngineTest {
         jdbc.update("insert into app_user(id,email,status,registered_at,last_login_at) values (?,?,?,?,?)",
                 USER.userId(), USER.email(), "ACTIVE", now, now);
         jdbc.update("insert into gameplay_config(config_key,config_value,updated_at) values (?,?,?)",
-                ActiveSavePolicyService.CONFIG_KEY, "2", now);
+                ActiveSavePolicyService.CONFIG_KEY, "4", now);
         return database;
     }
 

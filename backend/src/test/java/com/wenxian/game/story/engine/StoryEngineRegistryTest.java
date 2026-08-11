@@ -82,7 +82,7 @@ class StoryEngineRegistryTest {
         @Override public SaveResponse get(UserIdentity user, String saveId) { throw unsupported(); }
         @Override public SaveResponse takeTurn(UserIdentity user, String saveId, TurnRequest request) { throw unsupported(); }
         @Override public SaveResponse correct(UserIdentity user, String saveId, CorrectionRequest request) { throw unsupported(); }
-        @Override public void archive(UserIdentity user, String saveId) { throw unsupported(); }
+        @Override public void deleteSave(UserIdentity user, String saveId) { throw unsupported(); }
         @Override public SaveResponse removeEntity(UserIdentity user, String saveId, String entityId, long expectedRevision) { throw unsupported(); }
 
         private UnsupportedOperationException unsupported() {

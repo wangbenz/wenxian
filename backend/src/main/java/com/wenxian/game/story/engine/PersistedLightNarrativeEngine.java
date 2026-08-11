@@ -223,10 +223,11 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         if (saves.countActive(user.userId()) >= maximum) {
             throw GameApiException.of(HttpStatus.CONFLICT, "ACTIVE_SAVE_LIMIT_REACHED", "STATE",
                     "当前账号的存活命卷已经达到上限",
-                    "请先继续现有命卷，或将不再游玩的角色封存为只读档案。",
-                    List.of("返回我的命卷", "封存一名现有角色"));
+                    "请先继续现有命卷，或删除一份不再游玩的命卷。",
+                    List.of("返回我的命卷", "删除一份现有命卷"));
         }
         int slotNo = saves.nextSlotNo(user.userId());
+        int activeSlotNo = saves.nextActiveSlotNo(user.userId(), maximum);
         String saveId = SAVE_PREFIX + UUID.randomUUID();
         V014State.WorldProfile world = worlds.resolve(request.worldCode(), request.customWorld());
         String preference = text(request.storyPreference(), "自由探索，机缘与风险并存");
@@ -245,7 +246,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         String release = releases.current();
         Instant now = Instant.now();
         saves.insert(new com.wenxian.game.story.persistence.StoryPersistenceModels.NewSave(
-                saveId, user.userId(), slotNo, "ACTIVE", world.code(), ENGINE_CODE, ENGINE_VERSION,
+                saveId, user.userId(), slotNo, activeSlotNo, "ACTIVE", world.code(), ENGINE_CODE, ENGINE_VERSION,
                 STATE_SCHEMA_VERSION, "NATIVE", release, null, null, coreState(state), 0,
                 release, release, now));
         appendNewMemories(saveId, state);
@@ -261,7 +262,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                 .filter(this::belongsToThisEngine)
                 .map(saved -> {
                     V014State state = readState(saved);
-                    return new SaveSummary(saved.id(), saved.slotNo(), mode(saved.status()), ENGINE_CODE,
+                    return new SaveSummary(saved.id(), saved.activeSlotNo(), mode(saved.status()), ENGINE_CODE,
                             saved.engineVersion(), saved.stateSchemaVersion(), saved.revision(), saved.turnNumber(),
                             capabilities(saved.status()), state.world().name(), state.protagonist().name(),
                             state.protagonist().race(), state.protagonist().realm(), saved.status(), saved.updatedAt());
@@ -336,11 +337,12 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
             playerAi.recordSuccessfulInvocation(user.userId(), quotaRoute);
             return next;
         });
-        StoredSave updated = new StoredSave(saved.id(), saved.userId(), saved.slotNo(), saved.status(),
+        StoredSave updated = new StoredSave(saved.id(), saved.userId(), saved.slotNo(), saved.activeSlotNo(), saved.status(),
                 applied.state().world().code(), saved.engineCode(), saved.engineVersion(), STATE_SCHEMA_VERSION,
                 saved.sourceType(), saved.sourceEdition(), saved.sourceSaveId(), saved.parentSaveId(),
                 coreState(applied.state()), revision == null ? saved.revision() + 1 : revision,
-                applied.state().turnNumber(), saved.createdRelease(), releases.current(), saved.createdAt(), Instant.now());
+                applied.state().turnNumber(), saved.createdRelease(), releases.current(), saved.createdAt(), Instant.now(),
+                saved.deletedAt(), saved.deletedBy(), saved.deleteReason());
         return response(user.userId(), updated, applied.state(), route);
     }
 
@@ -414,14 +416,15 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
     }
 
     @Override
-    public void archive(UserIdentity user, String saveId) {
+    public void deleteSave(UserIdentity user, String saveId) {
         synchronized (accountLock(user.userId())) {
             requireOwned(user, saveId);
             try {
-                saves.archive(user.userId(), saveId);
+                saves.logicalDelete(user.userId(), saveId);
             } catch (OptimisticLockingFailureException error) {
                 throw GameApiException.of(HttpStatus.CONFLICT, "SAVE_NOT_ACTIVE", "STATE",
-                        "这份命卷已经封存", "封存记录只能阅读，不能重复封存。", List.of("返回我的命卷"));
+                        "这份命卷已经不在当前列表", "它可能已经被删除，或刚刚在其他页面发生了变化。",
+                        List.of("刷新我的命卷"));
             }
         }
     }
@@ -710,19 +713,20 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
     }
 
     private StoredSave withRevision(StoredSave saved, long revision, JsonNode state, int turnNumber) {
-        return new StoredSave(saved.id(), saved.userId(), saved.slotNo(), saved.status(), saved.worldCode(),
+        return new StoredSave(saved.id(), saved.userId(), saved.slotNo(), saved.activeSlotNo(), saved.status(), saved.worldCode(),
                 saved.engineCode(), saved.engineVersion(), saved.stateSchemaVersion(), saved.sourceType(),
                 saved.sourceEdition(), saved.sourceSaveId(), saved.parentSaveId(), state, revision, turnNumber,
-                saved.createdRelease(), releases.current(), saved.createdAt(), Instant.now());
+                saved.createdRelease(), releases.current(), saved.createdAt(), Instant.now(),
+                saved.deletedAt(), saved.deletedBy(), saved.deleteReason());
     }
 
     private String mode(String status) {
-        return "ACTIVE".equals(status) ? "PLAYABLE" : "ARCHIVE";
+        return "ACTIVE".equals(status) ? "PLAYABLE" : "ENDED";
     }
 
     private List<String> capabilities(String status) {
         if (!"ACTIVE".equals(status)) return List.of("READ");
-        return List.of("READ", "PLAY", "ARCHIVE", "CORRECT", "REMOVE_ENTITY");
+        return List.of("READ", "PLAY", "DELETE", "CORRECT", "REMOVE_ENTITY");
     }
 
     private void assertCreationEnabled() {

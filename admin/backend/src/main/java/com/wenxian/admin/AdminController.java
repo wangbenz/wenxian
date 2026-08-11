@@ -275,7 +275,7 @@ public class AdminController {
     public Map<String, Object> updateGameplayConfig(@RequestBody Map<String, Object> body) {
         return adminService.updateGameplayConfig(parseInt(body.get("accountPublicTurnLimit"), 20),
                 Boolean.TRUE.equals(body.get("customApiEnabled")), string(body.get("limitMessage")),
-                parseInt(body.get("maxActiveSaves"), 2));
+                parseInt(body.get("maxActiveSaves"), 4));
     }
 
     @GetMapping("/registration-config")

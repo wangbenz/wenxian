@@ -565,7 +565,7 @@ function Limits() {
   const [limit, setLimit] = useState(20);
   const [limitMessage, setLimitMessage] = useState("");
   const [customEnabled, setCustomEnabled] = useState(true);
-  const [maxActiveSaves, setMaxActiveSaves] = useState(2);
+  const [maxActiveSaves, setMaxActiveSaves] = useState(4);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   useEffect(() => {
@@ -590,8 +590,8 @@ function Limits() {
     ["今日自备回合", num(query.data.todayCustomTurns), "玩家密钥承担"],
     ["自备密钥玩家", num(query.data.customApiUsers), "当前有效"],
     ["异常密钥", num(query.data.invalidCredentialUsers), "需玩家重新设置"],
-    ["双命卷账号", num(query.data.usersWithMultipleSaves), `当前共 ${num(query.data.activeSaveCount)} 份存活命卷`],
-  ].map(([label, value, note]) => <article className="metric" key={label}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>)}</div><Panel title="账号回合与命卷规则"><div className="config-form"><label>每个账号赠送回合<input max="1000" min="1" type="number" value={limit} onChange={(event) => setLimit(Number(event.currentTarget.value))} /></label><label>同账号最大存活角色<select value={maxActiveSaves} onChange={(event) => setMaxActiveSaves(Number(event.currentTarget.value))}><option value={1}>1 个</option><option value={2}>2 个</option></select></label><label>回合耗尽时的提示<textarea maxLength={220} rows={4} value={limitMessage} onChange={(event) => setLimitMessage(event.currentTarget.value)} /></label><label className="check"><input checked={customEnabled} type="checkbox" onChange={(event) => setCustomEnabled(event.currentTarget.checked)} />允许玩家接入自己的推演密钥</label><p>可用供应商与模型请在“生成模型”页面维护。调低角色上限前，系统会检查现有账号；存在超限账号时会拒绝保存，不会自动删除玩家数据。</p>{message && <p className="notice">{message}</p>}<button className="primary" disabled={busy || limit < 1 || limit > 1000 || !limitMessage.trim()} onClick={() => void save()}>{busy ? "正在保存…" : "保存账号规则"}</button></div></Panel></>}</State>;
+    ["多命卷账号", num(query.data.usersWithMultipleSaves), `当前共 ${num(query.data.activeSaveCount)} 份可用命卷`],
+  ].map(([label, value, note]) => <article className="metric" key={label}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>)}</div><Panel title="账号回合与命卷规则"><div className="config-form"><label>每个账号赠送回合<input max="1000" min="1" type="number" value={limit} onChange={(event) => setLimit(Number(event.currentTarget.value))} /></label><label>同账号最大可用命卷<select value={maxActiveSaves} onChange={(event) => setMaxActiveSaves(Number(event.currentTarget.value))}><option value={1}>1 个</option><option value={2}>2 个</option><option value={3}>3 个</option><option value={4}>4 个</option></select></label><label>回合耗尽时的提示<textarea maxLength={220} rows={4} value={limitMessage} onChange={(event) => setLimitMessage(event.currentTarget.value)} /></label><label className="check"><input checked={customEnabled} type="checkbox" onChange={(event) => setCustomEnabled(event.currentTarget.checked)} />允许玩家接入自己的推演密钥</label><p>可用供应商与模型请在“生成模型”页面维护。调低命卷上限前，系统会检查现有账号；存在超限账号时会拒绝保存，不会自动删除玩家数据。</p>{message && <p className="notice">{message}</p>}<button className="primary" disabled={busy || limit < 1 || limit > 1000 || !limitMessage.trim()} onClick={() => void save()}>{busy ? "正在保存…" : "保存账号规则"}</button></div></Panel></>}</State>;
 }
 
 function AccessControlPage() {

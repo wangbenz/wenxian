@@ -88,7 +88,7 @@ public class AdminService {
         ensureGameplayConfig("account_public_turn_limit", "20");
         ensureGameplayConfig("account_public_turn_limit_message", "本账号获赠的推演回合已经用完。你可以前往「世界」接入自己的推演密钥继续游玩。");
         ensureGameplayConfig("custom_api_enabled", "true");
-        ensureGameplayConfig("max_active_saves", "2");
+        ensureGameplayConfig("max_active_saves", "4");
         ensureGameplayConfig("current_game_version", "V0.14");
         ensureGameplayConfig("game_access_mode", "OPEN");
         ensureGameplayConfig("game_access_notice_title", "命卷暂时封存");
@@ -738,13 +738,18 @@ public class AdminService {
         result.put("limitMessage", configValue("account_public_turn_limit_message",
                 "本账号获赠的推演回合已经用完。你可以前往「世界」接入自己的推演密钥继续游玩。"));
         result.put("customApiEnabled", customEnabled);
-        int maxActiveSaves = Math.max(1, Math.min(2,
-                parsePositiveInt(configValue("max_active_saves", "2"), 2)));
+        int maxActiveSaves = Math.max(1, Math.min(4,
+                parsePositiveInt(configValue("max_active_saves", "4"), 4)));
         result.put("maxActiveSaves", maxActiveSaves);
-        result.put("activeSaveCount", count("SELECT count(*) FROM game_save"));
+        result.put("activeSaveCount", count("""
+                SELECT count(*) FROM story_save
+                WHERE deleted_at IS NULL AND active_slot_no IS NOT NULL
+                """));
         result.put("usersWithMultipleSaves", count("""
                 SELECT count(*) FROM (
-                    SELECT user_id FROM game_save GROUP BY user_id HAVING count(*) > 1
+                    SELECT user_id FROM story_save
+                    WHERE deleted_at IS NULL AND active_slot_no IS NOT NULL
+                    GROUP BY user_id HAVING count(*) > 1
                 ) multi_save_users
                 """));
         result.put("customApiUsers", count("SELECT count(*) FROM user_ai_credential WHERE status = 'ACTIVE'"));
@@ -766,14 +771,16 @@ public class AdminService {
         if (accountPublicTurnLimit < 1 || accountPublicTurnLimit > 1000) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "账号赠送回合需在 1-1000 之间");
         }
-        if (maxActiveSaves < 1 || maxActiveSaves > 2) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "同账号存活角色上限只能设置为 1 或 2");
+        if (maxActiveSaves < 1 || maxActiveSaves > 4) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "同账号命卷上限只能设置为 1 至 4");
         }
         jdbc.queryForObject("select config_value from gameplay_config where config_key='max_active_saves' for update",
                 String.class);
         int overLimitUsers = count("""
                 SELECT count(*) FROM (
-                    SELECT user_id FROM game_save GROUP BY user_id HAVING count(*) > ?
+                    SELECT user_id FROM story_save
+                    WHERE deleted_at IS NULL AND active_slot_no IS NOT NULL
+                    GROUP BY user_id HAVING count(*) > ?
                 ) over_limit_users
                 """, maxActiveSaves);
         if (overLimitUsers > 0) {

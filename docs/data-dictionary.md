@@ -1,7 +1,7 @@
 # 《问仙录》中文数据字典
 
-> 状态：V0.14 命卷已全量迁入通用表，`story_*` 是当前权威读写结构；V0.13/V0.14 原表保留为只读历史档案
-> 最近更新：2026-08-09
+> 状态：当前命卷统一读写 `story_*`；旧产品表仅用于内部审计，不再向 H5 提供旧版档案入口
+> 最近更新：2026-08-11
 
 本文档记录表职责、关键字段、权威数据和迁移关系。每次修改表结构或关键字段时必须同步更新本文档。所有正式 MySQL 迁移脚本都必须使用中文 `COMMENT` 说明表、关键字段和重要索引用途。
 
@@ -23,16 +23,17 @@
 - `revision` 是乐观锁版本号，任何可写命卷更新都必须核对；
 - `request_id` 是客户端幂等请求号，同一行动网络重试时必须复用；
 - 删除玩家当前视图中的物品、人物或能力采用软隐藏，历史回合不删除；
-- 存活上限只统计 `story_save.status='ACTIVE'`；封存档案不占上限，`slot_no` 只增不复用；
+- 账号最多保留四份未删除命卷；`active_slot_no` 是可复用的玩家槽位，`slot_no` 是只增审计序号；
+- 玩家删除通过 `deleted_at` 逻辑删除，删除记录不再进入 H5、回合推进和当前命卷统计；
 - JSON 字段必须有结构版本，不能依赖产品发布版本推断结构；
 - 产品版本只用于发布和统计，不能决定物理表；
 - 玩家 API 不返回平台密钥、平台模型、内部异常和数据库结构。
 - 统计表不保存邮箱、密钥、完整 Prompt 或剧情正文，用户和命卷只保留稳定 ID；
 - 统计分日与留存统一使用 Asia/Shanghai，`data_origin` 区分 `REALTIME/BACKFILL`。
 
-### 2.1 V0.15 语义设计基线（尚未变更物理表）
+### 2.1 V0.15 可信事实语义基线
 
-V0.15 先确定以下语义，不代表数据库已经新增字段：
+命卷槽位与逻辑删除已经通过 `story_save` 中性字段落地；下表描述的可信事实语义仍优先复用现有 JSON、实体和审计结构，不代表每项语义都需要新增物理字段：
 
 | 语义 | 当前候选承载位置 | 编码前必须确认的问题 |
 |---|---|---|
@@ -51,7 +52,7 @@ V0.15 先确定以下语义，不代表数据库已经新增字段：
 ### `analytics_event`
 
 不可变的产品行为事实表。当前事件包括 `USER_REGISTERED`、`SAVE_CREATED`、`TURN_SUCCEEDED`、
-`CORRECTION_APPLIED`、`ENTITY_REMOVED` 和 `SAVE_ARCHIVED`。`event_key` 保证同一业务结果不会因网络重试重复统计；
+`CORRECTION_APPLIED`、`ENTITY_REMOVED`、`SAVE_DELETED`，以及仅供历史兼容的 `SAVE_ARCHIVED`。`event_key` 保证同一业务结果不会因网络重试重复统计；
 `release_version`、`engine_code` 和 `data_origin` 仅作为分析维度。该表不与版本业务表建立外键。
 
 ### `analytics_user_day`
@@ -96,12 +97,10 @@ V0.15 先确定以下语义，不代表数据库已经新增字段：
 | `current_release_version` | 当前产品发布版本 |
 | `default_story_engine` | 新命卷默认故事引擎 |
 | `default_story_engine_version` | 新命卷默认引擎版本 |
-| `max_active_saves` | 每账号最大存活命卷数 |
+| `max_active_saves` | 每账号当前命卷槽位上限，范围 1—4，默认 4 |
 | `account_public_turn_limit` | 平台赠送回合上限 |
 | `account_public_turn_limit_message` | 赠送回合耗尽提示 |
 | `registration_contact_text` | 玩家反馈与社群入口 |
-| `legacy_archive_enabled` | 是否展示旧世档案 |
-| `legacy_fork_enabled` | 是否允许承接旧世 |
 | `story_migration_prepare_enabled` | 是否允许迁移器写入隔离候选，默认关闭 |
 | `story_migration_activation_enabled` | 是否允许逐份激活候选，默认关闭 |
 | `story_migration_batch_limit` | 单次预演或准备的最大命卷数，范围 1—50 |
@@ -132,8 +131,9 @@ V0.15 先确定以下语义，不代表数据库已经新增字段：
 |---|---|---|
 | `id` | 统一命卷 ID | 主键 |
 | `user_id` | 所属玩家账号 ID | 外键到 `app_user` |
-| `slot_no` | 当前账号下的展示槽位 | 只由命卷生命周期服务分配 |
-| `status` | 命卷生命周期状态 | `ACTIVE/ARCHIVED/DEAD/MIGRATING/MIGRATION_FAILED` |
+| `slot_no` | 账号内只增历史序号 | 用于审计，不因删除复用 |
+| `active_slot_no` | H5 当前命卷槽位 | 1—4；删除后置空并允许新命卷复用 |
+| `status` | 命卷生命周期状态 | 玩家态为 `ACTIVE/ENDED`；迁移态为 `MIGRATING/MIGRATION_FAILED` |
 | `world_code` | 当前世界编码 | 不使用产品版本代替 |
 | `engine_code` | 故事引擎编码 | 例如 `LIGHT_NARRATIVE` |
 | `engine_version` | 故事引擎规则版本 | 整数递增 |
@@ -149,6 +149,8 @@ V0.15 先确定以下语义，不代表数据库已经新增字段：
 | `last_played_release` | 最后游玩时产品版本 | 运营追溯 |
 | `created_at` | 创建时间 | 微秒精度 |
 | `updated_at` | 最后变化时间 | 微秒精度 |
+| `deleted_at` | 玩家逻辑删除时间 | 非空命卷不再向玩家接口返回 |
+| `deleted_by/delete_reason` | 删除来源与原因编码 | 供审计使用，不保存玩家隐私文本 |
 
 **权威性**：当前主角、世界时间、当前位置、当前处境和使用的引擎以本表为准。
 
@@ -158,7 +160,8 @@ V0.15 先确定以下语义，不代表数据库已经新增字段：
 
 重要查询索引：
 
-- `idx_story_save_user_status(user_id,status,updated_at)`：按账号读取当前与封存命卷；
+- `uk_story_save_user_active_slot(user_id,active_slot_no)`：保证同账号当前槽位不重复，已删除记录允许为 `NULL`；
+- `idx_story_save_user_status(user_id,deleted_at,status,updated_at)`：优先读取账号未删除命卷；
 - `idx_story_save_status_turn(status,turn_number,updated_at)`：管理台只在指定生命周期内查询回合榜，避免加载全部命卷后在 Java 排序。
 
 ## 6. `story_turn`：回合事实表
@@ -321,7 +324,7 @@ V0.15 先确定以下语义，不代表数据库已经新增字段：
 
 ### V0.13
 
-V0.13 不完整迁入当前可写结构。统一列表通过旧版适配器读取；承接时复制可靠身份、境界、地点、重要能力、当前持有物品、重要人物和关键经历摘要。体力、追查、旧裁决、异常货币和临时人物不进入目标命卷。
+V0.13 属于早期测试数据，原表仅为内部排查保留。H5 不展示旧版入口，也不把这些记录计入当前四个命卷槽位。
 
 ## 14. 权威冲突顺序
 

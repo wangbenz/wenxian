@@ -51,7 +51,9 @@ public class AnalyticsRepository {
         int turns = event.eventType() == AnalyticsEventType.TURN_SUCCEEDED ? 1 : 0;
         int corrections = event.eventType() == AnalyticsEventType.CORRECTION_APPLIED ? 1 : 0;
         int removals = event.eventType() == AnalyticsEventType.ENTITY_REMOVED ? 1 : 0;
-        int archived = event.eventType() == AnalyticsEventType.SAVE_ARCHIVED ? 1 : 0;
+        // 旧字段名暂时保留以兼容管理台历史趋势；新语义同时统计玩家主动删除。
+        int archived = event.eventType() == AnalyticsEventType.SAVE_ARCHIVED
+                || event.eventType() == AnalyticsEventType.SAVE_DELETED ? 1 : 0;
         if (event.eventType() == AnalyticsEventType.USER_REGISTERED) return;
 
         int changed = jdbc.update("""

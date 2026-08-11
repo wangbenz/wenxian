@@ -224,8 +224,8 @@ class StoryProjectionPersistenceMapperTest {
     }
 
     private StoredSave save(ObjectNode state) {
-        return new StoredSave("story-save-1", "user-1", 1, "ACTIVE", "XUANXU",
+        return new StoredSave("story-save-1", "user-1", 1, 1, "ACTIVE", "XUANXU",
                 "LIGHT_NARRATIVE", 1, 1, "NATIVE", "V0.14", null, null, state,
-                1, 1, "V0.14", "V0.14", Instant.EPOCH, Instant.EPOCH);
+                1, 1, "V0.14", "V0.14", Instant.EPOCH, Instant.EPOCH, null, null, null);
     }
 }

@@ -14,6 +14,7 @@ import {
   ReaderIcon,
   ReloadIcon,
   SewingPinFilledIcon,
+  TrashIcon,
 } from "@radix-ui/react-icons";
 import {
   ApiError,
@@ -839,12 +840,36 @@ function ResetConfirmDialog({
   );
 }
 
-function SaveCards({ saves, currentSaveId, maxActiveSaves, isBusy, readOnly = false, onOpen, onCreate, onAbandon }: { saves: SaveSummary[]; currentSaveId?: string; maxActiveSaves: number; isBusy: boolean; readOnly?: boolean; onOpen: (save: SaveSummary) => void; onCreate: () => void; onAbandon: (save: SaveSummary) => void }) {
-  return <div className="save-card-list">{saves.map((save) => <article className="save-slot-card" data-current={save.saveId === currentSaveId} key={save.saveId}><button className="save-slot-main" disabled={isBusy} onClick={() => onOpen(save)} type="button"><span>命卷 {save.slotNo}{save.saveId === currentSaveId ? " · 当前" : ""}</span><strong>{save.playerName}</strong><p>{save.realm} · {save.currentLocation || "尚未入世"}</p><small>第 {save.turn} 回 · {new Date(save.updatedAt).toLocaleDateString("zh-CN")}</small></button>{!readOnly && <button className="save-slot-abandon" disabled={isBusy} onClick={() => onAbandon(save)} type="button">封存</button>}</article>)}{!readOnly && saves.length < maxActiveSaves && <button className="new-save-card" disabled={isBusy} onClick={onCreate} type="button"><span>＋</span><strong>开启新的命卷</strong><small>与现有角色分别经历、共享账号回合</small></button>}</div>;
+function saveUpdatedLabel(value: string) {
+  const time = new Date(value);
+  if (Number.isNaN(time.getTime())) return "最近游玩时间未知";
+  return `上次游玩 ${time.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}`;
 }
 
-function SaveSelectionView({ saves, maxActiveSaves, isBusy, readOnly = false, showLegacyArchive = false, onOpen, onCreate, onAbandon, onLogout }: { saves: SaveSummary[]; maxActiveSaves: number; isBusy: boolean; readOnly?: boolean; showLegacyArchive?: boolean; onOpen: (save: SaveSummary) => void; onCreate: () => void; onAbandon: (save: SaveSummary) => void; onLogout: () => void }) {
-  return <div className="record-view save-selection-view"><div className="page-title-row"><div><p className="eyebrow">YOUR DESTINY SCROLLS</p><h1>{readOnly ? "旧版命卷档案" : "选择命卷"}</h1></div><ReaderIcon className="title-icon" /></div>{readOnly ? <section className="legacy-readonly-notice"><strong>V0.13 已停止续写</strong><p>旧角色与经历完整保留供查阅，不会迁入或覆盖当前命卷。</p><button onClick={() => navigateEdition()} type="button">返回当前命卷</button></section> : <p className="save-selection-copy">同一账号可以保留 {maxActiveSaves} 名仍在世的角色。每份命卷拥有独立的经历、人物关系与天机上下文。</p>}<SaveCards isBusy={isBusy} maxActiveSaves={maxActiveSaves} onAbandon={onAbandon} onCreate={onCreate} onOpen={onOpen} readOnly={readOnly} saves={saves} />{showLegacyArchive && <button className="legacy-archive-link" onClick={() => navigateEdition("v013")} type="button"><ReaderIcon />查看 V0.13 旧版命卷档案</button>}<button className="reset-button save-logout" onClick={onLogout} type="button">退出邮箱</button></div>;
+function SaveCards({ saves, currentSaveId, maxActiveSaves, isBusy, onOpen, onCreate, onDelete }: { saves: SaveSummary[]; currentSaveId?: string; maxActiveSaves: number; isBusy: boolean; onOpen: (save: SaveSummary) => void; onCreate: () => void; onDelete: (save: SaveSummary) => void }) {
+  // 兼容迁移前可能重复或超出范围的旧 slotNo：优先保留有效槽位，冲突项依次补到空位。
+  // 新后端会通过 active_slot_no 保证唯一；这里仅避免灰度期间命卷卡片被 Map 静默覆盖。
+  const bySlot = new Map<number, SaveSummary>();
+  const pending: SaveSummary[] = [];
+  for (const save of saves) {
+    if (save.slotNo >= 1 && save.slotNo <= maxActiveSaves && !bySlot.has(save.slotNo)) bySlot.set(save.slotNo, save);
+    else pending.push(save);
+  }
+  for (const save of pending) {
+    const empty = Array.from({ length: maxActiveSaves }, (_, index) => index + 1).find((slot) => !bySlot.has(slot));
+    if (empty !== undefined) bySlot.set(empty, save);
+  }
+  return <div className="save-card-list" role="list">{Array.from({ length: maxActiveSaves }, (_, index) => {
+    const slotNo = index + 1;
+    const save = bySlot.get(slotNo);
+    if (!save) return <button aria-label={`在第${slotNo}命卷位开启新角色`} className="new-save-card" disabled={isBusy} key={`empty-${slotNo}`} onClick={onCreate} type="button"><span className="save-slot-index">{String(slotNo).padStart(2, "0")}</span><span className="new-save-mark">＋</span><strong>空命卷</strong><small>在此开启一段新的修仙经历</small></button>;
+    const current = save.saveId === currentSaveId;
+    return <article className="save-slot-card" data-current={current} key={save.saveId} role="listitem"><button aria-label={`进入${save.playerName}的命卷`} className="save-slot-main" disabled={isBusy} onClick={() => onOpen(save)} type="button"><span className="save-slot-index">{String(slotNo).padStart(2, "0")}</span><span className="save-slot-state">{current ? "当前命卷" : save.race || "此生命卷"}</span><strong>{save.playerName}</strong><p>{save.realm} · {save.currentLocation || "尚未入世"}</p><small>第 {save.turn} 回 · {saveUpdatedLabel(save.updatedAt)}</small><span className="save-open-label">进入此世 <ChevronRightIcon /></span></button><button aria-label={`删除${save.playerName}的命卷`} className="save-slot-delete" disabled={isBusy} onClick={() => onDelete(save)} type="button"><TrashIcon />删除</button></article>;
+  })}</div>;
+}
+
+function SaveSelectionView({ saves, maxActiveSaves, isBusy, onOpen, onCreate, onDelete, onLogout }: { saves: SaveSummary[]; maxActiveSaves: number; isBusy: boolean; onOpen: (save: SaveSummary) => void; onCreate: () => void; onDelete: (save: SaveSummary) => void; onLogout: () => void }) {
+  return <div className="record-view save-selection-view"><div className="save-selection-heading"><div><p className="eyebrow">MY DESTINY SCROLLS</p><h1>我的命卷</h1><p>选择一段人生继续历练，或在空命卷中开启新的角色。</p></div><div className="save-capacity"><strong>{saves.length}</strong><span>/ {maxActiveSaves}</span><small>已启用</small></div></div><SaveCards isBusy={isBusy} maxActiveSaves={maxActiveSaves} onCreate={onCreate} onDelete={onDelete} onOpen={onOpen} saves={saves} /><p className="save-delete-note">删除只会移除所选命卷，不影响账号、其他角色与已使用的回合。</p><button className="reset-button save-logout" onClick={onLogout} type="button">退出当前账号</button></div>;
 }
 
 function LegacyArchiveUnavailableView({ onLogout }: { onLogout: () => void }) {
@@ -870,7 +895,7 @@ function GenerationAccessCard({ settings, generation, isBusy, onOpen }: { settin
 
 function AbandonSaveDialog({ save, isBusy, onCancel, onConfirm }: { save: SaveSummary; isBusy: boolean; onCancel: () => void; onConfirm: () => void }) {
   const [confirmation, setConfirmation] = useState("");
-  return <div className="ink-dialog-backdrop" role="presentation"><section aria-modal="true" className="ink-dialog credential-dialog" role="dialog"><div className="ink-dialog-seal">藏</div><p className="eyebrow">ARCHIVE THIS DESTINY</p><h2>封存「{save.playerName}」的命卷</h2><p>封存后这名角色将不再出现在游戏中，但经历会作为前世记录保留，管理员仍可协助核查。此操作不会返还已经使用的账号回合。</p><label className="credential-field">请输入角色名“{save.playerName}”<input autoComplete="off" value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} /></label><div className="ink-dialog-actions"><button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">继续此世</button><button className="ink-dialog-confirm destructive" disabled={isBusy || confirmation !== save.playerName} onClick={onConfirm} type="button">确认封存</button></div></section></div>;
+  return <div className="ink-dialog-backdrop" role="presentation"><section aria-labelledby="delete-save-title" aria-modal="true" className="ink-dialog credential-dialog" role="dialog"><div className="ink-dialog-seal">删</div><p className="eyebrow">DELETE THIS DESTINY</p><h2 id="delete-save-title">删除「{save.playerName}」的命卷</h2><p>删除后，这名角色不会再出现在你的命卷列表中，相关经历也不能自行恢复。账号、其他命卷与已使用的回合不受影响。</p><label className="credential-field">请输入角色名“{save.playerName}”确认<input autoComplete="off" value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} /></label><div className="ink-dialog-actions"><button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">保留命卷</button><button className="ink-dialog-confirm destructive" disabled={isBusy || confirmation !== save.playerName} onClick={onConfirm} type="button">确认删除</button></div></section></div>;
 }
 
 function WorldView({ game, saves, maxActiveSaves, version, releaseNotes, isBusy, readOnly = false, onOpenSave, onCreateSave, onAbandonSave }: { game: GameState; saves: SaveSummary[]; maxActiveSaves: number; version: string; releaseNotes: ReleaseNote[]; isBusy: boolean; readOnly?: boolean; onOpenSave: (save: SaveSummary) => void; onCreateSave: () => void; onAbandonSave: (save: SaveSummary) => void }) {
@@ -879,7 +904,7 @@ function WorldView({ game, saves, maxActiveSaves, version, releaseNotes, isBusy,
       <div className="page-title-row"><div><p className="eyebrow">KNOWN WORLD</p><h1>世界</h1></div><GlobeIcon className="title-icon" /></div>
       <section className="location-card"><div className="location-art" /><div className="location-copy"><span><SewingPinFilledIcon /> 当前位置</span><h2>{game.sceneTitle} · {game.currentLocation}</h2><p>{game.world.summary}</p></div></section>
       <section className="world-law-card"><p><strong>修行法则</strong>{game.world.cultivationLaw}</p><p><strong>生存法则</strong>{game.world.dangerRule}</p><div>{game.world.factions.map((faction) => <span key={faction}>{faction}</span>)}</div></section>
-      <section className="record-section"><div className="section-label"><ReaderIcon /><h2>我的命卷</h2><span>{saves.length}/{maxActiveSaves}</span></div><SaveCards currentSaveId={game.saveId} isBusy={isBusy} maxActiveSaves={maxActiveSaves} onAbandon={onAbandonSave} onCreate={onCreateSave} onOpen={onOpenSave} readOnly={readOnly} saves={saves} /></section>
+      <section className="record-section"><div className="section-label"><ReaderIcon /><h2>我的命卷</h2><span>{saves.length}/{maxActiveSaves}</span></div><SaveCards currentSaveId={game.saveId} isBusy={isBusy} maxActiveSaves={maxActiveSaves} onCreate={onCreateSave} onDelete={onAbandonSave} onOpen={onOpenSave} saves={saves} /></section>
       <section className="record-section"><div className="section-label"><MagnifyingGlassIcon /><h2>未解线索</h2><span>{game.threads.length}</span></div><div className="thread-list">{game.threads.map((thread) => <article className="thread-card" key={thread.id}><div><h3>{thread.title}</h3><p>{thread.state}</p></div><span data-danger={thread.danger > 75 ? "high" : "normal"}>{dangerName(thread.danger)}</span></article>)}</div></section>
       <section className="release-history"><div className="section-label"><ReaderIcon /><h2>版本纪事</h2><span>{version}</span></div>{releaseNotes.length === 0 ? <p className="empty-copy">尚无公开版本纪事。</p> : releaseNotes.map((note) => <details key={note.id}><summary><span>{note.version}</span><strong>{note.title}</strong><small>{new Date(note.publishedAt).toLocaleDateString("zh-CN")}</small></summary><p>{note.content}</p></details>)}</section>
     </div>
@@ -1011,8 +1036,8 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
   const [bootstrap, setBootstrap] = useState<BootstrapResponse | null>(null);
   const [snapshot, setSnapshot] = useState<ApiSnapshot | null>(null);
   const [saves, setSaves] = useState<SaveSummary[]>([]);
-  const [maxActiveSaves, setMaxActiveSaves] = useState(2);
-  const storyMaxActiveSavesRef = useRef(2);
+  const [maxActiveSaves, setMaxActiveSaves] = useState(4);
+  const storyMaxActiveSavesRef = useRef(4);
   const [abandonTarget, setAbandonTarget] = useState<SaveSummary | null>(null);
   const [draft, setDraft] = useState("");
   const [characterDraft, setCharacterDraft] = useState<CharacterDraft>(DEFAULT_DRAFT);
@@ -1106,26 +1131,10 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
     setAiSettings(nextAiSettings);
     if (v014) setGenerationSettings(await gameApi.generationSettings());
     if (!nextAuth.passwordConfigured) setShowPasswordSettings(true);
-    const saveList = await refreshSaves();
-    if (saveList.saves.length > 1) {
-      setSnapshot(null);
-      setStage("saves");
-      return nextAiSettings;
-    }
-    if (saveList.saves.length === 1) {
-      const current = await loadSave(saveList.saves[0].saveId);
-      storeSnapshot(current);
-      setTab("adventure");
-      setStage(stageFor(current));
-      return nextAiSettings;
-    }
+    await refreshSaves();
+    // 登录后统一进入命卷列表，让单命卷玩家也能看见槽位、切换或新增角色。
     setSnapshot(null);
-    setCharacterDraft(DEFAULT_DRAFT);
-    setNameAlternatives([]);
-    setGeneratedName("");
-    setCharacterRoutes([]);
-    setSelectedCharacterRouteId("");
-    setStage("create");
+    setStage("saves");
     return nextAiSettings;
   };
 
@@ -1405,7 +1414,7 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
     const request = { ...characterDraft, playerName: validation.normalizedName };
     let created: ApiSnapshot;
     if (v014) {
-      if (restartTargetId) await gameApi.storyArchive(restartTargetId);
+      if (restartTargetId) await gameApi.storyDeleteSave(restartTargetId);
       const selectedRoute = characterRoutes.find((route) => route.id === selectedCharacterRouteId);
       created = storySnapshotView(await gameApi.storyCreateSave({
         worldCode: request.worldCode || "XUANXU", customWorld: request.customWorld,
@@ -1563,22 +1572,16 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
   const abandonSave = () => runBusy(async () => {
     if (!abandonTarget) return;
     const targetId = abandonTarget.saveId;
-    if (v014) await gameApi.storyArchive(targetId); else await gameApi.abandonSave(targetId, abandonTarget.playerName);
+    if (v014) await gameApi.storyDeleteSave(targetId); else await gameApi.abandonSave(targetId, abandonTarget.playerName);
     setAbandonTarget(null);
     if (snapshot?.state.saveId === targetId) {
       setSnapshot(null);
       window.localStorage.removeItem(CACHE_KEY);
     }
-    const list = await refreshSaves();
-    if (list.saves.length === 0) setStage("create");
-    else if (list.saves.length === 1) {
-      const next = await loadSave(list.saves[0].saveId);
-      storeSnapshot(next);
-      setTab("adventure");
-      setStage(stageFor(next));
-    }
-    else setStage("saves");
-    setToast("命卷已封存为前世记录");
+    await refreshSaves();
+    setTab("adventure");
+    setStage("saves");
+    setToast("命卷已删除，空出的命卷位可以重新使用");
   });
 
   const resetGame = () => {
@@ -1685,13 +1688,13 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
   return (
     <div className="game-shell" data-composer-focused={isComposerFocused} data-entry={!showGameChrome} data-font-size={fontSize} data-keyboard-open={keyboardOffset > 80} data-theme={actualTheme} onFocusCapture={(event) => { const target = event.target; if (target instanceof HTMLElement && target.matches("input, textarea, select") && !target.closest(".action-composer")) revealFormControl(target); }} style={{ "--keyboard-offset": `${keyboardOffset}px` } as CSSProperties}>
       <div className="paper-background" aria-hidden="true" />
-      <header className="game-header"><div className="game-header-inner"><div className="brand-lockup"><strong>问仙录</strong><span>浮生一卷 · {bootstrap?.version ?? "版本同步中"}</span></div>{stage === "game" && <button aria-label="打开设置" className="header-settings-button" onClick={() => setShowQuickSettings(true)} title="设置" type="button"><GearIcon /></button>}</div></header>
+      <header className="game-header"><div className="game-header-inner"><div className="brand-lockup"><strong>问仙录</strong><span>浮生一卷 · {bootstrap?.version ?? "版本同步中"}</span></div>{auth?.authenticated && !["loading", "login"].includes(stage) && <button aria-label="打开设置" className="header-settings-button" onClick={() => setShowQuickSettings(true)} title="设置" type="button"><GearIcon /></button>}</div></header>
       <div className="game-scroll" data-phase={game?.phase ?? stage} key={`${stage}-${tab}-${game?.turn ?? 0}`}><main className="screen-content" data-testid="game-content">
-        {aiSettings && !legacyReadOnly && (["saves", "create", "fate", "talent"] as AppStage[]).includes(stage) && <GenerationAccessCard generation={v014 ? generationSettings : null} isBusy={isBusy} onOpen={() => setShowAiSettings(true)} settings={aiSettings} />}
+        {aiSettings && !legacyReadOnly && (["create", "fate", "talent"] as AppStage[]).includes(stage) && <GenerationAccessCard generation={v014 ? generationSettings : null} isBusy={isBusy} onOpen={() => setShowAiSettings(true)} settings={aiSettings} />}
         {stage === "loading" && <LoadingView />}
         {stage === "login" && <LoginView accessStatus={accessStatus} announcement={loginAnnouncement} error={error} isBusy={isBusy} offline={syncMode === "offline"} onAuthenticate={authenticate} />}
-        {stage === "saves" && <SaveSelectionView isBusy={isBusy} maxActiveSaves={maxActiveSaves} onAbandon={setAbandonTarget} onCreate={createAdditionalSave} onLogout={() => void logout()} onOpen={(save) => void openSave(save)} readOnly={legacyReadOnly} saves={saves} showLegacyArchive={v014} />}
-        {stage === "create" && bootstrap && (legacyReadOnly ? <LegacyArchiveUnavailableView onLogout={() => void logout()} /> : <CharacterCreationView alternatives={nameAlternatives} bootstrap={bootstrap} draft={characterDraft} error={error} isBusy={isBusy} onCancelRestart={restartTargetId ? () => void cancelRestart() : undefined} onCreate={createCharacter} onDraft={updateCharacterDraft} onGenerateName={generateName} onGenerateRoutes={generateCharacterRoutes} onLegacyArchive={v014 ? () => navigateEdition("v013") : undefined} onLogout={() => void logout()} onSelectRoute={selectCharacterRoute} routeOptions={characterRoutes} selectedRouteId={selectedCharacterRouteId} />)}
+        {stage === "saves" && <SaveSelectionView isBusy={isBusy} maxActiveSaves={maxActiveSaves} onCreate={createAdditionalSave} onDelete={setAbandonTarget} onLogout={() => void logout()} onOpen={(save) => void openSave(save)} saves={saves} />}
+        {stage === "create" && bootstrap && (legacyReadOnly ? <LegacyArchiveUnavailableView onLogout={() => void logout()} /> : <CharacterCreationView alternatives={nameAlternatives} bootstrap={bootstrap} draft={characterDraft} error={error} isBusy={isBusy} onCancelRestart={restartTargetId ? () => void cancelRestart() : undefined} onCreate={createCharacter} onDraft={updateCharacterDraft} onGenerateName={generateName} onGenerateRoutes={generateCharacterRoutes} onLogout={() => void logout()} onSelectRoute={selectCharacterRoute} routeOptions={characterRoutes} selectedRouteId={selectedCharacterRouteId} />)}
         {stage === "fate" && game && (legacyReadOnly ? <LegacyArchiveUnavailableView onLogout={() => void logout()} /> : <FateSelectionView error={error} game={game} isBusy={isBusy} onRecreate={() => setResetIntent("FATES")} onSelect={setSelectedFate} onStart={chooseFate} selectedId={selectedFate} />)}
         {stage === "talent" && game && (legacyReadOnly ? <LegacyArchiveUnavailableView onLogout={() => void logout()} /> : <TalentSelectionView error={error} game={game} isBusy={isBusy} onEnter={enterWithTalent} onReroll={rerollTalents} onSelect={setSelectedTalent} onSkip={enterWithoutTalent} selectedId={selectedTalent} />)}
         {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView aiSettings={aiSettings} choices={choices} error={error} game={game} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onResolutionDismiss={dismissResolution} onSuggestion={(content) => void takeTurn("TEXT", { content })} readOnly={legacyReadOnly} resolution={snapshot?.actionResolution} />}
@@ -1715,7 +1718,7 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
       {showPasswordSettings && <PasswordDialog configured={auth?.passwordConfigured ?? false} mandatory={auth?.authenticated === true && !auth.passwordConfigured} error={error} isBusy={isBusy} onCancel={() => setShowPasswordSettings(false)} onSave={(current, next) => void savePassword(current, next)} />}
       {showDeleteAccount && <DeleteAccountDialog isBusy={isBusy} onCancel={() => setShowDeleteAccount(false)} onConfirm={() => void deleteAccount()} />}
       {showCorrection && <StoryCorrectionDialog error={error} isBusy={isBusy} onCancel={closeCorrection} onConfirm={() => void confirmCorrection()} onEdit={() => { setCorrectionPreview(null); setError(null); }} onPreview={(instruction) => void previewCorrection(instruction)} preview={correctionPreview} />}
-      {showQuickSettings && <QuickSettingsPanel aiSettings={aiSettings} email={email} fontSize={fontSize} generation={v014 ? generationSettings : null} isBusy={isBusy} legacyReadOnly={legacyReadOnly} onAiSettings={() => { setShowQuickSettings(false); setShowAiSettings(true); }} onClose={() => setShowQuickSettings(false)} onCorrection={v014 && game?.phase === "playing" && !legacyReadOnly ? () => { setShowQuickSettings(false); setCorrectionPreview(null); setError(null); setShowCorrection(true); } : undefined} onDeleteAccount={() => { setShowQuickSettings(false); setShowDeleteAccount(true); }} onFontSize={setFontSize} onLogout={() => { setShowQuickSettings(false); void logout(); }} onPasswordSettings={() => { setShowQuickSettings(false); setShowPasswordSettings(true); }} onPlatform={() => void usePlatformGeneration()} onReset={() => { setShowQuickSettings(false); resetGame(); }} onSaves={() => { setShowQuickSettings(false); setStage("saves"); }} onTheme={setTheme} passwordConfigured={auth?.passwordConfigured ?? false} showLegacyArchive={v014} theme={theme} />}
+      {showQuickSettings && <QuickSettingsPanel aiSettings={aiSettings} email={email} fontSize={fontSize} generation={v014 ? generationSettings : null} isBusy={isBusy} legacyReadOnly={legacyReadOnly} onAiSettings={() => { setShowQuickSettings(false); setShowAiSettings(true); }} onClose={() => setShowQuickSettings(false)} onCorrection={v014 && game?.phase === "playing" && !legacyReadOnly ? () => { setShowQuickSettings(false); setCorrectionPreview(null); setError(null); setShowCorrection(true); } : undefined} onDeleteAccount={() => { setShowQuickSettings(false); setShowDeleteAccount(true); }} onFontSize={setFontSize} onLogout={() => { setShowQuickSettings(false); void logout(); }} onPasswordSettings={() => { setShowQuickSettings(false); setShowPasswordSettings(true); }} onPlatform={() => void usePlatformGeneration()} onReset={() => { setShowQuickSettings(false); resetGame(); }} onSaves={() => { setShowQuickSettings(false); setStage("saves"); }} onTheme={setTheme} passwordConfigured={auth?.passwordConfigured ?? false} theme={theme} />}
       {isBusy && (stage === "create" || stage === "fate" || stage === "talent") && <DestinyLoadingOverlay stage={stage} />}
       {toast && <div className="save-toast" role="status"><span className="agent-dot" />{toast}</div>}
     </div>
@@ -1723,6 +1726,5 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
 }
 
 export default function Prototype() {
-  const legacy = new URLSearchParams(window.location.search).get("edition") === "v013";
-  return <LegacyPrototype v014={!legacy} />;
+  return <LegacyPrototype v014 />;
 }

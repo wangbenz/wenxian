@@ -124,7 +124,7 @@ class StoryRepositoriesTest {
     }
 
     private NewSave newSave(String saveId) {
-        return new NewSave(saveId, "story-user", 1, "ACTIVE", "XUANXU",
+        return new NewSave(saveId, "story-user", 1, 1, "ACTIVE", "XUANXU",
                 "LIGHT_NARRATIVE", 1, 1, "NATIVE", "V0.14", null, null,
                 state("陆沉"), 0, "V0.14", "V0.14", Instant.now());
     }

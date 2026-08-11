@@ -46,7 +46,8 @@ public interface StoryEngine {
 
     SaveResponse correct(UserIdentity user, String saveId, CorrectionRequest request);
 
-    void archive(UserIdentity user, String saveId);
+    /** 逻辑删除玩家命卷；实现必须保留审计数据，并让玩家列表立即停止返回该命卷。 */
+    void deleteSave(UserIdentity user, String saveId);
 
     SaveResponse removeEntity(UserIdentity user, String saveId, String entityId, long expectedRevision);
 }

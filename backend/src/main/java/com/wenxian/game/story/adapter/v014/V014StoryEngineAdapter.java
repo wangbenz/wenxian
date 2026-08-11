@@ -155,7 +155,7 @@ public class V014StoryEngineAdapter implements StoryEngine {
     }
 
     @Override
-    public void archive(UserIdentity user, String saveId) {
+    public void deleteSave(UserIdentity user, String saveId) {
         stableVoid(() -> game.archive(user, saveId));
     }
 
@@ -188,7 +188,7 @@ public class V014StoryEngineAdapter implements StoryEngine {
 
     private SaveResponse map(V014ApiModels.SaveResponse source) {
         V014State state = source.state();
-        String mode = "ACTIVE".equals(state.status()) ? "PLAYABLE" : "ARCHIVE";
+        String mode = "ACTIVE".equals(state.status()) ? "PLAYABLE" : "ENDED";
         return new SaveResponse(state.saveId(), mode, ENGINE_CODE, ENGINE_VERSION,
                 state.schemaVersion(), source.revision(), state.turnNumber(), capabilities(state.status()),
                 map(state), source.generationMode(), source.personalProvider(), source.personalModel());
@@ -218,7 +218,7 @@ public class V014StoryEngineAdapter implements StoryEngine {
 
     private List<String> capabilities(String status) {
         if (!"ACTIVE".equals(status)) return List.of("READ");
-        return List.of("READ", "PLAY", "ARCHIVE", "CORRECT", "REMOVE_ENTITY");
+        return List.of("READ", "PLAY", "DELETE", "CORRECT", "REMOVE_ENTITY");
     }
 
     private <T> T stable(Supplier<T> action) {

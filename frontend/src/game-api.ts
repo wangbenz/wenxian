@@ -370,7 +370,7 @@ type StoryStateContract = Omit<StoryState, "schemaVersion" | "protagonist"> & {
 
 type StorySaveContract = {
   saveId: string;
-  mode: "PLAYABLE" | "ARCHIVE";
+  mode: "PLAYABLE" | "ENDED";
   engineCode: string;
   engineVersion: number;
   stateSchemaVersion: number;
@@ -384,7 +384,7 @@ type StorySaveContract = {
 };
 
 type StorySaveSummaryContract = {
-  saveId: string; slotNo: number; mode: "PLAYABLE" | "ARCHIVE";
+  saveId: string; slotNo: number; mode: "PLAYABLE" | "ENDED";
   engineCode: string; engineVersion: number; stateSchemaVersion: number;
   revision: number; turnNumber: number; capabilities: string[];
   worldName: string; playerName: string; race: string; realm: string;
@@ -621,7 +621,7 @@ export const gameApi = {
   storyRemoveEntity: (saveId: string, entityId: string, revision: number) => request<StorySaveContract>(`/api/v1/story/saves/${encodeURIComponent(saveId)}/entities/${encodeURIComponent(entityId)}?revision=${revision}`, {
     method: "DELETE",
   }).then(legacySaveView),
-  storyArchive: (saveId: string) => request<void>(`/api/v1/story/saves/${encodeURIComponent(saveId)}`, { method: "DELETE" }),
+  storyDeleteSave: (saveId: string) => request<void>(`/api/v1/story/saves/${encodeURIComponent(saveId)}`, { method: "DELETE" }),
   generationSettings: () => request<StoryGenerationSettings>("/api/v1/generation/settings"),
   saveGenerationSettings: (settings: { mode: "PLATFORM" | "PERSONAL"; provider?: string; model?: string }) => request<StoryGenerationSettings>("/api/v1/generation/settings", {
     method: "PUT", body: JSON.stringify(settings),

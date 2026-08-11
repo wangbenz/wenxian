@@ -110,10 +110,10 @@ public class StoryApplicationService {
         }
     }
 
-    public void archive(UserIdentity user, String saveId) {
+    public void deleteSave(UserIdentity user, String saveId) {
         var engine = engines.requireForSave(saveId);
-        engine.archive(user, saveId);
-        analytics.publish("SAVE_ARCHIVED:" + saveId, AnalyticsEventType.SAVE_ARCHIVED,
+        engine.deleteSave(user, saveId);
+        analytics.publish("SAVE_DELETED:" + saveId, AnalyticsEventType.SAVE_DELETED,
                 user.userId(), saveId, engine.descriptor().code(), Map.of());
     }
 
@@ -135,7 +135,7 @@ public class StoryApplicationService {
                     "STORY_SAVE_NOT_FOUND", "STATE", "没有找到这份命卷", error.getMessage(),
                     List.of("刷新我的命卷"));
             case SAVE_NOT_ACTIVE -> com.wenxian.game.api.GameApiException.of(HttpStatus.CONFLICT,
-                    "SAVE_NOT_ACTIVE", "STATE", "这份命卷已经封存", error.getMessage(),
+                    "SAVE_NOT_ACTIVE", "STATE", "这份命卷已经无法继续", error.getMessage(),
                     List.of("选择其他命卷"));
             case REVISION_CONFLICT -> com.wenxian.game.api.GameApiException.of(HttpStatus.CONFLICT,
                     "CORRECTION_REVISION_CONFLICT", "STATE", "命卷状态已经变化", error.getMessage(),

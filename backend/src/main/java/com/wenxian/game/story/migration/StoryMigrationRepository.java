@@ -105,10 +105,10 @@ public class StoryMigrationRepository {
         String worldCode = target.coreState().path("world").path("code").asText("UNKNOWN");
         jdbc.update("""
                 insert into story_save(
-                    id,user_id,slot_no,status,world_code,engine_code,engine_version,state_schema_version,
+                    id,user_id,slot_no,active_slot_no,status,world_code,engine_code,engine_version,state_schema_version,
                     source_type,source_edition,source_save_id,parent_save_id,state_json,revision,turn_number,
                     created_release,last_played_release,created_at,updated_at
-                ) values (?,?,?,'MIGRATING',?,'LIGHT_NARRATIVE',1,?,'MIGRATED_V014','V0.14',?,null,?,1,?,
+                ) values (?,?,?,null,'MIGRATING',?,'LIGHT_NARRATIVE',1,?,'MIGRATED_V014','V0.14',?,null,?,1,?,
                     'V0.14','V0.14',?,?)
                 """, report.targetSaveId(), report.userId(), report.slotNo(), worldCode,
                 report.targetSchemaVersion(), report.sourceSaveId(), write(target.coreState()),
@@ -181,8 +181,23 @@ public class StoryMigrationRepository {
     }
 
     public void activate(String migrationId, String targetSaveId, String targetStatus) {
-        int saveChanged = jdbc.update("update story_save set status=?,updated_at=? where id=? and status='MIGRATING'",
-                targetStatus, Timestamp.from(Instant.now()), targetSaveId);
+        Integer activeSlotNo = jdbc.queryForObject("""
+                select min(candidate.slot_no) from (
+                    select 1 slot_no union all select 2 union all select 3 union all select 4
+                ) candidate
+                where not exists (
+                    select 1 from story_save occupied
+                    where occupied.user_id=(select user_id from story_save where id=?)
+                      and occupied.deleted_at is null and occupied.active_slot_no=candidate.slot_no
+                )
+                """, Integer.class, targetSaveId);
+        if (activeSlotNo == null) {
+            throw new IllegalStateException("当前账号没有可用命卷槽位，迁移候选无法激活");
+        }
+        int saveChanged = jdbc.update("""
+                update story_save set status=?,active_slot_no=?,updated_at=?
+                where id=? and status='MIGRATING' and deleted_at is null
+                """, targetStatus, activeSlotNo, Timestamp.from(Instant.now()), targetSaveId);
         int auditChanged = jdbc.update("""
                 update story_save_migration set status='SUCCESS',error_message=null,completed_at=?
                 where id=? and status='READY'

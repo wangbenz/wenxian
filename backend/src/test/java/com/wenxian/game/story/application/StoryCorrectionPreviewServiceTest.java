@@ -115,7 +115,7 @@ class StoryCorrectionPreviewServiceTest {
                         StoryPatch.WorldFactOperation.EXPAND, "既有设定")),
                 Map.of("character-1\u0000fact-1", new StoryProjection.KnowledgeState(
                         "character-1", "fact-1", "守门人知道戒严缘由", List.of("turn-2"))), List.of());
-        saves.insert(new NewSave("story-save-1", "user-1", 1, "ACTIVE", "XUANXU",
+        saves.insert(new NewSave("story-save-1", "user-1", 1, 1, "ACTIVE", "XUANXU",
                 "LIGHT_NARRATIVE", 1, 1, "NATIVE", "V0.14", null, null,
                 projections.writeState(base, trusted), 4, "V0.14", "V0.14", NOW));
         entities.insert(entity("item-1", "ITEM", true));

@@ -11,7 +11,7 @@ import java.time.Instant;
 @Service
 public class ActiveSavePolicyService {
     public static final String CONFIG_KEY = "max_active_saves";
-    private static final int DEFAULT_MAXIMUM = 2;
+    private static final int DEFAULT_MAXIMUM = 4;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -45,7 +45,7 @@ public class ActiveSavePolicyService {
 
     private int normalize(String value) {
         try {
-            return Math.max(1, Math.min(2, Integer.parseInt(value)));
+            return Math.max(1, Math.min(4, Integer.parseInt(value)));
         } catch (RuntimeException ignored) {
             return DEFAULT_MAXIMUM;
         }
