@@ -632,7 +632,16 @@ function TalentSelectionView({ game, selectedId, isBusy, error, onSelect, onEnte
   </div>;
 }
 
-function AdventureView({ game, choices, resolution, aiSettings, isBusy, offline, readOnly = false, error, onChoice, onSuggestion, onResolutionDismiss }: { game: GameState; choices: Choice[]; resolution?: ApiSnapshot["actionResolution"]; aiSettings: AiSettings | null; isBusy: boolean; offline: boolean; readOnly?: boolean; error: UiProblem | null; onChoice: (id: string) => void; onSuggestion: (action: string) => void; onResolutionDismiss: () => void }) {
+function AdventureView({ game, choices, resolution, aiSettings, generation, isBusy, offline, readOnly = false, error, onChoice, onSuggestion, onResolutionDismiss }: { game: GameState; choices: Choice[]; resolution?: ApiSnapshot["actionResolution"]; aiSettings: AiSettings | null; generation?: StoryGenerationSettings | null; isBusy: boolean; offline: boolean; readOnly?: boolean; error: UiProblem | null; onChoice: (id: string) => void; onSuggestion: (action: string) => void; onResolutionDismiss: () => void }) {
+  const usageCopy = generation
+    ? generation.mode === "PERSONAL"
+      ? "正在使用自己的推演密钥 · 不消耗平台回合"
+      : `平台赠送回合还可使用 ${generation.platform.remainingTurns} 回`
+    : aiSettings
+      ? aiSettings.usingCustomApi
+        ? "正在使用自己的推演密钥 · 不消耗平台回合"
+        : `平台赠送回合还可使用 ${aiSettings.remainingTurns} 回`
+      : null;
   return (
     <div className="adventure-view">
       <section className="scene-heading" aria-labelledby="scene-title"><span className="leaf-mark" aria-hidden="true">〆</span><div><p className="eyebrow">当前场景</p><h1 id="scene-title">{game.sceneTitle}</h1><small className="scene-time"><ClockIcon />{formatWorldTime(game.worldYear, game.day, game.minute)}</small></div></section>
@@ -660,7 +669,7 @@ function AdventureView({ game, choices, resolution, aiSettings, isBusy, offline,
       </section>}
       {offline && !readOnly && !isBusy && <div className="agent-thinking offline-note" role="status"><LightningBoltIcon /><span>命卷暂时无法续写，已有经历仍可查阅。</span></div>}
       {error && !isBusy && <ProblemNotice problem={error} />}
-      {aiSettings && !readOnly && <p className="daily-chapter-usage">{aiSettings.usingCustomApi ? "正在使用自己的推演密钥 · 不消耗赠送回合" : `当前账号回合 ${aiSettings.usedTurns}/${aiSettings.turnLimit}`}</p>}
+      {usageCopy && !readOnly && <p className="daily-chapter-usage">{usageCopy}</p>}
     </div>
   );
 }
@@ -880,15 +889,16 @@ function GenerationAccessCard({ settings, generation, isBusy, onOpen }: { settin
   const personal = generation?.mode === "PERSONAL";
   const provider = generation?.personalProviders.find((item) => item.code === generation.selectedPersonalProvider);
   const personalReady = personal && provider?.credentialConfigured && provider.credentialStatus === "ACTIVE";
+  const platformRemaining = generation?.platform.remainingTurns ?? settings.remainingTurns;
   const title = personal
     ? personalReady ? "正在使用自己的推演密钥" : "自己的推演密钥需要重新验证"
-    : `账号赠送回合 ${settings.usedTurns}/${settings.turnLimit}`;
+    : `平台赠送回合 · 剩余 ${platformRemaining} 回`;
   const detail = personal
     ? personalReady
       ? `${provider?.name ?? "自选服务"}密钥尾号 ${provider?.maskedSuffix ?? "已隐藏"}，只用于你的命卷。`
       : "本次行动不会自动改用平台回合，请先重新保存密钥或主动切换平台推演。"
-    : settings.remainingTurns > 0
-      ? `还可使用 ${settings.remainingTurns} 回；平台推演的具体技术配置不会对玩家展示。`
+    : platformRemaining > 0
+      ? "四份命卷共享同一账号余额；平台推演的具体技术配置不会对玩家展示。"
       : "赠送回合已用完，接入自己的密钥后仍可继续游玩。";
   return <section className="generation-access-card"><div><span>剧情生成</span><strong>{title}</strong><p>{detail}</p></div><button disabled={isBusy || !settings.customApiEnabled} onClick={onOpen} type="button">{personalReady ? "管理" : personal ? "重新验证" : "接入密钥"}</button></section>;
 }
@@ -1697,7 +1707,7 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
         {stage === "create" && bootstrap && (legacyReadOnly ? <LegacyArchiveUnavailableView onLogout={() => void logout()} /> : <CharacterCreationView alternatives={nameAlternatives} bootstrap={bootstrap} draft={characterDraft} error={error} isBusy={isBusy} onCancelRestart={restartTargetId ? () => void cancelRestart() : undefined} onCreate={createCharacter} onDraft={updateCharacterDraft} onGenerateName={generateName} onGenerateRoutes={generateCharacterRoutes} onLogout={() => void logout()} onSelectRoute={selectCharacterRoute} routeOptions={characterRoutes} selectedRouteId={selectedCharacterRouteId} />)}
         {stage === "fate" && game && (legacyReadOnly ? <LegacyArchiveUnavailableView onLogout={() => void logout()} /> : <FateSelectionView error={error} game={game} isBusy={isBusy} onRecreate={() => setResetIntent("FATES")} onSelect={setSelectedFate} onStart={chooseFate} selectedId={selectedFate} />)}
         {stage === "talent" && game && (legacyReadOnly ? <LegacyArchiveUnavailableView onLogout={() => void logout()} /> : <TalentSelectionView error={error} game={game} isBusy={isBusy} onEnter={enterWithTalent} onReroll={rerollTalents} onSelect={setSelectedTalent} onSkip={enterWithoutTalent} selectedId={selectedTalent} />)}
-        {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView aiSettings={aiSettings} choices={choices} error={error} game={game} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onResolutionDismiss={dismissResolution} onSuggestion={(content) => void takeTurn("TEXT", { content })} readOnly={legacyReadOnly} resolution={snapshot?.actionResolution} />}
+        {stage === "game" && game?.phase === "playing" && tab === "adventure" && <AdventureView aiSettings={aiSettings} choices={choices} error={error} game={game} generation={v014 ? generationSettings : null} isBusy={isBusy} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onResolutionDismiss={dismissResolution} onSuggestion={(content) => void takeTurn("TEXT", { content })} readOnly={legacyReadOnly} resolution={snapshot?.actionResolution} />}
         {stage === "game" && game?.phase === "playing" && tab === "character" && <CharacterView game={game} isBusy={isBusy} onCleanup={v014 ? setCleanupTarget : undefined} />}
         {stage === "game" && game?.phase === "playing" && tab === "chronicle" && <ChronicleView game={game} />}
         {stage === "game" && game?.phase === "playing" && tab === "world" && <WorldView game={game} isBusy={isBusy} maxActiveSaves={maxActiveSaves} onAbandonSave={setAbandonTarget} onCreateSave={createAdditionalSave} onOpenSave={(save) => void openSave(save)} readOnly={legacyReadOnly} releaseNotes={releaseNotes} saves={saves} version={bootstrap?.version ?? "版本同步中"} />}

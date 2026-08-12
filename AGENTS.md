@@ -57,11 +57,13 @@
 
 ## Account Turn Quota Contract
 
-- The platform-sponsored turn limit is authoritative in `gameplay_config.account_public_turn_limit`. It is a cumulative per-account limit, does not reset daily, and changing it applies to both existing and new accounts.
-- Never hardcode the sponsored turn count in H5 copy. Registration success, Adventure usage, World settings, remaining turns, and exhaustion handling must use the backend `AiSettings.turnLimit`, `usedTurns`, and `remainingTurns`.
+- The long-lived authority for platform-sponsored turns is the account-level `turn_credit_grant` balance plus `turn_credit_reservation` and immutable `turn_credit_ledger`; all active saves under one account share it. `user_daily_quota` and `gameplay_config.account_public_turn_limit` are legacy compatibility sources until the controlled cutover is complete, never the target wallet.
+- New grants must use a stable idempotency key and a neutral source such as `INITIAL`, `PLAYTEST`, `FEEDBACK`, `ACTIVITY`, `ADMIN`, or `LEGACY_OPENING`. Sign-in, referral, purchase, and other future domains may call the same grant service but must not add their rules to the credit ledger.
+- The platform route reserves one turn before model work and consumes it only with the successfully committed story turn. Provider failures, rejected proposals, format retries, and rolled-back story transactions must release or roll back the reservation and never consume a turn. A valid player-owned key bypasses platform turns completely.
+- Never hardcode the sponsored turn count in H5 copy. After runtime integration, registration success, Adventure usage, settings, remaining turns, and exhaustion handling must read the account credit response; compatibility `AiSettings` fields must be mapped from the same source instead of maintaining a second counter.
 - The exhaustion message is managed from the admin Limits page and stored in `gameplay_config.account_public_turn_limit_message`. Player support/QQ copy reuses `gameplay_config.registration_contact_text` so operators maintain contact information in one place.
 - Exhaustion is a normal business outcome, not a model failure. The backend returns HTTP 429 with code `PUBLIC_TURN_LIMIT_REACHED`; H5 must show the dedicated ink-style dialog with the configured message, support contact, QQ copy action when a group number is present, and a route to World/key settings. Do not replace it with “天机紊乱”.
-- A valid player-owned generation key bypasses the sponsored-turn limit and must not increment sponsored usage. Genuine network/provider/5xx failures may still use the generic “天机紊乱” presentation.
+- Genuine network/provider/5xx failures may still use the generic “天机紊乱” presentation, but must carry a diagnosable public reference and leave platform credit unchanged.
 
 ## Deployment and Data Safety
 

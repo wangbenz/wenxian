@@ -295,6 +295,84 @@ create table user_daily_quota (
     constraint fk_daily_quota_user foreign key (user_id) references app_user(id) on delete cascade
 );
 
+create table turn_credit_grant (
+    id varchar(80) primary key,
+    user_id varchar(64) not null,
+    credit_class varchar(24) not null,
+    grant_type varchar(32) not null,
+    campaign_code varchar(64),
+    source_reference varchar(160),
+    idempotency_key varchar(180) not null unique,
+    granted_count integer not null,
+    available_count integer not null,
+    reserved_count integer not null default 0,
+    consumed_count integer not null default 0,
+    expired_count integer not null default 0,
+    revoked_count integer not null default 0,
+    status varchar(24) not null,
+    expires_at timestamp,
+    reason varchar(240) not null,
+    created_by varchar(64) not null,
+    created_at timestamp not null,
+    updated_at timestamp not null,
+    constraint fk_turn_credit_grant_user foreign key (user_id) references app_user(id) on delete cascade,
+    constraint ck_turn_credit_grant_nonnegative check (
+        granted_count >= 0 and available_count >= 0 and reserved_count >= 0 and consumed_count >= 0
+        and expired_count >= 0 and revoked_count >= 0
+    ),
+    constraint ck_turn_credit_grant_conservation check (
+        granted_count = available_count + reserved_count + consumed_count + expired_count + revoked_count
+    )
+);
+
+create index idx_turn_credit_grant_user_available
+    on turn_credit_grant(user_id, status, expires_at, available_count);
+create index idx_turn_credit_grant_campaign on turn_credit_grant(campaign_code, created_at);
+
+create table turn_credit_reservation (
+    id varchar(80) primary key,
+    user_id varchar(64) not null,
+    save_id varchar(80) not null,
+    request_id varchar(80) not null,
+    grant_id varchar(80) not null,
+    amount integer not null default 1,
+    status varchar(24) not null,
+    expires_at timestamp not null,
+    turn_id varchar(80),
+    created_at timestamp not null,
+    updated_at timestamp not null,
+    unique(user_id, save_id, request_id),
+    constraint fk_turn_credit_reservation_user foreign key (user_id) references app_user(id) on delete cascade,
+    constraint fk_turn_credit_reservation_grant foreign key (grant_id) references turn_credit_grant(id),
+    constraint ck_turn_credit_reservation_amount check (amount > 0)
+);
+
+create index idx_turn_credit_reservation_expiry on turn_credit_reservation(status, expires_at);
+create index idx_turn_credit_reservation_grant on turn_credit_reservation(grant_id, status);
+
+create table turn_credit_ledger (
+    id varchar(80) primary key,
+    user_id varchar(64) not null,
+    grant_id varchar(80) not null,
+    reservation_id varchar(80),
+    event_type varchar(24) not null,
+    event_key varchar(200) not null unique,
+    available_delta integer not null default 0,
+    reserved_delta integer not null default 0,
+    consumed_delta integer not null default 0,
+    balance_after integer not null,
+    business_reference varchar(160),
+    operator_id varchar(64) not null,
+    remark varchar(240) not null,
+    created_at timestamp not null,
+    constraint fk_turn_credit_ledger_user foreign key (user_id) references app_user(id) on delete cascade,
+    constraint fk_turn_credit_ledger_grant foreign key (grant_id) references turn_credit_grant(id),
+    constraint fk_turn_credit_ledger_reservation foreign key (reservation_id) references turn_credit_reservation(id)
+);
+
+create index idx_turn_credit_ledger_user_time on turn_credit_ledger(user_id, created_at);
+create index idx_turn_credit_ledger_grant_time on turn_credit_ledger(grant_id, created_at);
+
 create table v014_game_save (
     id varchar(80) primary key,
     user_id varchar(64) not null,

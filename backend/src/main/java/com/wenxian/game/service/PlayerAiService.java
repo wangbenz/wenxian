@@ -4,7 +4,10 @@ import com.wenxian.game.api.GameApiException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.wenxian.game.config.RuntimeAiConfigService;
 import com.wenxian.game.config.SecretCipher;
+import com.wenxian.game.credit.TurnCreditModels.Balance;
+import com.wenxian.game.credit.TurnCreditService;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpHeaders;
@@ -43,16 +46,32 @@ public class PlayerAiService {
     private final RuntimeAiConfigService runtimeConfig;
     private final RestClient restClient;
     private final String masterKey;
+    private final TurnCreditService turnCredits;
+    private final boolean turnCreditEnabled;
 
+    @Autowired
     public PlayerAiService(JdbcTemplate jdbc,
                            RuntimeAiConfigService runtimeConfig,
                            RestClient.Builder restClientBuilder,
                            @Value("${deepseek.base-url:https://api.deepseek.com}") String baseUrl,
-                           @Value("${game.ai-config-master-key:wenxian-local-config-key-change-me}") String masterKey) {
+                           @Value("${game.ai-config-master-key:wenxian-local-config-key-change-me}") String masterKey,
+                           TurnCreditService turnCredits,
+                           @Value("${wenxian.turn-credit.enabled:false}") boolean turnCreditEnabled) {
         this.jdbc = jdbc;
         this.runtimeConfig = runtimeConfig;
         this.restClient = restClientBuilder.baseUrl(baseUrl).build();
         this.masterKey = masterKey;
+        this.turnCredits = turnCredits;
+        this.turnCreditEnabled = turnCreditEnabled;
+    }
+
+    /** 兼容轻量单元测试；正式 Spring 运行时使用带回合账户依赖的构造器。 */
+    public PlayerAiService(JdbcTemplate jdbc,
+                           RuntimeAiConfigService runtimeConfig,
+                           RestClient.Builder restClientBuilder,
+                           String baseUrl,
+                           String masterKey) {
+        this(jdbc, runtimeConfig, restClientBuilder, baseUrl, masterKey, null, false);
     }
 
     @PostConstruct
@@ -64,11 +83,20 @@ public class PlayerAiService {
 
     public Settings settings(String userId) {
         Credential credential = credential(userId);
-        int used = usedTurns(userId);
-        int limit = accountLimit();
+        LegacyQuota legacy = legacyQuota(userId);
+        int used = legacy.usedTurns();
+        int limit = legacy.turnLimit();
+        int remaining = legacy.remainingTurns();
+        if (turnCreditEnabled && turnCredits != null) {
+            turnCredits.ensureLegacyOpening(userId, legacy.turnLimit(), legacy.usedTurns());
+            Balance balance = turnCredits.balance(userId);
+            limit = balance.granted();
+            used = balance.consumed();
+            remaining = balance.available();
+        }
         boolean customEnabled = customApiEnabled();
         boolean usingCustom = customEnabled && credential != null && "ACTIVE".equals(credential.status());
-        return new Settings(limit, used, Math.max(0, limit - used), customEnabled,
+        return new Settings(limit, used, remaining, customEnabled,
                 usingCustom, credential != null, credential == null ? null : credential.maskedSuffix(),
                 credential == null ? null : credential.status(),
                 credential == null ? null : credential.lastVerifiedAt());
@@ -109,6 +137,14 @@ public class PlayerAiService {
                     contactText,
                     supportGroup(contactText));
         }
+    }
+
+    /** 新回合账户沿用既有玩家提示契约，不向前端暴露内部账本异常。 */
+    public void throwPublicTurnLimit() {
+        String contactText = configValue(CONTACT_TEXT_KEY, DEFAULT_CONTACT_TEXT);
+        throw new PublicTurnLimitException(
+                configValue(ACCOUNT_LIMIT_MESSAGE_KEY, DEFAULT_LIMIT_MESSAGE),
+                accountLimit(), contactText, supportGroup(contactText));
     }
 
     private String supportGroup(String contactText) {
@@ -179,6 +215,13 @@ public class PlayerAiService {
         } catch (NumberFormatException ignored) {
             return 20;
         }
+    }
+
+    /** 只供回合账户首次建立期初余额使用；之后以新账本为准。 */
+    public LegacyQuota legacyQuota(String userId) {
+        int used = usedTurns(userId);
+        int limit = accountLimit();
+        return new LegacyQuota(limit, used, Math.max(0, limit - used));
     }
 
     public boolean customApiEnabled() {
@@ -258,6 +301,8 @@ public class PlayerAiService {
     public record Settings(int turnLimit, int usedTurns, int remainingTurns, boolean customApiEnabled,
                            boolean usingCustomApi, boolean credentialConfigured, String maskedSuffix,
                            String credentialStatus, Instant lastVerifiedAt) {}
+
+    public record LegacyQuota(int turnLimit, int usedTurns, int remainingTurns) {}
 
     public record Route(RuntimeAiConfigService.RuntimeConfig config, String source) {
         public boolean custom() { return USER_SOURCE.equals(source); }

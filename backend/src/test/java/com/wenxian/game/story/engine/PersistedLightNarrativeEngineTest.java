@@ -1017,6 +1017,58 @@ class PersistedLightNarrativeEngineTest {
         }
     }
 
+    @Test
+    void trustedTurnUsesCreditReservationAndFailureReturnsIt() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            StoryPatch accepted = turnPatch("行至溪边", "你沿着山路走到溪边，在水声前停下。", 30,
+                    List.of(), List.of(), new DecisionCheckpoint(false, null));
+            StoryTurnAgent successful = (context, route) -> new StoryTurnAgent.Generated(accepted, List.of(
+                    new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                            "{}", "credit-success", "test-model", 80, 140, 20)));
+            PlayerAiService playerAi = testPlayerAi(jdbc);
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    successful, playerAi, true);
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            engine.takeTurn(USER, created.saveId(), new TurnRequest("走到溪边", "request-credit-ok", 1));
+
+            assertEquals(19, jdbc.queryForObject("""
+                    select coalesce(sum(available_count),0) from turn_credit_grant where user_id=?
+                    """, Integer.class, USER.userId()));
+            assertEquals(1, jdbc.queryForObject("""
+                    select count(*) from turn_credit_reservation where user_id=? and status='CONSUMED'
+                    """, Integer.class, USER.userId()));
+            assertEquals(0, jdbc.queryForObject("""
+                    select coalesce(sum(used_count),0) from user_daily_quota where user_id=?
+                    """, Integer.class, USER.userId()), "新账本启用后不得再写旧额度计数");
+
+            StoryTurnAgent failing = (context, route) -> {
+                throw new IllegalStateException("模拟模型中断");
+            };
+            PersistedLightNarrativeEngine failingEngine = trustedEngine(database, saves, entities, memories,
+                    failing, playerAi, true);
+            assertThrows(RuntimeException.class, () -> failingEngine.takeTurn(USER, created.saveId(),
+                    new TurnRequest("继续前行", "request-credit-fail", 2)));
+
+            assertEquals(19, jdbc.queryForObject("""
+                    select coalesce(sum(available_count),0) from turn_credit_grant where user_id=?
+                    """, Integer.class, USER.userId()));
+            assertEquals(1, jdbc.queryForObject("""
+                    select count(*) from turn_credit_reservation where user_id=? and status='RELEASED'
+                    """, Integer.class, USER.userId()));
+            assertEquals(1, jdbc.queryForObject("select count(*) from story_turn where save_id=?",
+                    Integer.class, created.saveId()));
+        } finally {
+            database.shutdown();
+        }
+    }
+
     private PersistedLightNarrativeEngine engine(EmbeddedDatabase database, StorySaveRepository saves,
                                                   StoryEntityRepository entities,
                                                   StoryMemoryRepository memories) {
@@ -1042,6 +1094,15 @@ class PersistedLightNarrativeEngineTest {
                                                          StoryMemoryRepository memories,
                                                          StoryTurnAgent trustedAgent,
                                                          PlayerAiService playerAi) {
+        return trustedEngine(database, saves, entities, memories, trustedAgent, playerAi, false);
+    }
+
+    private PersistedLightNarrativeEngine trustedEngine(EmbeddedDatabase database, StorySaveRepository saves,
+                                                         StoryEntityRepository entities,
+                                                         StoryMemoryRepository memories,
+                                                         StoryTurnAgent trustedAgent,
+                                                         PlayerAiService playerAi,
+                                                         boolean creditEnabled) {
         JdbcTemplate jdbc = new JdbcTemplate(database);
         StoryTurnRepository turns = new StoryTurnRepository(jdbc, mapper);
         StoryConversationRepository conversations = new StoryConversationRepository(jdbc);
@@ -1052,12 +1113,16 @@ class PersistedLightNarrativeEngineTest {
                 conversations, turns, projections, new PromptContextAssembler(), trustedAgent, trustedReducer);
         GameVersionService releases = new GameVersionService(jdbc);
         TransactionTemplate transactions = new TransactionTemplate(new DataSourceTransactionManager(database));
+        var creditService = new com.wenxian.game.credit.TurnCreditService(
+                new com.wenxian.game.credit.TurnCreditRepository(jdbc), transactions);
+        var turnAccess = new com.wenxian.game.credit.PlatformTurnAccessService(
+                playerAi, creditService, creditEnabled);
         StoryTurnCommitService commit = new StoryTurnCommitService(saves, turns, entities, memories,
-                conversations, projections, releases, playerAi, transactions, mapper);
+                conversations, projections, releases, turnAccess, transactions, mapper);
         return new PersistedLightNarrativeEngine(saves, turns, entities, memories, conversations,
                 new StoryCorrectionRepository(jdbc, mapper), preparation, commit, null,
                 new V014StateReducer(), new StubModels(), new V014WorldCatalog(false), null,
-                new ActiveSavePolicyService(jdbc), playerAi, releases, transactions, mapper,
+                new ActiveSavePolicyService(jdbc), turnAccess, releases, transactions, mapper,
                 true, true, "https://example.com");
     }
 

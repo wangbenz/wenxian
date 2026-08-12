@@ -1,7 +1,7 @@
 # 《问仙录》中文数据字典
 
 > 状态：当前命卷统一读写 `story_*`；旧产品表仅用于内部审计，不再向 H5 提供旧版档案入口
-> 最近更新：2026-08-11
+> 最近更新：2026-08-12
 
 本文档记录表职责、关键字段、权威数据和迁移关系。每次修改表结构或关键字段时必须同步更新本文档。所有正式 MySQL 迁移脚本都必须使用中文 `COMMENT` 说明表、关键字段和重要索引用途。
 
@@ -10,7 +10,7 @@
 | 分层 | 权威内容 | 主要表 |
 |---|---|---|
 | 账号层 | 账号、密码、会话、注册与登录 | `app_user`、`user_session`、`auth_*` |
-| 运营层 | 公告、白名单、额度、配置 | `release_note`、`game_access_whitelist`、`gameplay_config`、`user_daily_quota` |
+| 运营层 | 公告、白名单、平台回合账户、配置 | `release_note`、`game_access_whitelist`、`gameplay_config`、`turn_credit_*` |
 | 模型层 | 供应商、模型、加密密钥与用量 | `ai_provider_*`、`user_ai_provider_credential`、`user_model_preference`、`ai_usage_log` |
 | 命卷层 | 当前状态、回合、实体、记忆与修正 | `story_*` |
 | 统计层 | 产品事件、日活、日汇总与留存批次 | `analytics_*` |
@@ -107,6 +107,37 @@
 | `story_migration_batch_limit` | 单次预演或准备的最大命卷数，范围 1—50 |
 
 现有 `current_game_version` 在迁移期继续兼容，完成改造后改为 `current_release_version`。现有 `v014_platform_provider/model` 改为模型层中性配置。
+
+`account_public_turn_limit` 在回合账户切换前继续作为旧账号统一上限；切换后只作为“新账号初始赠送数量”的兼容配置来源，不能再动态改变所有旧账号余额。`user_daily_quota` 只保留旧扣减审计和期初迁移依据，不再承担目标余额。
+
+### `turn_credit_grant`
+
+账号平台回合的权威赠送批次。初始赠送、内测、有效反馈、运营活动和未来购买均写成独立批次，四份命卷共享。
+
+| 关键字段 | 中文含义与约束 |
+|---|---|
+| `credit_class` | `SPONSORED` 为平台赠送，`PURCHASED` 为未来购买预留；首版不实现支付 |
+| `grant_type` | 中性发放来源，如 `INITIAL/PLAYTEST/FEEDBACK/ACTIVITY/ADMIN/LEGACY_OPENING`；后续可扩展签到和邀请，不改账户核心 |
+| `idempotency_key` | 外部业务唯一键，同一奖励重试只能生成一个批次 |
+| `granted_count` | 批次最初总数，必须等于其余五类数量之和 |
+| `available_count` | 当前可预占回合数 |
+| `reserved_count` | 模型生成中、尚未提交正式回合的数量 |
+| `consumed_count` | 已随正式剧情回合成功消费数量 |
+| `expired_count/revoked_count` | 到期或被运营撤销的未用数量 |
+| `status` | `ACTIVE/EXHAUSTED/EXPIRED/REVOKED` |
+| `expires_at` | 可空；非空批次优先按最近到期顺序消费 |
+
+守恒约束 `granted = available + reserved + consumed + expired + revoked` 是数据库和服务共同保护的业务不变量。
+
+### `turn_credit_reservation`
+
+模型调用前的跨进程临时预占。唯一键 `(user_id, save_id, request_id)` 保证同一 H5 行动网络重试不会重复占用。成功回合转为 `CONSUMED`；模型、审阅、业务或事务失败转为 `RELEASED`；超时或批次到期转为 `EXPIRED`。`save_id` 不绑定具体版本命卷外键，以便统一命卷切换期间兼容，但所有权必须由调用方在预占前校验。
+
+### `turn_credit_ledger`
+
+平台回合不可变审计流水。`event_key` 保证每次 `GRANT/RESERVE/RELEASE/CONSUME/EXPIRE/REVOKE` 只记录一次；三类 delta 记录可用、预占和已消费的变化，`balance_after` 保存事件完成后的账号可用余额。流水只保存稳定业务编号和非隐私原因，不保存邮箱、密钥、Prompt或剧情正文。
+
+2026-08-12 已在共享 RDS 增量创建三张表，并使用带 `V015-CREDIT-SMOKE` 标记的测试批次验证真实 MySQL 事务；测试剩余可用余额已全部撤销。代码已支持通过 `wenxian.turn-credit.enabled` 仅在 V0.15 进程开启新账户：首次访问会从旧上限与历史成功扣减幂等生成 `LEGACY_OPENING`，后续成功回合只写新账本，失败回合释放预占。V0.14 进程保持开关关闭，继续使用旧额度路径，二者不会双写同一成功回合。
 
 ### `ai_provider_config`
 

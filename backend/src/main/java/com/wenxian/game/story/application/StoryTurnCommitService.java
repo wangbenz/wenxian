@@ -3,7 +3,7 @@ package com.wenxian.game.story.application;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.service.GameVersionService;
-import com.wenxian.game.service.PlayerAiService;
+import com.wenxian.game.credit.PlatformTurnAccessService;
 import com.wenxian.game.story.agent.StoryModelRoute;
 import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryProjection;
@@ -44,7 +44,7 @@ public class StoryTurnCommitService {
     private final StoryConversationRepository conversations;
     private final StoryProjectionPersistenceMapper projections;
     private final GameVersionService releases;
-    private final PlayerAiService playerAi;
+    private final PlatformTurnAccessService turnAccess;
     private final TransactionTemplate transactions;
     private final ObjectMapper mapper;
 
@@ -56,7 +56,7 @@ public class StoryTurnCommitService {
             StoryConversationRepository conversations,
             StoryProjectionPersistenceMapper projections,
             GameVersionService releases,
-            PlayerAiService playerAi,
+            PlatformTurnAccessService turnAccess,
             TransactionTemplate transactions,
             ObjectMapper mapper) {
         this.saves = saves;
@@ -66,7 +66,7 @@ public class StoryTurnCommitService {
         this.conversations = conversations;
         this.projections = projections;
         this.releases = releases;
-        this.playerAi = playerAi;
+        this.turnAccess = turnAccess;
         this.transactions = transactions;
         this.mapper = mapper;
     }
@@ -74,16 +74,16 @@ public class StoryTurnCommitService {
     /** 提交回合；调用方必须在调用模型前已经完成额度检查。 */
     public Committed commit(String userId, StoredSave saved, String requestId, String playerAction,
                             StoryTurnPreparationService.Prepared prepared, StoryModelRoute route,
-                            PlayerAiService.Route quotaRoute) {
+                            PlatformTurnAccessService.Permit turnPermit) {
         Committed committed = transactions.execute(status -> commitInTransaction(
-                userId, saved, requestId, playerAction, prepared, route, quotaRoute));
+                userId, saved, requestId, playerAction, prepared, route, turnPermit));
         if (committed == null) throw new IllegalStateException("可信回合事务没有返回结果");
         return committed;
     }
 
     private Committed commitInTransaction(String userId, StoredSave saved, String requestId, String playerAction,
                                           StoryTurnPreparationService.Prepared prepared, StoryModelRoute route,
-                                          PlayerAiService.Route quotaRoute) {
+                                          PlatformTurnAccessService.Permit turnPermit) {
         StoryProjection after = prepared.applied().projection();
         StoryPatch accepted = prepared.applied().acceptedPatch();
         int nextTurn = saved.turnNumber() + 1;
@@ -104,7 +104,8 @@ public class StoryTurnCommitService {
                 saved.stateSchemaVersion(), nextTurn, saved.worldCode(), saved.status(), releases.current());
         persistChangedEntities(saved.id(), nextTurn, prepared, after, accepted, Instant.now());
         persistNewMemories(saved.id(), nextTurn, prepared.before(), after);
-        turns.insert(new NewTurn("story-turn-" + UUID.randomUUID(), saved.id(), requestId, nextTurn,
+        String turnId = "story-turn-" + UUID.randomUUID();
+        turns.insert(new NewTurn(turnId, saved.id(), requestId, nextTurn,
                 playerAction, accepted.narrative(), mapper.valueToTree(choices), mapper.valueToTree(accepted),
                 prepared.before().worldTimeMinutes(), after.worldTimeMinutes(), saved.engineCode(),
                 saved.engineVersion(), PROMPT_VERSION, route.provider(),
@@ -114,7 +115,7 @@ public class StoryTurnCommitService {
         if (accepted.rollingSummary() != null && !accepted.rollingSummary().isBlank()) {
             conversations.updateSummary(saved.id(), accepted.rollingSummary().strip(), nextTurn);
         }
-        playerAi.recordSuccessfulInvocation(userId, quotaRoute);
+        turnAccess.consume(turnPermit, userId, turnId);
         return new Committed(revision, nextTurn, state, accepted);
     }
 

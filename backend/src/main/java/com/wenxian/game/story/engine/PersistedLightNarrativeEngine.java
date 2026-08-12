@@ -13,6 +13,7 @@ import com.wenxian.game.service.PlayerAiService;
 import com.wenxian.game.story.agent.StoryModelFailureException;
 import com.wenxian.game.story.agent.StoryModelRoute;
 import com.wenxian.game.story.application.StoryTurnCommitService;
+import com.wenxian.game.credit.PlatformTurnAccessService;
 import com.wenxian.game.story.application.StoryTurnPreparationService;
 import com.wenxian.game.story.domain.StoryActionPreconditionException;
 import com.wenxian.game.story.domain.StoryPatch;
@@ -110,7 +111,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
     private final V014WorldCatalog worlds;
     private final V014CharacterRouteService characterRoutes;
     private final ActiveSavePolicyService savePolicy;
-    private final PlayerAiService playerAi;
+    private final PlatformTurnAccessService turnAccess;
     private final GameVersionService releases;
     private final TransactionTemplate transactions;
     private final ObjectMapper mapper;
@@ -136,7 +137,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
             V014WorldCatalog worlds,
             V014CharacterRouteService characterRoutes,
             ActiveSavePolicyService savePolicy,
-            PlayerAiService playerAi,
+            PlatformTurnAccessService turnAccess,
             GameVersionService releases,
             TransactionTemplate transactions,
             ObjectMapper mapper,
@@ -157,7 +158,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         this.worlds = worlds;
         this.characterRoutes = characterRoutes;
         this.savePolicy = savePolicy;
-        this.playerAi = playerAi;
+        this.turnAccess = turnAccess;
         this.releases = releases;
         this.transactions = transactions;
         this.mapper = mapper;
@@ -292,10 +293,11 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         V014State before = readState(saved);
         ResolvedRoute route = models.resolve(user.userId(), legacyBaseUrl);
         PlayerAiService.Route quotaRoute = quotaRoute(route);
-        playerAi.assertPublicQuota(user.userId(), quotaRoute);
+        PlatformTurnAccessService.Permit turnPermit = turnAccess.reserve(
+                user.userId(), saveId, request.requestId(), quotaRoute);
 
         if (trustedTurnsEnabled) {
-            return takeTrustedTurn(user, saved, request, route, quotaRoute);
+            return takeTrustedTurn(user, saved, request, route, turnPermit);
         }
 
         V014StoryAgent.Generated generated;
@@ -306,6 +308,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
             generated = agent.generate(user.userId(), before, conversations.summary(saveId), recent,
                     request.action(), route);
         } catch (RuntimeException error) {
+            releaseTurnAfterFailure(turnPermit, "剧情模型调用失败，释放平台回合", error);
             if (route.hasCustomCredential() && causedByAuthentication(error)) {
                 models.markCredentialInvalid(user.userId(), route.provider(), "AUTHENTICATION_FAILED");
                 throw new GameApiException(HttpStatus.CONFLICT, "PERSONAL_KEY_REJECTED", "CREDENTIAL",
@@ -316,27 +319,36 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
             throw error;
         }
 
-        V014StateReducer.Applied applied = reducer.apply(before, request.action(), generated.envelope());
-        Long revision = transactions.execute(status -> {
-            JsonNode core = coreState(applied.state());
-            long next = saves.updateState(user.userId(), saveId, saved.revision(), core,
-                    STATE_SCHEMA_VERSION, applied.state().turnNumber(), applied.state().world().code(),
-                    saved.status(), releases.current());
-            synchronizeEntities(saveId, applied.state());
-            appendNewMemories(saveId, applied.state());
-            turns.insert(new NewTurn("story-turn-" + UUID.randomUUID(), saveId, request.requestId(),
-                    applied.state().turnNumber(), request.action(), applied.state().narrative(),
-                    mapper.valueToTree(applied.state().choices()), readJson(generated.rawPatchJson()),
-                    before.worldTimeMinutes(), applied.state().worldTimeMinutes(), ENGINE_CODE, ENGINE_VERSION,
-                    PROMPT_VERSION, route.provider(), route.model(), route.credentialSource(),
-                    generated.result().inputTokens(), generated.result().outputTokens(), 0, 0,
-                    generated.result().latencyMs(), releases.current(), Instant.now()));
-            if (!applied.rollingSummary().isBlank()) {
-                conversations.updateSummary(saveId, applied.rollingSummary(), applied.state().turnNumber());
-            }
-            playerAi.recordSuccessfulInvocation(user.userId(), quotaRoute);
-            return next;
-        });
+        V014StateReducer.Applied applied;
+        Long revision;
+        try {
+            applied = reducer.apply(before, request.action(), generated.envelope());
+            V014StateReducer.Applied accepted = applied;
+            revision = transactions.execute(status -> {
+                JsonNode core = coreState(accepted.state());
+                long next = saves.updateState(user.userId(), saveId, saved.revision(), core,
+                        STATE_SCHEMA_VERSION, accepted.state().turnNumber(), accepted.state().world().code(),
+                        saved.status(), releases.current());
+                synchronizeEntities(saveId, accepted.state());
+                appendNewMemories(saveId, accepted.state());
+                String turnId = "story-turn-" + UUID.randomUUID();
+                turns.insert(new NewTurn(turnId, saveId, request.requestId(),
+                        accepted.state().turnNumber(), request.action(), accepted.state().narrative(),
+                        mapper.valueToTree(accepted.state().choices()), readJson(generated.rawPatchJson()),
+                        before.worldTimeMinutes(), accepted.state().worldTimeMinutes(), ENGINE_CODE, ENGINE_VERSION,
+                        PROMPT_VERSION, route.provider(), route.model(), route.credentialSource(),
+                        generated.result().inputTokens(), generated.result().outputTokens(), 0, 0,
+                        generated.result().latencyMs(), releases.current(), Instant.now()));
+                if (!accepted.rollingSummary().isBlank()) {
+                    conversations.updateSummary(saveId, accepted.rollingSummary(), accepted.state().turnNumber());
+                }
+                turnAccess.consume(turnPermit, user.userId(), turnId);
+                return next;
+            });
+        } catch (RuntimeException error) {
+            releaseTurnAfterFailure(turnPermit, "剧情状态未能提交，释放平台回合", error);
+            throw error;
+        }
         StoredSave updated = new StoredSave(saved.id(), saved.userId(), saved.slotNo(), saved.activeSlotNo(), saved.status(),
                 applied.state().world().code(), saved.engineCode(), saved.engineVersion(), STATE_SCHEMA_VERSION,
                 saved.sourceType(), saved.sourceEdition(), saved.sourceSaveId(), saved.parentSaveId(),
@@ -347,7 +359,8 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
     }
 
     private SaveResponse takeTrustedTurn(UserIdentity user, StoredSave saved, TurnRequest request,
-                                         ResolvedRoute resolvedRoute, PlayerAiService.Route quotaRoute) {
+                                         ResolvedRoute resolvedRoute,
+                                         PlatformTurnAccessService.Permit turnPermit) {
         StoryModelRoute route = new StoryModelRoute(resolvedRoute.baseUrl(), resolvedRoute.apiKey(),
                 resolvedRoute.provider(), resolvedRoute.adapterType(), resolvedRoute.model(),
                 resolvedRoute.credentialSource());
@@ -355,6 +368,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         try {
             prepared = trustedTurnPreparation.prepare(saved, request.action(), route);
         } catch (RuntimeException error) {
+            releaseTurnAfterFailure(turnPermit, "可信剧情生成或审阅失败，释放平台回合", error);
             if (resolvedRoute.hasCustomCredential() && causedByAuthentication(error)) {
                 models.markCredentialInvalid(user.userId(), resolvedRoute.provider(), "AUTHENTICATION_FAILED");
                 throw new GameApiException(HttpStatus.CONFLICT, "PERSONAL_KEY_REJECTED", "CREDENTIAL",
@@ -384,15 +398,29 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         }
         try {
             trustedTurnCommit.commit(user.userId(), saved, request.requestId(), request.action(),
-                    prepared, route, quotaRoute);
-        } catch (OptimisticLockingFailureException error) {
-            throw new GameApiException(HttpStatus.CONFLICT, "STATE_CONFLICT", "STATE",
-                    "命卷已经在别处发生变化", "已阻止覆盖较新的记录，本次未消耗回合。",
-                    List.of("刷新当前命卷后继续"), true, false, false, Map.of(),
-                    "trusted story turn revision conflict", error);
+                    prepared, route, turnPermit);
+        } catch (RuntimeException error) {
+            releaseTurnAfterFailure(turnPermit, "可信剧情事务未能提交，释放平台回合", error);
+            if (error instanceof OptimisticLockingFailureException) {
+                throw new GameApiException(HttpStatus.CONFLICT, "STATE_CONFLICT", "STATE",
+                        "命卷已经在别处发生变化", "已阻止覆盖较新的记录，本次未消耗回合。",
+                        List.of("刷新当前命卷后继续"), true, false, false, Map.of(),
+                        "trusted story turn revision conflict", error);
+            }
+            throw error;
         }
         StoredSave updated = requireOwned(user, saved.id());
         return response(user.userId(), updated, readState(updated), resolvedRoute);
+    }
+
+    /** 归还失败回合时不覆盖原始业务异常；归还失败的预占仍可由超时清理任务恢复。 */
+    private void releaseTurnAfterFailure(PlatformTurnAccessService.Permit permit, String reason,
+                                         RuntimeException original) {
+        try {
+            turnAccess.release(permit, reason);
+        } catch (RuntimeException releaseFailure) {
+            original.addSuppressed(releaseFailure);
+        }
     }
 
     @Override
