@@ -6,11 +6,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -21,13 +23,16 @@ public class AdminController {
     private final AdminService adminService;
     private final AdminAnalyticsService analyticsService;
     private final AnalyticsAggregationService aggregationService;
+    private final TurnCreditAdminService turnCreditAdminService;
 
     public AdminController(AdminService adminService,
                            AdminAnalyticsService analyticsService,
-                           AnalyticsAggregationService aggregationService) {
+                           AnalyticsAggregationService aggregationService,
+                           TurnCreditAdminService turnCreditAdminService) {
         this.adminService = adminService;
         this.analyticsService = analyticsService;
         this.aggregationService = aggregationService;
+        this.turnCreditAdminService = turnCreditAdminService;
     }
 
     @PostMapping("/login")
@@ -43,7 +48,7 @@ public class AdminController {
     @PostMapping("/change-password")
     public Map<String, Object> changePassword(
             @RequestBody Map<String, Object> body,
-            @org.springframework.web.bind.annotation.RequestHeader("Authorization") String auth) {
+            @RequestHeader("Authorization") String auth) {
         String token = auth != null && auth.startsWith("Bearer ") ? auth.substring(7) : "";
         String oldPassword = string(body.get("oldPassword"));
         String newPassword = string(body.get("newPassword"));
@@ -179,6 +184,42 @@ public class AdminController {
     public Map<String, Object> unlockPlayerAuth(@PathVariable String userId) {
         adminService.unlockPlayerAuth(userId);
         return Map.of("ok", true, "message", "登录与注册限制已解除");
+    }
+
+    @GetMapping("/turn-credits")
+    public Map<String, Object> turnCreditAccounts(
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return turnCreditAdminService.accounts(search, page, size);
+    }
+
+    @GetMapping("/turn-credits/{userId}")
+    public Map<String, Object> turnCreditDetail(@PathVariable String userId) {
+        return turnCreditAdminService.detail(userId);
+    }
+
+    @PostMapping("/turn-credits/{userId}/grants")
+    public Map<String, Object> grantTurnCredits(
+            @PathVariable String userId,
+            @RequestBody Map<String, Object> body,
+            @org.springframework.web.bind.annotation.RequestHeader("Authorization") String auth) {
+        Instant expiresAt = parseInstant(string(body.get("expiresAt")));
+        return turnCreditAdminService.grant(userId, new TurnCreditAdminService.GrantRequest(
+                        string(body.get("operationId")), string(body.get("grantType")),
+                        parseInt(body.get("count"), 0), string(body.get("campaignCode")),
+                        string(body.get("sourceReference")), expiresAt, string(body.get("reason"))),
+                adminService.authenticatedOperatorId(bearerToken(auth)));
+    }
+
+    @PostMapping("/turn-credits/{userId}/grants/{grantId}/revoke")
+    public Map<String, Object> revokeTurnCredits(
+            @PathVariable String userId,
+            @PathVariable String grantId,
+            @RequestBody Map<String, Object> body,
+            @RequestHeader("Authorization") String auth) {
+        return turnCreditAdminService.revoke(userId, grantId, string(body.get("reason")),
+                adminService.authenticatedOperatorId(bearerToken(auth)));
     }
 
     @GetMapping("/users/{userId}/lives/{saveId}/turns")
@@ -342,5 +383,14 @@ public class AdminController {
 
     private static String bearerToken(String auth) {
         return auth != null && auth.startsWith("Bearer ") ? auth.substring(7) : "";
+    }
+
+    private static Instant parseInstant(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return Instant.parse(value);
+        } catch (RuntimeException invalid) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "到期时间格式不正确");
+        }
     }
 }

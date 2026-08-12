@@ -1821,6 +1821,11 @@ public class AdminService {
 
     // ---- helpers ----
 
+    /** 供同一管理服务内的高风险业务取得已认证管理员ID，不向前端返回会话信息。 */
+    String authenticatedOperatorId(String token) {
+        return authenticatedAdminId(token);
+    }
+
     private String authenticatedAdminId(String token) {
         if (token == null || token.isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "登录已过期，请重新登录");

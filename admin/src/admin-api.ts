@@ -122,6 +122,29 @@ export type GenerationProvider = {
     platformEnabled: boolean; userSelectable: boolean; activePlatform: boolean; updatedAt: string }>;
 };
 export type GameplayConfig = { accountPublicTurnLimit: number; limitMessage: string; customApiEnabled: boolean; customApiUsers: number; invalidCredentialUsers: number; todayPublicInvocations: number; todayCustomTurns: number; maxActiveSaves: number; activeSaveCount: number; usersWithMultipleSaves: number };
+export type TurnCreditBalance = {
+  granted: number; available: number; reserved: number; consumed: number; expired: number; revoked: number;
+  nearestExpiry: string | null; ledgerInitialized: boolean;
+};
+export type TurnCreditAccount = TurnCreditBalance & {
+  userId: string; email: string; status: string; lastLoginAt: string | null;
+};
+export type TurnCreditAccountPage = { total: number; page: number; size: number; rows: TurnCreditAccount[] };
+export type TurnCreditGrant = {
+  id: string; creditClass: "SPONSORED" | "PURCHASED"; grantType: string; campaignCode: string | null;
+  sourceReference: string | null; granted: number; available: number; reserved: number; consumed: number;
+  expired: number; revoked: number; status: "ACTIVE" | "EXHAUSTED" | "EXPIRED" | "REVOKED";
+  expiresAt: string | null; reason: string; createdBy: string; createdAt: string; updatedAt: string;
+};
+export type TurnCreditLedger = {
+  id: string; grantId: string; reservationId: string | null; eventType: string;
+  availableDelta: number; reservedDelta: number; consumedDelta: number; balanceAfter: number;
+  businessReference: string | null; operatorId: string; remark: string; createdAt: string;
+};
+export type TurnCreditDetail = {
+  user: { userId: string; email: string; status: string; registeredAt: string; lastLoginAt: string | null };
+  balance: TurnCreditBalance; grants: TurnCreditGrant[]; ledger: TurnCreditLedger[];
+};
 export type RegistrationConfig = { maxUsers: number; currentUsers: number; remainingSlots: number; limitMessage: string; contactText: string };
 export type AccessControl = {
   mode: "OPEN" | "WHITELIST"; title: string; message: string; resumeAt: string;
@@ -204,6 +227,10 @@ export const adminApi = {
   userDetail: (userId: string) => request<UserDetail>(`/users/${encodeURIComponent(userId)}`),
   resetPlayerPassword: (userId: string) => request<{ temporaryPassword: string }>(`/users/${encodeURIComponent(userId)}/temporary-password`, { method: "POST" }),
   unlockPlayerAuth: (userId: string) => request<{ ok: boolean; message: string }>(`/users/${encodeURIComponent(userId)}/unlock-auth`, { method: "POST" }),
+  turnCreditAccounts: (search = "", page = 0, size = 20) => request<TurnCreditAccountPage>(`/turn-credits?search=${encodeURIComponent(search)}&page=${page}&size=${size}`),
+  turnCreditDetail: (userId: string) => request<TurnCreditDetail>(`/turn-credits/${encodeURIComponent(userId)}`),
+  grantTurnCredits: (userId: string, payload: { operationId: string; grantType: string; count: number; campaignCode: string; sourceReference: string; expiresAt: string; reason: string }) => request<TurnCreditDetail>(`/turn-credits/${encodeURIComponent(userId)}/grants`, { method: "POST", body: JSON.stringify(payload) }),
+  revokeTurnCredits: (userId: string, grantId: string, reason: string) => request<TurnCreditDetail>(`/turn-credits/${encodeURIComponent(userId)}/grants/${encodeURIComponent(grantId)}/revoke`, { method: "POST", body: JSON.stringify({ reason }) }),
   userTurns: (userId: string, saveId: string, page = 0, size = 20, turn = "") => request<TurnPage>(`/users/${encodeURIComponent(userId)}/lives/${encodeURIComponent(saveId)}/turns?page=${page}&size=${size}${turn ? `&turn=${encodeURIComponent(turn)}` : ""}`),
   userAdjudications: (userId: string, saveId: string, limit = 20) => request<ActionAdjudication[]>(`/users/${encodeURIComponent(userId)}/lives/${encodeURIComponent(saveId)}/adjudications?limit=${limit}`),
   executions: (saveId: string, turn?: number) => request<AgentExecution[]>(`/agent-executions/${encodeURIComponent(saveId)}${turn === undefined ? "" : `?turn=${turn}`}`),

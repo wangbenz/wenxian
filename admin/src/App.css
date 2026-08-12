@@ -382,6 +382,31 @@ td small { display: block; max-width: 220px; margin-top: 3px; overflow: hidden; 
 .turn-ranking > button > b { color: #356ae6; font-size: 21px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .turn-ranking > button > b small { margin-left: 2px; color: #75817b; font-size: 9px; font-weight: 400; }
 
+/* Turn credit accounts */
+.credit-balance-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.credit-balance-grid > span { min-width: 0; padding: 15px; color: #667085; background: #fff; border: 1px solid #dbe2ec; font-size: 11px; }
+.credit-balance-grid strong { display: block; margin: 5px 0 2px; color: #101828; font-size: 25px; font-variant-numeric: tabular-nums; }
+.credit-balance-grid small { color: #98a2b3; }
+.credit-grant-form { margin: 22px 0; padding: 18px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow); }
+.credit-grant-form > div:first-child { margin-bottom: 15px; }
+.credit-grant-form h3, .credit-grant-form p { margin-bottom: 5px; }
+.credit-grant-form p { color: var(--muted); font-size: 12px; }
+.credit-grant-form .form-grid { margin-bottom: 14px; }
+.credit-grant-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.credit-grant-list > article { min-width: 0; padding: 15px; background: #fff; border: 1px solid #dbe2ec; }
+.credit-grant-list article > header, .credit-grant-list article > footer { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.credit-grant-list article > header > div { min-width: 0; display: grid; gap: 3px; }
+.credit-grant-list article > header small, .credit-grant-list article > footer small { overflow: hidden; color: #98a2b3; text-overflow: ellipsis; white-space: nowrap; }
+.credit-grant-list article > div:not(.credit-revoke) { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 13px 0; background: #e4e7ec; }
+.credit-grant-list article > div > span { min-width: 0; padding: 9px; color: #667085; background: #f8fafc; font-size: 10px; }
+.credit-grant-list article > div strong { display: block; margin-top: 3px; color: #1d2939; font-size: 16px; }
+.credit-grant-list article > p { min-height: 3em; margin: 0 0 12px; color: #667085; font-size: 12px; line-height: 1.55; }
+.credit-grant-list article > footer { padding-top: 11px; border-top: 1px solid #eaecf0; }
+.credit-revoke { margin-top: 13px; padding: 12px; background: #fff6f4; border: 1px solid #e6c6c2; }
+.credit-revoke > div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 9px; }
+.credit-positive { color: #2f8f67; }
+.credit-negative { color: var(--danger); }
+
 /* Drawers and modals */
 .drawer-mask, .modal-mask { position: fixed; z-index: 50; inset: 0; display: flex; justify-content: flex-end; background: #10182870; }
 .drawer { width: min(620px, 94vw); height: 100dvh; padding: 0 28px 28px; overflow: auto; background: #f8fafc; box-shadow: -20px 0 60px #10182833; }
@@ -518,6 +543,7 @@ td small { display: block; max-width: 220px; margin-top: 3px; overflow: hidden; 
   .admin-account-grid { grid-template-columns: 1fr; }
   .activation-funnel { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .turn-ranking { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .credit-grant-list { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 720px) {
@@ -579,6 +605,10 @@ td small { display: block; max-width: 220px; margin-top: 3px; overflow: hidden; 
   .activation-funnel { grid-template-columns: 1fr; padding: 12px; }
   .activation-funnel article { padding: 12px; }
   .turn-ranking { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .credit-balance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .credit-grant-list article > footer { align-items: stretch; flex-direction: column; }
+  .credit-grant-list article > footer button { width: 100%; }
+  .credit-revoke > div { display: grid; grid-template-columns: 1fr; }
   .panel-title-row { align-items: flex-start; }
   .panel-title-row > span:first-child { line-height: 1.5; }
   .operation-alerts { flex-direction: column; gap: 7px; }
