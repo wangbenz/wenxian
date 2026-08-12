@@ -143,6 +143,9 @@ class TurnCreditAdminServiceTest {
         var rows = (java.util.List<Map<String, Object>>) result.get("rows");
         assertEquals("player@example.com", rows.getFirst().get("email"));
         assertEquals(false, rows.getFirst().get("ledgerInitialized"));
+        assertEquals(20, rows.getFirst().get("granted"));
+        assertEquals(17, rows.getFirst().get("available"));
+        assertEquals(3, rows.getFirst().get("consumed"));
         assertEquals(0, jdbc.queryForObject("select count(*) from turn_credit_grant", Integer.class));
     }
 }

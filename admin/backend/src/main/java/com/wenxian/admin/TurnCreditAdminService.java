@@ -39,6 +39,7 @@ public class TurnCreditAdminService {
         int safePage = Math.max(0, page);
         int safeSize = Math.max(1, Math.min(100, size));
         String pattern = "%" + normalized + "%";
+        int legacyLimit = configInt("account_public_turn_limit", 20, 1, 1000);
         long total = number("""
                 select count(*) from app_user u
                 where (?='' or lower(u.email) like lower(?) or u.id like ?)
@@ -54,7 +55,8 @@ public class TurnCreditAdminService {
                        coalesce(sum(g.revoked_count),0) revoked_count,
                        min(case when g.status='ACTIVE' and g.available_count>0 and g.expires_at>?
                                 then g.expires_at end) nearest_expiry,
-                       coalesce(sum(case when g.grant_type='LEGACY_OPENING' then 1 else 0 end),0) opening_count
+                       coalesce(sum(case when g.grant_type='LEGACY_OPENING' then 1 else 0 end),0) opening_count,
+                       coalesce((select sum(q.used_count) from user_daily_quota q where q.user_id=u.id),0) legacy_used_count
                 from app_user u
                 left join turn_credit_grant g on g.user_id=u.id
                 where (?='' or lower(u.email) like lower(?) or u.id like ?)
@@ -67,14 +69,16 @@ public class TurnCreditAdminService {
             item.put("email", row.getString("email"));
             item.put("status", row.getString("status"));
             item.put("lastLoginAt", instant(row.getTimestamp("last_login_at")));
-            item.put("granted", row.getInt("granted_count"));
-            item.put("available", row.getInt("available_count"));
+            boolean initialized = row.getInt("opening_count") > 0;
+            int legacyUsed = Math.min(legacyLimit, row.getInt("legacy_used_count"));
+            item.put("granted", initialized ? row.getInt("granted_count") : legacyLimit);
+            item.put("available", initialized ? row.getInt("available_count") : legacyLimit - legacyUsed);
             item.put("reserved", row.getInt("reserved_count"));
-            item.put("consumed", row.getInt("consumed_count"));
+            item.put("consumed", initialized ? row.getInt("consumed_count") : legacyUsed);
             item.put("expired", row.getInt("expired_count"));
             item.put("revoked", row.getInt("revoked_count"));
             item.put("nearestExpiry", instant(row.getTimestamp("nearest_expiry")));
-            item.put("ledgerInitialized", row.getInt("opening_count") > 0);
+            item.put("ledgerInitialized", initialized);
             return item;
         }, Timestamp.from(Instant.now()), Timestamp.from(Instant.now()), normalized, pattern, pattern,
                 safeSize, safePage * safeSize);
@@ -234,7 +238,7 @@ public class TurnCreditAdminService {
 
     private Map<String, Object> balance(String userId) {
         Instant now = Instant.now();
-        return jdbc.queryForObject("""
+        Map<String, Object> result = jdbc.queryForObject("""
                 select coalesce(sum(granted_count),0) granted,
                        coalesce(sum(case when status='ACTIVE' and (expires_at is null or expires_at>?)
                                          then available_count else 0 end),0) available,
@@ -258,6 +262,15 @@ public class TurnCreditAdminService {
             item.put("ledgerInitialized", row.getInt("opening_count") > 0);
             return item;
         }, Timestamp.from(now), Timestamp.from(now), userId);
+        if (Boolean.FALSE.equals(result.get("ledgerInitialized"))) {
+            int limit = configInt("account_public_turn_limit", 20, 1, 1000);
+            int used = (int) Math.min(limit, number(
+                    "select coalesce(sum(used_count),0) from user_daily_quota where user_id=?", userId));
+            result.put("granted", limit);
+            result.put("available", limit - used);
+            result.put("consumed", used);
+        }
+        return result;
     }
 
     private int availableBalance(String userId, Instant now) {

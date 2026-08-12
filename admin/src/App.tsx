@@ -448,58 +448,160 @@ const creditEvent = (value: string) => ({ GRANT: "发放", RESERVE: "预占", RE
 const signed = (value: number) => value > 0 ? `+${value}` : `${value}`;
 
 function TurnCredits() {
-  const [search, setSearch] = useState(""); const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [page, setPage] = useState(0); const [selected, setSelected] = useState<string | null>(null);
-  useEffect(() => { const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 350); return () => window.clearTimeout(timer); }, [search]);
-  const query = useLoad<TurnCreditAccountPage>(() => adminApi.turnCreditAccounts(debouncedSearch, page, 20), [debouncedSearch, page]);
+  const [search, setSearch] = useState("");
+  const [queryText, setQueryText] = useState("");
+  const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<string | null>(null);
+  const query = useLoad<TurnCreditAccountPage>(
+    () => queryText ? adminApi.turnCreditAccounts(queryText, page, 20) : Promise.resolve({ total: 0, page: 0, size: 20, rows: [] }),
+    [queryText, page],
+  );
+  const submitSearch = (event: FormEvent) => {
+    event.preventDefault();
+    const next = search.trim();
+    setPage(0);
+    setQueryText(next);
+    setSelected(null);
+  };
+  const clearSearch = () => {
+    setSearch("");
+    setQueryText("");
+    setPage(0);
+    setSelected(null);
+  };
   return <>
-    <div className="page-intro"><div><h2>账号回合账户</h2><p>查询、赠送或撤销未使用回合。余额由批次和流水计算，不能直接修改。</p></div><button className="secondary" onClick={query.reload}>刷新账户</button></div>
-    <div className="filters"><label className="search-field"><span className="sr-only">搜索回合账户</span><input placeholder="输入完整邮箱或用户 ID" value={search} onChange={(event) => { setSearch(event.currentTarget.value); setPage(0); }} /></label></div>
-    <State loading={query.loading} error={query.error}>
-      <Panel title={`回合账户 · ${query.data?.total ?? 0}`}><Table label="账号回合账户列表"><thead><tr><th>玩家</th><th>可用</th><th>生成中</th><th>已使用</th><th>累计赠送</th><th>到期/撤销</th><th>账本状态</th><th>最近登录</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>{query.data?.rows.map((row: TurnCreditAccount) => <tr key={row.userId}><td>{row.email}<small title={row.userId}>{shortId(row.userId)}</small></td><td><strong>{num(row.available)}</strong></td><td>{num(row.reserved)}</td><td>{num(row.consumed)}</td><td>{num(row.granted)}</td><td>{num(row.expired + row.revoked)}<small>到期 {row.expired} · 撤销 {row.revoked}</small></td><td>{row.ledgerInitialized ? <Badge value="ACTIVE" /> : <Badge value="PENDING" />}<small>{row.ledgerInitialized ? "已建立期初" : "首次赠送时自动建立"}</small></td><td>{fmt(row.lastLoginAt)}</td><td><button className="table-action" onClick={() => setSelected(row.userId)}>管理</button></td></tr>)}</tbody></Table>{query.data?.rows.length === 0 && <p className="empty-state">没有符合条件的玩家账号。</p>}<Pager page={page} size={20} total={query.data?.total ?? 0} onPage={setPage} /></Panel>
-    </State>
+    <div className="page-intro credit-page-intro"><div><p className="kicker">PLAYER SUPPORT</p><h2>给玩家赠送回合</h2><p>先找到玩家，再选择赠送原因和数量。系统会保留完整记录，不会覆盖玩家原有回合。</p></div></div>
+    <ol className="credit-guide" aria-label="回合赠送步骤">
+      <li><span>1</span><div><strong>查找玩家</strong><small>输入邮箱或用户 ID</small></div></li>
+      <li><span>2</span><div><strong>核对余额</strong><small>确认是正确的账号</small></div></li>
+      <li><span>3</span><div><strong>选择原因并赠送</strong><small>到账后可查看记录</small></div></li>
+    </ol>
+    <form className="credit-search-bar" onSubmit={submitSearch}>
+      <label><span>玩家邮箱或用户 ID</span><input autoComplete="off" autoFocus placeholder="例如 player@example.com" value={search} onChange={(event) => setSearch(event.currentTarget.value)} /></label>
+      <button className="primary" disabled={!search.trim()} type="submit">查找玩家</button>
+      {queryText && <button className="secondary" onClick={clearSearch} type="button">重新查找</button>}
+    </form>
+    {!queryText && <section className="credit-start-state"><strong>请先查找需要赠送回合的玩家</strong><p>建议输入完整邮箱，可避免选择错误账号。页面不会默认加载全部玩家。</p></section>}
+    {queryText && <State loading={query.loading} error={query.error}>
+      <section className="credit-search-results">
+        <header><div><h3>查找结果</h3><p>找到 {num(query.data?.total ?? 0)} 个账号，请核对邮箱后选择。</p></div><button className="secondary" onClick={query.reload}>刷新结果</button></header>
+        <div>{query.data?.rows.map((row: TurnCreditAccount) => <button className="credit-account-row" key={row.userId} onClick={() => setSelected(row.userId)} type="button">
+          <span className="credit-account-identity"><strong>{row.email}</strong><small>{shortId(row.userId)} · 最近登录 {relativeTime(row.lastLoginAt)}</small></span>
+          <span><small>可用回合</small><strong>{num(row.available)}</strong></span>
+          <span><small>已经使用</small><strong>{num(row.consumed)}</strong></span>
+          <span><small>暂时占用</small><strong>{num(row.reserved)}</strong></span>
+          <b>选择账号</b>
+        </button>)}</div>
+        {query.data?.rows.length === 0 && <p className="empty-state">没有找到该玩家，请检查邮箱或用户 ID 是否正确。</p>}
+        <Pager page={page} size={20} total={query.data?.total ?? 0} onPage={setPage} />
+      </section>
+    </State>}
     {selected && <TurnCreditDrawer userId={selected} onChanged={query.reload} onClose={() => setSelected(null)} />}
   </>;
 }
 
+const GRANT_SOURCE_OPTIONS = [
+  { value: "PLAYTEST", label: "灰度测试", help: "邀请玩家参与新版本验证", reason: "灰度测试回合" },
+  { value: "FEEDBACK", label: "问题反馈", help: "奖励有效问题或建议", reason: "有效问题反馈奖励" },
+  { value: "ACTIVITY", label: "运营活动", help: "签到、邀请或群内活动", reason: "运营活动奖励" },
+  { value: "ADMIN", label: "人工补发", help: "补偿异常或其他原因", reason: "管理员人工补发" },
+] as const;
+
 function TurnCreditDrawer({ userId, onChanged, onClose }: { userId: string; onChanged: () => void; onClose: () => void }) {
   useOverlay(onClose);
   const query = useLoad<TurnCreditDetail>(() => adminApi.turnCreditDetail(userId), [userId]);
-  const [grantType, setGrantType] = useState("PLAYTEST"); const [count, setCount] = useState(50);
-  const [campaignCode, setCampaignCode] = useState("V015_GRAY"); const [sourceReference, setSourceReference] = useState("");
-  const [expiresAt, setExpiresAt] = useState(""); const [reason, setReason] = useState("V0.15 灰度测试回合");
-  const [busy, setBusy] = useState(false); const [notice, setNotice] = useState("");
-  const [revokeGrant, setRevokeGrant] = useState<TurnCreditGrant | null>(null); const [revokeReason, setRevokeReason] = useState("");
+  const [grantType, setGrantType] = useState("PLAYTEST");
+  const [count, setCount] = useState(50);
+  const [campaignCode, setCampaignCode] = useState("V015_GRAY");
+  const [sourceReference, setSourceReference] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [reason, setReason] = useState("灰度测试回合");
+  const [historyView, setHistoryView] = useState<"grants" | "ledger">("grants");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [revokeGrant, setRevokeGrant] = useState<TurnCreditGrant | null>(null);
+  const [revokeReason, setRevokeReason] = useState("");
   const operationId = useRef("");
+  const selectSource = (value: typeof GRANT_SOURCE_OPTIONS[number]) => {
+    setGrantType(value.value);
+    setReason(value.reason);
+    setCampaignCode(value.value === "PLAYTEST" ? "V015_GRAY" : "");
+  };
   const grant = async () => {
     if (busy) return;
     if (!operationId.current) operationId.current = crypto.randomUUID();
     setBusy(true); setNotice("");
     try {
-      await adminApi.grantTurnCredits(userId, { operationId: operationId.current, grantType, count, campaignCode: campaignCode.trim(), sourceReference: sourceReference.trim(), expiresAt: expiresAt ? new Date(expiresAt).toISOString() : "", reason: reason.trim() });
-      operationId.current = ""; setNotice(`已赠送 ${count} 回，流水已记录。`); query.reload(); onChanged();
-    } catch (error) { setNotice(error instanceof Error ? error.message : "赠送失败"); }
-    finally { setBusy(false); }
+      await adminApi.grantTurnCredits(userId, {
+        operationId: operationId.current, grantType, count, campaignCode: campaignCode.trim(),
+        sourceReference: sourceReference.trim(), expiresAt: expiresAt ? new Date(expiresAt).toISOString() : "",
+        reason: reason.trim(),
+      });
+      operationId.current = "";
+      setNotice(`赠送成功：${query.data?.user.email ?? "该玩家"} 已增加 ${count} 个可用回合。`);
+      query.reload();
+      onChanged();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "赠送失败，请稍后重试");
+    } finally {
+      setBusy(false);
+    }
   };
   const revoke = async () => {
     if (!revokeGrant || busy || !revokeReason.trim()) return;
     setBusy(true); setNotice("");
     try {
       await adminApi.revokeTurnCredits(userId, revokeGrant.id, revokeReason.trim());
-      setNotice(`已撤销该批次剩余的 ${revokeGrant.available} 回。`); setRevokeGrant(null); setRevokeReason(""); query.reload(); onChanged();
-    } catch (error) { setNotice(error instanceof Error ? error.message : "撤销失败"); }
-    finally { setBusy(false); }
+      setNotice(`已撤销该批次剩余的 ${revokeGrant.available} 个回合，玩家已使用的回合不受影响。`);
+      setRevokeGrant(null); setRevokeReason(""); query.reload(); onChanged();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "撤销失败，请刷新后重试");
+    } finally {
+      setBusy(false);
+    }
   };
   const balance = query.data?.balance;
-  return <div className="drawer-mask" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><aside aria-labelledby="credit-drawer-title" aria-modal="true" className="drawer drawer-wide" role="dialog"><header className="drawer-header"><div><p className="kicker">TURN CREDIT ACCOUNT</p><h2 id="credit-drawer-title">{query.data?.user.email || "回合账户"}</h2></div><button aria-label="关闭回合账户" className="drawer-close" onClick={onClose}>×</button></header><State loading={query.loading} error={query.error}>{query.data && balance && <>
-    <section className="detail-section"><h3>当前余额</h3><div className="credit-balance-grid"><span>可用回合<strong>{num(balance.available)}</strong><small>四份命卷共享</small></span><span>生成中<strong>{num(balance.reserved)}</strong><small>失败后自动释放</small></span><span>已使用<strong>{num(balance.consumed)}</strong><small>仅成功回合扣除</small></span><span>累计赠送<strong>{num(balance.granted)}</strong><small>到期 {balance.expired} · 撤销 {balance.revoked}</small></span></div>{!balance.ledgerInitialized && <p className="inline-warning">该账号尚未建立期初账本；首次赠送时会先按旧额度和已用回合自动建立。</p>}</section>
-    <section className="credit-grant-form"><div><h3>赠送回合</h3><p>所有字段会写入赠送批次和审计流水，不会覆盖原有余额。</p></div><div className="form-grid"><label>赠送来源<select value={grantType} onChange={(event) => setGrantType(event.currentTarget.value)}><option value="PLAYTEST">灰度测试</option><option value="FEEDBACK">问题反馈</option><option value="ACTIVITY">运营活动</option><option value="ADMIN">人工赠送</option></select></label><label>赠送数量<input min="1" max="1000" type="number" value={count} onChange={(event) => setCount(Number(event.currentTarget.value))} /></label><label>活动编码<input maxLength={64} placeholder="例如 V015_GRAY" value={campaignCode} onChange={(event) => setCampaignCode(event.currentTarget.value)} /></label><label>来源编号<input maxLength={160} placeholder="反馈编号或测试名单编号" value={sourceReference} onChange={(event) => setSourceReference(event.currentTarget.value)} /></label><label>到期时间（可不填）<input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.currentTarget.value)} /></label><label>赠送原因<input maxLength={240} value={reason} onChange={(event) => setReason(event.currentTarget.value)} /></label></div><button className="primary" disabled={busy || count < 1 || count > 1000 || !reason.trim()} onClick={() => void grant()}>{busy ? "正在处理…" : `确认赠送 ${count} 回`}</button></section>
-    {notice && <p className="notice" role="status">{notice}</p>}
-    <section className="detail-section"><h3>赠送批次</h3><div className="credit-grant-list">{query.data.grants.map((item) => <article key={item.id}><header><div><strong>{creditSource(item.grantType)}</strong><small>{item.campaignCode || item.sourceReference || shortId(item.id)}</small></div><Badge value={item.status} /></header><div><span>赠送<strong>{item.granted}</strong></span><span>可用<strong>{item.available}</strong></span><span>预占<strong>{item.reserved}</strong></span><span>已用<strong>{item.consumed}</strong></span></div><p>{item.reason}</p><footer><small>{fmt(item.createdAt)}{item.expiresAt ? ` · ${fmt(item.expiresAt)} 到期` : " · 长期有效"}</small>{item.creditClass === "SPONSORED" && item.status === "ACTIVE" && item.available > 0 && <button className="danger-link" disabled={item.reserved > 0 || busy} onClick={() => { setRevokeGrant(item); setRevokeReason(""); }}>{item.reserved > 0 ? "生成中，暂不可撤销" : "撤销未使用"}</button>}</footer>{revokeGrant?.id === item.id && <div className="credit-revoke"><label>撤销原因<textarea autoFocus maxLength={240} rows={2} value={revokeReason} onChange={(event) => setRevokeReason(event.currentTarget.value)} /></label><div><button className="secondary" onClick={() => setRevokeGrant(null)}>取消</button><button className="danger-link" disabled={busy || !revokeReason.trim()} onClick={() => void revoke()}>确认撤销 {item.available} 回</button></div></div>}</article>)}</div>{query.data.grants.length === 0 && <p className="empty-state">尚无赠送批次。</p>}</section>
-    <section className="detail-section"><h3>最近流水</h3><Panel title="不可变回合流水"><Table label="回合账户流水"><thead><tr><th>类型</th><th>可用变化</th><th>预占变化</th><th>消费变化</th><th>变动后余额</th><th>说明</th><th>操作方</th><th>时间</th></tr></thead><tbody>{query.data.ledger.map((item) => <tr key={item.id}><td>{creditEvent(item.eventType)}</td><td className={item.availableDelta < 0 ? "credit-negative" : "credit-positive"}>{signed(item.availableDelta)}</td><td>{signed(item.reservedDelta)}</td><td>{signed(item.consumedDelta)}</td><td><strong>{item.balanceAfter}</strong></td><td className="wide">{item.remark}<small>{item.businessReference || shortId(item.grantId)}</small></td><td>{item.operatorId}</td><td>{fmt(item.createdAt)}</td></tr>)}</tbody></Table>{query.data.ledger.length === 0 && <p className="empty-state">尚无账户流水。</p>}</Panel></section>
-  </>}</State></aside></div>;
+  return <div className="drawer-mask" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <aside aria-labelledby="credit-drawer-title" aria-modal="true" className="drawer credit-drawer" role="dialog">
+      <header className="drawer-header"><div><p className="kicker">TURN SUPPORT</p><h2 id="credit-drawer-title">{query.data?.user.email || "正在读取玩家…"}</h2></div><button aria-label="关闭回合赠送" className="drawer-close" onClick={onClose}>×</button></header>
+      <State loading={query.loading} error={query.error}>{query.data && balance && <>
+        <section className="credit-account-summary">
+          <div><span>当前可用</span><strong>{num(balance.available)}<small> 回</small></strong><p>该账号下所有命卷共同使用</p></div>
+          <dl><div><dt>已使用</dt><dd>{num(balance.consumed)}</dd></div><div><dt>暂时占用</dt><dd>{num(balance.reserved)}</dd></div><div><dt>累计获得</dt><dd>{num(balance.granted)}</dd></div></dl>
+        </section>
+        {!balance.ledgerInitialized && <p className="inline-warning">这是旧账号。首次赠送时系统会自动衔接原有额度和已用回合，无需人工换算。</p>}
+        <section className="credit-grant-flow">
+          <header><span>赠送回合</span><strong>选择一种赠送原因</strong></header>
+          <div className="credit-source-grid">{GRANT_SOURCE_OPTIONS.map((item) => <button aria-pressed={grantType === item.value} key={item.value} onClick={() => selectSource(item)} type="button"><strong>{item.label}</strong><small>{item.help}</small></button>)}</div>
+          <div className="credit-amount-section">
+            <label>赠送数量<input aria-label="赠送数量" max="1000" min="1" type="number" value={count} onChange={(event) => setCount(Number(event.currentTarget.value))} /></label>
+            <div aria-label="常用赠送数量" className="credit-amount-options">{[10, 20, 50, 100].map((amount) => <button aria-pressed={count === amount} key={amount} onClick={() => setCount(amount)} type="button">{amount} 回</button>)}</div>
+          </div>
+          <label>操作说明<input maxLength={240} placeholder="说明为什么赠送，方便以后核对" value={reason} onChange={(event) => setReason(event.currentTarget.value)} /></label>
+          <details className="credit-advanced"><summary>补充记录信息（可不填）</summary><div className="form-grid">
+            <label>反馈或活动编号<input maxLength={160} placeholder="例如 WX-问题编号" value={sourceReference} onChange={(event) => setSourceReference(event.currentTarget.value)} /></label>
+            <label>活动批次<input maxLength={64} placeholder="例如 V015_GRAY" value={campaignCode} onChange={(event) => setCampaignCode(event.currentTarget.value)} /></label>
+            <label className="full">到期时间<input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.currentTarget.value)} /><small>留空表示长期有效</small></label>
+          </div></details>
+          <div className="credit-confirm-row"><p>确认后，<strong>{query.data.user.email}</strong> 将增加 <strong>{num(count)} 回</strong>；原有余额不会被覆盖。</p><button className="primary" disabled={busy || count < 1 || count > 1000 || !reason.trim()} onClick={() => void grant()}>{busy ? "正在处理…" : `确认赠送 ${count} 回`}</button></div>
+        </section>
+        {notice && <p className="notice" role="status">{notice}</p>}
+        <section className="credit-history">
+          <header><div><h3>账户记录</h3><p>用于核对赠送、使用和撤销情况。</p></div><div className="range-switch"><button aria-pressed={historyView === "grants"} onClick={() => setHistoryView("grants")}>赠送批次</button><button aria-pressed={historyView === "ledger"} onClick={() => setHistoryView("ledger")}>余额流水</button></div></header>
+          {historyView === "grants" ? <div className="credit-grant-list">{query.data.grants.map((item) => <article key={item.id}>
+            <header><div><strong>{creditSource(item.grantType)}</strong><small>{item.sourceReference || item.campaignCode || shortId(item.id)}</small></div><Badge value={item.status} /></header>
+            <div><span>本次赠送<strong>{item.granted}</strong></span><span>仍可使用<strong>{item.available}</strong></span><span>已经使用<strong>{item.consumed}</strong></span><span>暂时占用<strong>{item.reserved}</strong></span></div>
+            <p>{item.reason}</p>
+            <footer><small>{fmt(item.createdAt)}{item.expiresAt ? ` · ${fmt(item.expiresAt)} 到期` : " · 长期有效"}</small>{item.creditClass === "SPONSORED" && item.status === "ACTIVE" && item.available > 0 && <button className="danger-link" disabled={item.reserved > 0 || busy} onClick={() => { setRevokeGrant(item); setRevokeReason(""); }}>{item.reserved > 0 ? "有回合正在生成，暂不可撤销" : `撤销剩余 ${item.available} 回`}</button>}</footer>
+            {revokeGrant?.id === item.id && <div className="credit-revoke"><p>只会撤销尚未使用的 {item.available} 回，已使用记录不会改变。</p><label>撤销原因<textarea autoFocus maxLength={240} rows={2} value={revokeReason} onChange={(event) => setRevokeReason(event.currentTarget.value)} /></label><div><button className="secondary" onClick={() => setRevokeGrant(null)}>取消</button><button className="danger-link" disabled={busy || !revokeReason.trim()} onClick={() => void revoke()}>确认撤销</button></div></div>}
+          </article>)}</div> : <Table label="回合余额流水"><thead><tr><th>发生了什么</th><th>可用变化</th><th>占用变化</th><th>已用变化</th><th>变动后可用</th><th>说明</th><th>时间</th></tr></thead><tbody>{query.data.ledger.map((item) => <tr key={item.id}><td>{creditEvent(item.eventType)}</td><td className={item.availableDelta < 0 ? "credit-negative" : "credit-positive"}>{signed(item.availableDelta)}</td><td>{signed(item.reservedDelta)}</td><td>{signed(item.consumedDelta)}</td><td><strong>{item.balanceAfter}</strong></td><td className="wide">{item.remark}<small>{item.operatorId}</small></td><td>{fmt(item.createdAt)}</td></tr>)}</tbody></Table>}
+          {historyView === "grants" && query.data.grants.length === 0 && <p className="empty-state">尚无赠送记录。</p>}
+          {historyView === "ledger" && query.data.ledger.length === 0 && <p className="empty-state">尚无余额变化。</p>}
+        </section>
+      </>}</State>
+    </aside>
+  </div>;
 }
-
 function TurnRanking({ rows, onSelect }: { rows: TurnRankingItem[]; onSelect: (userId: string) => void }) {
   return <Panel title="当前角色回合榜 · 前 10 名"><div className="turn-ranking">{rows.map((row, index) => <button key={row.saveId} onClick={() => onSelect(row.userId)} type="button"><span className={index < 3 ? `rank rank-${index + 1}` : "rank"}>{index + 1}</span><span className="rank-player"><strong>{row.playerName || "尚未命名"}</strong><small>{row.email}</small><small>{row.realm || "尚未入道"} · {relativeTime(row.lastActiveAt)}</small></span><b>{num(row.turn)}<small>回</small></b></button>)}</div>{rows.length === 0 && <p className="empty-state">目前还没有已创建角色的玩家。</p>}<p className="panel-note">按当前存活命卷统计，前世回合不会累加；点击角色可查看完整账号与历代记录。</p></Panel>;
 }
