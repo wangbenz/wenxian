@@ -155,16 +155,42 @@ public final class PromptContextAssembler {
     }
 
     private EntityIndexEntry toIndex(EntityState value) {
-        return new EntityIndexEntry(value.id(), value.entityType(), value.name(), value.status(), value.visible(),
+        return new EntityIndexEntry(value.id(), value.entityType(), value.name(), objectiveStatus(value), value.visible(),
                 value.quantity(), value.inPossession(), value.custody(), value.abilityState(), value.lifecycle(),
                 value.relationship());
     }
 
     private EntityDetail toDetail(EntityState value) {
         JsonNode attributes = value.attributes() == null ? null : value.attributes().deepCopy();
-        return new EntityDetail(value.id(), value.entityType(), value.name(), value.status(), value.summary(),
+        return new EntityDetail(value.id(), value.entityType(), value.name(), objectiveStatus(value),
+                objectiveSummary(value),
                 attributes, value.visible(), value.quantity(), value.inPossession(), value.custody(),
                 value.abilityState(), value.lifecycle(), value.relationship());
+    }
+
+    /**
+     * 人物自由文本状态可能包含旧版本重复写入的物品保管描述，不能再作为客观事实发送给模型。
+     * 人物客观状态只由结构化生命周期、关系、身份与最后地点组成；物品保管始终从 ITEM.custody 读取。
+     */
+    private String objectiveStatus(EntityState value) {
+        if (!"CHARACTER".equalsIgnoreCase(value.entityType())) return value.status();
+        return value.lifecycle() == null ? "UNKNOWN" : value.lifecycle().name();
+    }
+
+    private String objectiveSummary(EntityState value) {
+        if (!"CHARACTER".equalsIgnoreCase(value.entityType())) return value.summary();
+        List<String> facts = new ArrayList<>();
+        JsonNode attributes = value.attributes();
+        if (attributes != null) {
+            addFact(facts, "身份", attributes.path("identity").asText(""));
+            addFact(facts, "最后确认地点", attributes.path("lastKnownLocation").asText(""));
+        }
+        if (value.relationship() != null) addFact(facts, "与主角关系", value.relationship().label());
+        return String.join("；", facts);
+    }
+
+    private void addFact(List<String> facts, String label, String value) {
+        if (present(value)) facts.add(label + "：" + value.strip());
     }
 
     private boolean isCurrentInventoryItem(EntityState value) {

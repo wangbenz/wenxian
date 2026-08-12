@@ -100,7 +100,12 @@ public interface StoryTurnAgent {
         }
     }
 
-    record Review(boolean accepted, String problem, List<StoryModelGateway.Result> modelResults) {
+    record Review(boolean accepted, String problem, boolean requiresFreshNarrative,
+                  List<StoryModelGateway.Result> modelResults) {
+        public Review(boolean accepted, String problem, List<StoryModelGateway.Result> modelResults) {
+            this(accepted, problem, false, modelResults);
+        }
+
         public Review {
             problem = problem == null ? "" : problem.strip();
             modelResults = modelResults == null ? List.of() : List.copyOf(modelResults);

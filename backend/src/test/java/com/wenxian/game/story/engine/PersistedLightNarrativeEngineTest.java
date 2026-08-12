@@ -734,7 +734,7 @@ class PersistedLightNarrativeEngineTest {
     }
 
     @Test
-    void trustedTurnRepairsOneIndependentReviewRejectionAndPersistsAllUsage() {
+    void trustedTurnRegeneratesFreshNarrativeAfterAuthorizationReviewRejection() {
         EmbeddedDatabase database = database();
         try {
             JdbcTemplate jdbc = new JdbcTemplate(database);
@@ -747,6 +747,7 @@ class PersistedLightNarrativeEngineTest {
                     List.of(), List.of(), new DecisionCheckpoint(false, null));
             AtomicInteger reviews = new AtomicInteger();
             AtomicInteger repairs = new AtomicInteger();
+            AtomicInteger freshRegenerations = new AtomicInteger();
             StoryTurnAgent reviewedAgent = new StoryTurnAgent() {
                 @Override
                 public Generated generate(StoryPromptContext context, StoryModelRoute route) {
@@ -760,7 +761,7 @@ class PersistedLightNarrativeEngineTest {
                     var result = new com.wenxian.game.story.agent.StoryModelGateway.Result(
                             "{}", "review-" + attempt, "test-model", 10, 8, 5);
                     return attempt == 0
-                            ? new Review(false, "正文擅自追问了玩家未授权的古战场", List.of(result))
+                            ? new Review(false, "正文擅自追问了玩家未授权的古战场", true, List.of(result))
                             : new Review(true, "", List.of(result));
                 }
 
@@ -769,8 +770,16 @@ class PersistedLightNarrativeEngineTest {
                                                 InvocationContext invocation, StoryPatch proposal,
                                                 String problem) {
                     repairs.incrementAndGet();
+                    throw new AssertionError("玩家授权类拒绝不应在原正文上局部修补");
+                }
+
+                @Override
+                public Generated regenerateFreshNarrative(StoryPromptContext context, StoryModelRoute route,
+                                                          InvocationContext invocation, StoryPatch proposal,
+                                                          String problem) {
+                    freshRegenerations.incrementAndGet();
                     assertTrue(problem.contains("擅自追问"));
-                    return generated(repaired, "repair", 40, 90);
+                    return generated(repaired, "fresh-regeneration", 40, 90);
                 }
 
                 private Generated generated(StoryPatch patch, String responseId, int input, int output) {
@@ -788,7 +797,8 @@ class PersistedLightNarrativeEngineTest {
                     new TurnRequest("只询问屋顶是否漏雨", "request-review-repair", 1));
 
             assertEquals(2, reviews.get());
-            assertEquals(1, repairs.get());
+            assertEquals(0, repairs.get());
+            assertEquals(1, freshRegenerations.get());
             assertEquals(repaired.narrative(), response.state().narrative());
             assertEquals(160, jdbc.queryForObject(
                     "select prompt_tokens from story_turn where save_id=?", Integer.class, created.saveId()));

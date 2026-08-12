@@ -40,6 +40,8 @@ class ModelBackedStoryTurnAgentTest {
             assertTrue(request.systemPrompt().contains("玩家没有在 action 中明确做出的任何后续决定"));
             assertTrue(request.systemPrompt().contains("必须在该行动完成的静止场景结束"));
             assertTrue(request.systemPrompt().contains("最终停止位置"));
+            assertTrue(request.systemPrompt().contains("factContract.agencyBoundary"));
+            assertTrue(request.systemPrompt().contains("不得给主角补写玩家未表达的动机"));
             assertTrue(request.systemPrompt().contains("currentInventory"));
             assertTrue(request.systemPrompt().contains("不得在一回合拆成多个重复 LANDMARK"));
             assertTrue(request.systemPrompt().contains("不得仅因本轮提到就 CREATE 新 LANDMARK"));
@@ -248,6 +250,7 @@ class ModelBackedStoryTurnAgentTest {
             assertEquals(0.0, request.temperature());
             assertEquals("deepseek-v4-flash", request.model());
             assertTrue(request.systemPrompt().contains("行动事实解析 Agent"));
+            assertTrue(request.systemPrompt().contains("agencyBoundary 必须完整解释玩家授权"));
             assertTrue(request.userPrompt().contains("ability-reflection"));
             assertTrue(request.userPrompt().contains("施展照影诀"));
             assertTrue(request.userPrompt().contains("\"coreState\""));
@@ -258,7 +261,11 @@ class ModelBackedStoryTurnAgentTest {
                     {"intentSummary":"施展已有能力观察石门","itemActionDetected":false,
                      "references":[{"mention":"照影诀","resolution":"EXISTING","entityId":"ability-reflection",
                        "entityType":"ABILITY","canonicalName":"照影诀","role":"SOURCE","expectedCustody":null}],
-                     "itemTransitions":[],"characterPreconditions":[],"stopBoundary":"观察完成后停下",
+                     "itemTransitions":[],"characterPreconditions":[],
+                     "agencyBoundary":{"authorizedActions":["施展照影诀观察石门"],
+                       "prohibitedActions":["离开石门"],"unresolvedDecisions":["是否接受入门条件"],
+                       "requiredEndState":"观察完成后仍停在石门前"},
+                     "stopBoundary":"观察完成后停下",
                      "conflict":{"present":false,"reason":"","correction":""}}
                     """, 38, 20, 90);
         };
@@ -268,6 +275,9 @@ class ModelBackedStoryTurnAgentTest {
 
         assertFalse(resolved.contract().itemActionDetected());
         assertEquals("ability-reflection", resolved.contract().references().getFirst().entityId());
+        assertEquals(List.of("施展照影诀观察石门"),
+                resolved.contract().agencyBoundary().authorizedActions());
+        assertEquals("观察完成后仍停在石门前", resolved.contract().agencyBoundary().requiredEndState());
         assertEquals(1, resolved.modelResults().size());
     }
 
@@ -275,6 +285,17 @@ class ModelBackedStoryTurnAgentTest {
     void usesIndependentFlashReviewerEvenWhenNarrativeUsesPro() throws Exception {
         StoryModelGateway gateway = request -> {
             assertEquals("deepseek-v4-flash", request.model());
+            if (request.systemPrompt().contains("玩家授权复核 Agent")) {
+                assertTrue(request.userPrompt().contains("factContract"));
+                assertTrue(request.userPrompt().contains("narrative"));
+                return result("""
+                        {"chronologicalAgencyEvents":["施展照影诀","停在石门前"],
+                         "protagonistActions":["施展照影诀"],"protagonistDecisions":[],
+                         "protagonistMotives":[],"endingState":"仍在石门前",
+                         "firstRequiredStopOccurrence":"","actionsAfterRequiredStop":[],
+                         "passed":true,"problem":""}
+                        """, 18, 12, 45);
+            }
             return result("""
                     {"reference":{"passed":true,"problem":""},
                      "inventory":{"passed":true,"problem":""},
@@ -293,6 +314,72 @@ class ModelBackedStoryTurnAgentTest {
                 new StoryTurnAgent.InvocationContext("save-review-pro", 10), proposed);
 
         assertTrue(review.accepted());
+        assertEquals(2, review.modelResults().size());
+    }
+
+    @Test
+    void dedicatedAgencyReviewRejectsReturnTripMissedByGeneralReview() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> {
+            if (calls.incrementAndGet() == 1) {
+                return result("""
+                        {"reference":{"passed":true,"problem":""},
+                         "inventory":{"passed":true,"problem":""},
+                         "authorization":{"passed":true,"problem":""},
+                         "decision":{"passed":true,"problem":""},
+                         "time":{"passed":true,"problem":""},
+                         "state":{"passed":true,"problem":""}}
+                        """, 40, 10, 90);
+            }
+            assertTrue(request.systemPrompt().contains("完整提取"));
+            assertTrue(request.systemPrompt().contains("不能因为候选最后声称"));
+            return result("""
+                    {"chronologicalAgencyEvents":["沿村东小路探索","到达杂木林口","转身返回水井"],
+                     "protagonistActions":["沿村东小路探索","转身沿原路返回水井"],
+                     "protagonistDecisions":["选择不进入杂木林并返程"],
+                     "protagonistMotives":[],"endingState":"回到水井旁",
+                     "firstRequiredStopOccurrence":"到达杂木林岔路",
+                     "actionsAfterRequiredStop":["转身沿原路返回水井"],
+                     "passed":false,"problem":"候选擅自返程，违反不返程并停在抵达位置的授权边界"}
+                    """, 22, 18, 55);
+        };
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch proposed = mapper.readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Review review = agent(gateway).review(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-agency-review", 10), proposed);
+
+        assertFalse(review.accepted());
+        assertTrue(review.requiresFreshNarrative());
+        assertTrue(review.problem().contains("擅自返程"));
+        assertEquals(2, review.modelResults().size());
+    }
+
+    @Test
+    void rejectsAgencyReviewThatClaimsPassAfterActionsBeyondRequiredStop() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> calls.incrementAndGet() == 1
+                ? result("""
+                        {"reference":{"passed":true,"problem":""},"inventory":{"passed":true,"problem":""},
+                         "authorization":{"passed":true,"problem":""},"decision":{"passed":true,"problem":""},
+                         "time":{"passed":true,"problem":""},"state":{"passed":true,"problem":""}}
+                        """, 30, 10, 50)
+                : result("""
+                        {"chronologicalAgencyEvents":["到达第一处岔路","选择主路继续前行"],
+                         "protagonistActions":["继续前行"],"protagonistDecisions":["选择主路"],
+                         "protagonistMotives":[],"endingState":"第二处岔路",
+                         "firstRequiredStopOccurrence":"第一处岔路","actionsAfterRequiredStop":["选择主路继续前行"],
+                         "passed":true,"problem":""}
+                        """, 20, 15, 45);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch proposed = mapper.readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Review review = agent(gateway).review(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-bad-agency-pass", 10), proposed);
+
+        assertFalse(review.accepted());
+        assertTrue(review.requiresFreshNarrative());
+        assertTrue(review.problem().contains("首次应停止位置之后"));
     }
 
     @Test

@@ -110,6 +110,7 @@ public class StoryTurnPreparationService {
             applied = reducer.reduce(before, generation.patch(), explicitDurationMinutes);
         } catch (IllegalArgumentException rejected) {
             StoryTurnAgent.Generated repaired = rejected instanceof StoryNarrativeFreshnessException
+                    || rejected instanceof ReviewRejectedException review && review.requiresFreshNarrative
                     ? agent.regenerateFreshNarrative(context, route, invocation,
                             generation.patch(), rejected.getMessage())
                     : agent.repairRejected(context, route, invocation,
@@ -169,7 +170,18 @@ public class StoryTurnPreparationService {
 
     private void rejectReview(StoryTurnAgent.Review review) {
         if (review != null && !review.accepted()) {
-            throw new IllegalArgumentException("独立回合审阅未通过：" + review.problem());
+            throw new ReviewRejectedException("独立回合审阅未通过：" + review.problem(),
+                    review.requiresFreshNarrative());
+        }
+    }
+
+    /** 审阅类别决定恢复方式，避免通过解析中文错误文本选择修复流程。 */
+    private static final class ReviewRejectedException extends IllegalArgumentException {
+        private final boolean requiresFreshNarrative;
+
+        private ReviewRejectedException(String message, boolean requiresFreshNarrative) {
+            super(message);
+            this.requiresFreshNarrative = requiresFreshNarrative;
         }
     }
 

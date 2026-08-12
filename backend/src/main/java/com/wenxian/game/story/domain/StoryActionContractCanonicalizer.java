@@ -23,7 +23,7 @@ public final class StoryActionContractCanonicalizer {
         if (transitions.equals(contract.itemTransitions())) return contract;
         return new StoryActionContract(contract.intentSummary(), contract.itemActionDetected(),
                 contract.references(), transitions, contract.characterPreconditions(),
-                contract.stopBoundary(), contract.conflict());
+                contract.agencyBoundary(), contract.stopBoundary(), contract.conflict());
     }
 
     private ItemTransition canonicalize(StoryProjection projection, ItemTransition transition) {

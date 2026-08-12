@@ -17,6 +17,7 @@ public record StoryActionContract(
         List<EntityReference> references,
         List<ItemTransition> itemTransitions,
         List<CharacterPrecondition> characterPreconditions,
+        PlayerAgencyBoundary agencyBoundary,
         String stopBoundary,
         Conflict conflict
 ) {
@@ -25,8 +26,24 @@ public record StoryActionContract(
         references = safe(references);
         itemTransitions = safe(itemTransitions);
         characterPreconditions = safe(characterPreconditions);
+        agencyBoundary = agencyBoundary == null
+                ? new PlayerAgencyBoundary(intentSummary.isBlank() ? List.of() : List.of(intentSummary),
+                        List.of(), List.of(), "")
+                : agencyBoundary.authorizedActions().isEmpty() && !intentSummary.isBlank()
+                ? new PlayerAgencyBoundary(List.of(intentSummary), agencyBoundary.prohibitedActions(),
+                        agencyBoundary.unresolvedDecisions(), agencyBoundary.requiredEndState())
+                : agencyBoundary;
         stopBoundary = text(stopBoundary);
         conflict = conflict == null ? new Conflict(false, "", "") : conflict;
+    }
+
+    /** 兼容行动授权边界加入前的测试替身和调用方。 */
+    public StoryActionContract(String intentSummary, boolean itemActionDetected,
+                               List<EntityReference> references, List<ItemTransition> itemTransitions,
+                               List<CharacterPrecondition> characterPreconditions, String stopBoundary,
+                               Conflict conflict) {
+        this(intentSummary, itemActionDetected, references, itemTransitions, characterPreconditions,
+                null, stopBoundary, conflict);
     }
 
     /**
@@ -66,6 +83,26 @@ public record StoryActionContract(
                                         String requiredRelationship) {
         public CharacterPrecondition(String characterId, LifecycleState requiredLifecycle) {
             this(characterId, requiredLifecycle, null);
+        }
+    }
+
+    /**
+     * 玩家本轮授予主角的行动权限。
+     *
+     * <p>它由独立行动解析请求形成，供正文模型与独立审阅共同使用。字段保存语义陈述而不是业务枚举，
+     * 因而能覆盖开放世界中的任意行动；Java 只负责完整传递，不使用关键词替玩家解释。</p>
+     */
+    public record PlayerAgencyBoundary(
+            List<String> authorizedActions,
+            List<String> prohibitedActions,
+            List<String> unresolvedDecisions,
+            String requiredEndState
+    ) {
+        public PlayerAgencyBoundary {
+            authorizedActions = safe(authorizedActions);
+            prohibitedActions = safe(prohibitedActions);
+            unresolvedDecisions = safe(unresolvedDecisions);
+            requiredEndState = text(requiredEndState);
         }
     }
 

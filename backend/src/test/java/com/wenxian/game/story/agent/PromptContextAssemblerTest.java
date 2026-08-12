@@ -9,6 +9,7 @@ import com.wenxian.game.story.agent.StoryPromptContext.PreviousTurn;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
+import com.wenxian.game.story.domain.StoryPatch.RelationshipValue;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
@@ -146,11 +147,33 @@ class PromptContextAssemblerTest {
                 context.objective().relatedEntities().stream().map(StoryPromptContext.EntityDetail::id).toList());
     }
 
+    @Test
+    void characterObjectiveContextExcludesLegacyCustodyNarrative() {
+        StoryPromptContext context = assembler.assemble(projection(), new ContextRequest(
+                "与旧日师尊交谈", List.of(),
+                new ContextSelection(Set.of("character-mentor"), Set.of("character-mentor"),
+                        Set.of(), List.of(), Set.of()), "", null));
+
+        StoryPromptContext.EntityIndexEntry index = context.objective().entityIndex().getFirst();
+        StoryPromptContext.EntityDetail detail = context.objective().relatedEntities().getFirst();
+        assertEquals("DEAD", index.status());
+        assertEquals("DEAD", detail.status());
+        assertFalse(detail.summary().contains("断剑尖"));
+        assertTrue(detail.summary().contains("旧宗门长老"));
+        assertTrue(detail.summary().contains("青石镇"));
+        assertTrue(detail.summary().contains("旧识"));
+    }
+
     private StoryProjection projection() {
         EntityState ability = new EntityState("ability-reflection", "ABILITY", "照影诀", "仍可施展",
                 "可以映照旧痕", null, true, null, null, AbilityState.MASTERED, null);
-        EntityState mentor = new EntityState("character-mentor", "CHARACTER", "旧日师尊", "已经身故",
-                "只留下残缺手札", null, true, null, null, null, LifecycleState.DEAD);
+        var mentorAttributes = JsonNodeFactory.instance.objectNode();
+        mentorAttributes.put("identity", "旧宗门长老");
+        mentorAttributes.put("lastKnownLocation", "青石镇");
+        EntityState mentor = new EntityState("character-mentor", "CHARACTER", "旧日师尊",
+                "已经身故；生前替玩家保管断剑尖", "只留下残缺手札并保管断剑尖",
+                mentorAttributes, true, null, null, null, null, LifecycleState.DEAD,
+                new RelationshipValue("旧识", "曾经交谈"));
         EntityState herbs = new EntityState("item-herbs", "ITEM", "一包灵材", "尚未清点",
                 "来源不明", JsonNodeFactory.instance.objectNode().put("source", "旧矿洞"), true,
                 new QuantityValue(false, null), true, null, null);

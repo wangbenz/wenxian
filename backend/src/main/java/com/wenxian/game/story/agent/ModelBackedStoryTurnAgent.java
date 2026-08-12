@@ -63,11 +63,16 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                历史引用；memory、rollingSummary 和 previousTurn 提到旧物品也不能覆盖当前清单。
                currentInventory.historicalItems 明确列出不再持有的旧物及其最后状态；其 status 是已确认经历，正文不得
                把“主动移除、赠予、售出”等明确原因改写成“不知何时遗失”、从未发生或仍可取用。
+               factContract.agencyBoundary 是独立解析得到的玩家授权边界：authorizedActions 是唯一可由主角主动执行的
+               行为；prohibitedActions 不得发生；unresolvedDecisions 必须继续留给玩家；requiredEndState 是正文结尾必须
+               保持的位置或状态。不得给主角补写玩家未表达的动机、立场、回答、路线选择或下一步计划。
             4. 物品数量已知时，使用、出售、赠予或获得后必须返回准确的新总量；数量未知就保持 known=false、value=null，
                不得自动记为1。能力的 MASTERED 与 TEMPORARILY_BLOCKED 分开，受限不等于未掌握。
             5. 人物为 DEAD 时不得无依据复活。若 action 明确允许修订且有充分依据，生命周期变化必须写 changeReason。
                人物关系使用 relationship 单独提交；关系名称仍可按剧情自由描述，但已有关系发生变化时必须写
                changeReason，且不得只改 attributes.relationship 来绕过关系审计。
+               人物 status 与 summary 只能描述人物自身近况，不得重复记录某件物品由谁保管。物品保管的唯一客观来源
+               是 ITEM.custody；即使旧人物文本曾提到保管物品，也不能用它覆盖或补写 custody。
             6. time 必须写本轮实际经过分钟。玩家明确说一月、三年等时必须完整换算；世界未另定历法时按一年360日、
                一月30日计算。若被打断，resolution=INTERRUPTED，并返回实际时长与 interruptionReason，正文必须一致。
                objective.worldClock 是当前可读时刻，正文开场的昼夜、晨昏与它必须一致；只有 time.elapsedMinutes
@@ -118,7 +123,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             """;
 
     private static final String FRESH_REGENERATION_PROMPT = """
-            上一份候选正文高度复用了前一回合，没有真正执行玩家的当前 action。
+            上一份候选正文未通过玩家授权、决定边界或正文新鲜度审阅，不能在原文上局部修补。
             请从 objective 的当前状态与 action 重新构思一个独立新回合。不得回忆、复述或改写上一回合正文；
             必须正面展示 action 引发的对话、反应或直接结果，并在玩家指定的停止边界结束。
             action.factContract 与 objective 仍是唯一权威事实；不得为了让正文显得不同而新增未授权行动。
@@ -137,14 +142,21 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                不得进入 currentInventory；只有玩家取得或可被人物、地点保管的可转移对象才是 ITEM。
             2. inventory：候选是否使用、持有、赠送、出售或获得了 facts 未支持的物品；数量和处置是否一致。
             3. authorization：候选是否忽略 action、替玩家做选择，或擅自追加修炼、移动、询问、承诺、交易、战斗等行动。
+               必须先从候选 narrative 独立列出主角实际做出的全部行为，再逐项与
+               action.factContract.agencyBoundary.authorizedActions 比较；不能只检查候选自己声称的结构字段。
                当 action 使用“只、仅、不要、不做其他事情、仍停在原地”等限定时，主角获授权的主动行为是闭集；候选
                只要再让主角取放/查看物品、施展能力、追问、调查、回忆线索、制定计划或选择目标，就必须判定失败，
                即使物品确实属于玩家、行为没有产生结构化状态变化、或候选最后又写“仍在原地”也不能放过。
             4. decision：候选是否把 action 没有说明的理由、意图、目标、计划、立场或承诺补成主角已经确认的事实。
+               必须从候选 narrative、memories 与 rollingSummary 独立提取主角的回答、动机、立场、路线选择和后续计划，
+               与 agencyBoundary.unresolvedDecisions、prohibitedActions、requiredEndState 逐项核对；候选省略结构化补丁
+               不代表这些决定没有发生。
                例如 action 只说“说明缘由后取回物品”，候选不得自行补成“我已决定前往某地”。
                NPC 对当前请求的回应、环境直接反应和已授权行动的必然结果不算替玩家决定。
             5. time：开场时刻、经过时长、结束时刻与 action 的时间契约是否一致，是否跳过明确要求叙述的过程。
             6. state：地点、境界、能力掌握、人物生死、待确认决定及 proposed 的结构化变化是否前后一致。
+               ITEM.custody 是物品保管的唯一客观来源。人物 status/summary 若声称持有、归还或失去某物，但与 custody
+               不一致，必须失败；也不得要求人物 status/summary 重复保存 custody 已经表达的事实。
                同一处场景及其普通组成部分若被拆成多个重复 LANDMARK，也必须判定失败；普通观察最多形成一个
                有长期引用价值的场景实体。
                若候选仅因观察而把屋檐、门框、墙角、路面等现有地点组成部分新建为 LANDMARK，且玩家没有明确
@@ -211,6 +223,10 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                characterPreconditions 只能复制 facts 中非空的 lifecycle 与 relationship.label；facts 为 UNKNOWN 时可填 UNKNOWN，
                facts 没有对应字段时必须填 null，不得根据人物 status 或 summary 猜成 ACTIVE、DEAD 或某种关系。
             8. stopBoundary 只概括玩家明确要求的停止点；没有则为空。
+            9. agencyBoundary 必须完整解释玩家授权，不判断行动能否成功：
+               authorizedActions 逐项列出主角本轮可以主动执行的行为；prohibitedActions 列出玩家明确禁止或由“只/仅”
+               排除的行为；unresolvedDecisions 列出玩家明确要求保留、或行动完成后仍应由玩家决定的问题；
+               requiredEndState 写玩家要求正文结束时保持的位置或状态。不得把模型认为合理的动机或下一步补进去。
 
             只返回 JSON，不要 Markdown：
             {
@@ -232,8 +248,44 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                 "quantity":null
               }],
               "characterPreconditions":[{"characterId":"","requiredLifecycle":"ACTIVE|MISSING|DORMANT|DEAD|UNKNOWN","requiredRelationship":null}],
+              "agencyBoundary":{"authorizedActions":[],"prohibitedActions":[],"unresolvedDecisions":[],"requiredEndState":""},
               "stopBoundary":"",
               "conflict":{"present":false,"reason":"","correction":""}
+            }
+            """;
+
+    private static final String AGENCY_REVIEW_PROMPT = """
+            你是《问仙录》的玩家授权复核 Agent。你不续写剧情，只检查候选是否替玩家行动或决定。
+            action.playerAction 是玩家原话；action.factContract.agencyBoundary 是行动解析 Agent 给出的授权边界；
+            proposed 是待提交候选。
+
+            必须先独立阅读 proposed.narrative、memories、rollingSummary 和 coreState，完整提取：
+            - chronologicalAgencyEvents：按正文发生顺序列出主角行为与需要玩家决定的场景，不能合并或跳过中段；
+            - protagonistActions：正文中主角实际做出的主动行为，包括移动、返程、回答、取放物品、追问、修炼和战斗；
+            - protagonistDecisions：已经替主角确定的路线、目标、承诺、态度和下一步计划；
+            - protagonistMotives：正文给主角补写的原因、心理立场或价值判断；
+            - endingState：正文最后主角所处地点和静止状态。
+            - firstRequiredStopOccurrence：action 要求“遇到某情形就停下”时，候选第一次出现该情形的位置；没有则为空；
+            - actionsAfterRequiredStop：第一次应停止之后，正文仍让主角执行的全部行为。
+
+            然后逐项与 agencyBoundary 比较。authorizedActions 之外的新增主动行为、prohibitedActions 中的行为、
+            被提前回答的 unresolvedDecisions、或不满足 requiredEndState 的结尾，都必须 passed=false。
+            若 firstRequiredStopOccurrence 非空且 actionsAfterRequiredStop 非空，也必须 passed=false；候选不能在第一次选择点
+            写“等待决定”，下一段却替玩家选择其中一条路继续行动，再停在更晚的选择点。
+            NPC 的自主回应、环境变化和已授权行为的直接身体结果不算替玩家决定。不能因为候选最后声称“等待决定”
+            就忽略正文此前已经发生的返程、回答、承诺或路线选择。
+
+            只返回 JSON，不要 Markdown：
+            {
+              "chronologicalAgencyEvents":[],
+              "protagonistActions":[],
+              "protagonistDecisions":[],
+              "protagonistMotives":[],
+              "endingState":"",
+              "firstRequiredStopOccurrence":"",
+              "actionsAfterRequiredStop":[],
+              "passed":true,
+              "problem":""
             }
             """;
 
@@ -387,7 +439,24 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                     mapper.writeValueAsString(payload), 0.0);
             ReviewResponse response = tolerantMapper.readValue(rawJson(result.text()), ReviewResponse.class);
             List<String> problems = response.problems();
-            return new Review(problems.isEmpty(), String.join("；", problems), List.of(result));
+            if (!problems.isEmpty()) {
+                return new Review(false, String.join("；", problems),
+                        response.requiresFreshNarrative(), List.of(result));
+            }
+            StoryModelGateway.Result agencyResult = call(reviewRoute, invocation,
+                    "STORY_TURN_AGENCY_REVIEW_FLASH", AGENCY_REVIEW_PROMPT,
+                    mapper.writeValueAsString(agencyReviewPayload(context, proposed)), 0.0);
+            AgencyReviewResponse agency = tolerantMapper.readValue(rawJson(agencyResult.text()),
+                    AgencyReviewResponse.class);
+            agency.validate();
+            String extractedBoundaryProblem = agency.extractedBoundaryProblem();
+            boolean agencyPassed = agency.passed() && extractedBoundaryProblem.isBlank();
+            String problem = !extractedBoundaryProblem.isBlank()
+                    ? extractedBoundaryProblem : agency.problem();
+            String agencyProblem = agencyPassed
+                    ? "" : "玩家授权：" + (problem.isBlank() ? "授权复核未通过" : problem);
+            return new Review(agencyPassed, agencyProblem, !agencyPassed,
+                    List.of(result, agencyResult));
         } catch (JsonProcessingException error) {
             throw new IllegalArgumentException("回合审阅未返回有效结果", error);
         }
@@ -419,6 +488,20 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("facts", facts);
+        payload.put("action", context.action());
+        payload.put("proposed", candidate);
+        return payload;
+    }
+
+    /** 授权复核不携带世界设定和实体详情，只保留玩家原话、授权边界和候选中的主角行为。 */
+    private Map<String, Object> agencyReviewPayload(StoryPromptContext context, StoryPatch proposed) {
+        Map<String, Object> candidate = new LinkedHashMap<>();
+        candidate.put("narrative", proposed.narrative());
+        candidate.put("coreState", proposed.coreState());
+        candidate.put("memories", proposed.memories());
+        candidate.put("decisionCheckpoint", proposed.decisionCheckpoint());
+        candidate.put("rollingSummary", proposed.rollingSummary());
+        Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("action", context.action());
         payload.put("proposed", candidate);
         return payload;
@@ -541,6 +624,14 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
 
     private record ReviewResponse(ReviewCheck reference, ReviewCheck inventory, ReviewCheck authorization,
                                   ReviewCheck decision, ReviewCheck time, ReviewCheck state) {
+        private boolean requiresFreshNarrative() {
+            return failed(authorization) || failed(decision);
+        }
+
+        private boolean failed(ReviewCheck check) {
+            return check != null && Boolean.FALSE.equals(check.passed());
+        }
+
         private List<String> problems() {
             List<String> values = new ArrayList<>();
             collect(values, "实体引用", reference);
@@ -563,4 +654,43 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
     }
 
     private record ReviewCheck(Boolean passed, String problem) {}
+
+    private record AgencyReviewResponse(List<String> chronologicalAgencyEvents,
+                                        List<String> protagonistActions,
+                                        List<String> protagonistDecisions,
+                                        List<String> protagonistMotives,
+                                        String endingState,
+                                        String firstRequiredStopOccurrence,
+                                        List<String> actionsAfterRequiredStop,
+                                        Boolean passed,
+                                        String problem) {
+        private AgencyReviewResponse {
+            problem = problem == null ? "" : problem.strip();
+        }
+
+        private void validate() {
+            if (chronologicalAgencyEvents == null || protagonistActions == null || protagonistDecisions == null
+                    || protagonistMotives == null || endingState == null || firstRequiredStopOccurrence == null
+                    || actionsAfterRequiredStop == null || passed == null) {
+                throw new IllegalArgumentException("玩家授权复核缺少完整行为提取结果");
+            }
+            if (!passed && problem.isBlank()) {
+                throw new IllegalArgumentException("玩家授权复核拒绝时必须说明原因");
+            }
+        }
+
+        /**
+         * 复核模型已经逐段提取出“应停点后的行动”时，Java 只核对这组结构化结果自洽，
+         * 不再依赖中文剧情关键词重新判断。该冲突按正文越权处理并走整段重新生成，而不是变成技术失败。
+         */
+        private String extractedBoundaryProblem() {
+            if (firstRequiredStopOccurrence.isBlank() && !actionsAfterRequiredStop.isEmpty()) {
+                return "授权复核列出了停止边界后的行动，但缺少首次应停止位置";
+            }
+            if (!firstRequiredStopOccurrence.isBlank() && !actionsAfterRequiredStop.isEmpty() && passed) {
+                return "候选在首次应停止位置之后仍替玩家继续行动";
+            }
+            return "";
+        }
+    }
 }
