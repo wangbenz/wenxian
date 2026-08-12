@@ -110,14 +110,17 @@ public class TurnCreditAdminService {
      */
     @Transactional
     public Map<String, Object> grant(String userId, GrantRequest request, String operatorId) {
-        requireUser(userId);
+        Map<String, Object> user = requireUser(userId);
+        if (!"ACTIVE".equals(user.get("status"))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "该玩家账号当前不可用，不能赠送回合");
+        }
         GrantRequest command = normalize(request);
         ensureLegacyOpening(userId);
         String idempotencyKey = "ADMIN:" + command.operationId();
         List<Map<String, Object>> existing = grantByIdempotency(idempotencyKey);
         if (!existing.isEmpty()) {
             verifySameGrant(existing.getFirst(), userId, command);
-            return detail(userId);
+            return grantResult(userId, existing.getFirst().get("id").toString(), command, true);
         }
         Instant now = Instant.now();
         String grantId = id("credit-grant");
@@ -136,7 +139,7 @@ public class TurnCreditAdminService {
             List<Map<String, Object>> raced = grantByIdempotency(idempotencyKey);
             if (raced.isEmpty()) throw duplicate;
             verifySameGrant(raced.getFirst(), userId, command);
-            return detail(userId);
+            return grantResult(userId, raced.getFirst().get("id").toString(), command, true);
         }
         int balanceAfter = availableBalance(userId, now);
         jdbc.update("""
@@ -149,7 +152,25 @@ public class TurnCreditAdminService {
                 command.reason(), Timestamp.from(now));
         audit("GRANT_TURN_CREDIT", "管理员 " + operatorId + " 向账号 " + userId + " 赠送 "
                 + command.count() + " 回（" + command.grantType() + "）");
-        return detail(userId);
+        return grantResult(userId, grantId, command, false);
+    }
+
+    /**
+     * 返回赠送后的账号详情和本次操作摘要。摘要由后端给出，避免前端从并发变化的批次列表猜测本次结果。
+     */
+    private Map<String, Object> grantResult(String userId, String grantId, GrantRequest command,
+                                            boolean idempotent) {
+        Map<String, Object> result = detail(userId);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> balance = (Map<String, Object>) result.get("balance");
+        Map<String, Object> operation = new LinkedHashMap<>();
+        operation.put("grantId", grantId);
+        operation.put("count", command.count());
+        operation.put("balanceAfter", balance.get("available"));
+        operation.put("expiresAt", command.expiresAt() == null ? null : command.expiresAt().toString());
+        operation.put("idempotent", idempotent);
+        result.put("operation", operation);
+        return result;
     }
 
     /** 撤销某批次当前尚未使用的赠送回合；已消费数量保留，存在预占时拒绝操作。 */
@@ -283,16 +304,20 @@ public class TurnCreditAdminService {
 
     private List<Map<String, Object>> grantByIdempotency(String key) {
         return jdbc.query("""
-                select id,user_id,grant_type,idempotency_key,granted_count,expires_at,reason
+                select id,user_id,grant_type,campaign_code,source_reference,idempotency_key,
+                       granted_count,expires_at,reason
                 from turn_credit_grant where idempotency_key=?
                 """, (row, index) -> {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", row.getString("id"));
             item.put("userId", row.getString("user_id"));
             item.put("grantType", row.getString("grant_type"));
+            item.put("campaignCode", row.getString("campaign_code"));
+            item.put("sourceReference", row.getString("source_reference"));
             item.put("idempotencyKey", row.getString("idempotency_key"));
             item.put("count", row.getInt("granted_count"));
-            item.put("expiresAt", instant(row.getTimestamp("expires_at")));
+            item.put("expiresAt", row.getTimestamp("expires_at") == null
+                    ? null : row.getTimestamp("expires_at").toInstant());
             item.put("reason", row.getString("reason"));
             return item;
         }, key);
@@ -301,7 +326,11 @@ public class TurnCreditAdminService {
     private void verifySameGrant(Map<String, Object> existing, String userId, GrantRequest command) {
         if (!userId.equals(existing.get("userId"))
                 || !command.grantType().equals(existing.get("grantType"))
-                || command.count() != (int) existing.get("count")) {
+                || command.count() != (int) existing.get("count")
+                || !java.util.Objects.equals(blankToNull(command.campaignCode()), existing.get("campaignCode"))
+                || !java.util.Objects.equals(blankToNull(command.sourceReference()), existing.get("sourceReference"))
+                || !java.util.Objects.equals(command.expiresAt(), existing.get("expiresAt"))
+                || !command.reason().equals(existing.get("reason"))) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "该操作编号已经用于另一笔赠送，请刷新后重试");
         }
     }
@@ -325,19 +354,23 @@ public class TurnCreditAdminService {
 
     private Map<String, Object> mapGrant(java.sql.ResultSet row) throws java.sql.SQLException {
         Map<String, Object> item = new LinkedHashMap<>();
+        Timestamp expiryTimestamp = row.getTimestamp("expires_at");
+        boolean projectedExpired = "ACTIVE".equals(row.getString("status"))
+                && expiryTimestamp != null && !expiryTimestamp.toInstant().isAfter(Instant.now());
+        int storedAvailable = row.getInt("available_count");
         item.put("id", row.getString("id"));
         item.put("creditClass", row.getString("credit_class"));
         item.put("grantType", row.getString("grant_type"));
         item.put("campaignCode", row.getString("campaign_code"));
         item.put("sourceReference", row.getString("source_reference"));
         item.put("granted", row.getInt("granted_count"));
-        item.put("available", row.getInt("available_count"));
+        item.put("available", projectedExpired ? 0 : storedAvailable);
         item.put("reserved", row.getInt("reserved_count"));
         item.put("consumed", row.getInt("consumed_count"));
-        item.put("expired", row.getInt("expired_count"));
+        item.put("expired", row.getInt("expired_count") + (projectedExpired ? storedAvailable : 0));
         item.put("revoked", row.getInt("revoked_count"));
-        item.put("status", row.getString("status"));
-        item.put("expiresAt", instant(row.getTimestamp("expires_at")));
+        item.put("status", projectedExpired ? "EXPIRED" : row.getString("status"));
+        item.put("expiresAt", instant(expiryTimestamp));
         item.put("reason", row.getString("reason"));
         item.put("createdBy", row.getString("created_by"));
         item.put("createdAt", instant(row.getTimestamp("created_at")));

@@ -144,6 +144,7 @@ export type TurnCreditLedger = {
 export type TurnCreditDetail = {
   user: { userId: string; email: string; status: string; registeredAt: string; lastLoginAt: string | null };
   balance: TurnCreditBalance; grants: TurnCreditGrant[]; ledger: TurnCreditLedger[];
+  operation?: { grantId: string; count: number; balanceAfter: number; expiresAt: string | null; idempotent: boolean };
 };
 export type RegistrationConfig = { maxUsers: number; currentUsers: number; remainingSlots: number; limitMessage: string; contactText: string };
 export type AccessControl = {

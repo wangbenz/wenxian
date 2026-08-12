@@ -56,8 +56,25 @@ const DEFAULT_PAGE: Record<ModuleId, Page> = {
   settings: "models",
   system: "health",
 };
-const fmt = (value?: string | null) => value ? new Date(value).toLocaleString("zh-CN") : "—";
-const shanghaiDate = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date());
+const SHANGHAI_TIME_ZONE = "Asia/Shanghai";
+const fmt = (value?: string | null) => value ? new Intl.DateTimeFormat("zh-CN", {
+  timeZone: SHANGHAI_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+}).format(new Date(value)) : "—";
+const shanghaiDate = (value = new Date()) => new Intl.DateTimeFormat("en-CA", {
+  timeZone: SHANGHAI_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+}).format(value);
+const shanghaiTime = (value = new Date()) => new Intl.DateTimeFormat("en-GB", {
+  timeZone: SHANGHAI_TIME_ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+}).format(value);
+
+// 管理台有效期统一解释为北京时间，不能依赖运营人员电脑所在时区。
+const shanghaiLocalToInstant = (dateValue: string, timeValue: string) => {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const [hour, minute] = timeValue.split(":").map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return "";
+  return new Date(Date.UTC(year, month - 1, day, hour - 8, minute)).toISOString();
+};
 const num = (value: number) => new Intl.NumberFormat("zh-CN").format(value || 0);
 const compactNum = (value: number) => new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(value || 0);
 const latency = (value: number) => value ? `${(value / 1000).toFixed(1)} 秒` : "—";
@@ -485,12 +502,12 @@ function TurnCredits() {
     {queryText && <State loading={query.loading} error={query.error}>
       <section className="credit-search-results">
         <header><div><h3>查找结果</h3><p>找到 {num(query.data?.total ?? 0)} 个账号，请核对邮箱后选择。</p></div><button className="secondary" onClick={query.reload}>刷新结果</button></header>
-        <div>{query.data?.rows.map((row: TurnCreditAccount) => <button className="credit-account-row" key={row.userId} onClick={() => setSelected(row.userId)} type="button">
-          <span className="credit-account-identity"><strong>{row.email}</strong><small>{shortId(row.userId)} · 最近登录 {relativeTime(row.lastLoginAt)}</small></span>
+        <div>{query.data?.rows.map((row: TurnCreditAccount) => <button className="credit-account-row" disabled={row.status !== "ACTIVE"} key={row.userId} onClick={() => setSelected(row.userId)} type="button">
+          <span className="credit-account-identity"><strong>{row.email}</strong><small>{shortId(row.userId)} · 最近登录 {relativeTime(row.lastLoginAt)}</small><Badge value={row.status} /></span>
           <span><small>可用回合</small><strong>{num(row.available)}</strong></span>
           <span><small>已经使用</small><strong>{num(row.consumed)}</strong></span>
           <span><small>暂时占用</small><strong>{num(row.reserved)}</strong></span>
-          <b>选择账号</b>
+          <b>{row.status === "ACTIVE" ? "选择账号" : "账号不可用"}</b>
         </button>)}</div>
         {query.data?.rows.length === 0 && <p className="empty-state">没有找到该玩家，请检查邮箱或用户 ID 是否正确。</p>}
         <Pager page={page} size={20} total={query.data?.total ?? 0} onPage={setPage} />
@@ -507,6 +524,34 @@ const GRANT_SOURCE_OPTIONS = [
   { value: "ADMIN", label: "人工补发", help: "补偿异常或其他原因", reason: "管理员人工补发" },
 ] as const;
 
+type CreditValidity = "PERMANENT" | "SEVEN_DAYS" | "THIRTY_DAYS" | "CUSTOM";
+type PendingCreditGrant = { expiresAt: string };
+
+const CREDIT_VALIDITY_OPTIONS: Array<{ value: CreditValidity; label: string; help: string }> = [
+  { value: "PERMANENT", label: "长期有效", help: "默认选择，不设置到期时间" },
+  { value: "SEVEN_DAYS", label: "7天", help: "从确认赠送时开始计算" },
+  { value: "THIRTY_DAYS", label: "30天", help: "适合阶段性测试与活动" },
+  { value: "CUSTOM", label: "自定义", help: "按北京时间选择日期和时刻" },
+];
+
+function CreditGrantConfirmation({ email, count, reason, expiresAt, balance, busy, onCancel, onConfirm }: {
+  email: string; count: number; reason: string; expiresAt: string; balance: number; busy: boolean;
+  onCancel: () => void; onConfirm: () => void;
+}) {
+  return <div className="modal-mask"><section aria-labelledby="credit-confirm-title" aria-modal="true" className="modal confirm-modal credit-confirm-modal" role="dialog">
+    <header className="drawer-header"><div><p className="kicker">FINAL CHECK</p><h2 id="credit-confirm-title">确认赠送回合</h2></div><button aria-label="关闭赠送确认" className="drawer-close" disabled={busy} onClick={onCancel}>×</button></header>
+    <p>请再次核对账号和数量。本次操作会立即写入回合账户与审计流水。</p>
+    <dl className="credit-confirm-summary">
+      <div><dt>玩家账号</dt><dd>{email}</dd></div>
+      <div><dt>赠送数量</dt><dd>{num(count)} 回</dd></div>
+      <div><dt>赠送后可用</dt><dd>{num(balance + count)} 回</dd></div>
+      <div><dt>有效期</dt><dd>{expiresAt ? `${fmt(expiresAt)} 到期` : "长期有效"}</dd></div>
+      <div className="full"><dt>操作说明</dt><dd>{reason}</dd></div>
+    </dl>
+    <div className="modal-actions"><button className="secondary" disabled={busy} onClick={onCancel}>返回修改</button><button className="primary" disabled={busy} onClick={onConfirm}>{busy ? "正在赠送…" : `确认赠送 ${count} 回`}</button></div>
+  </section></div>;
+}
+
 function TurnCreditDrawer({ userId, onChanged, onClose }: { userId: string; onChanged: () => void; onClose: () => void }) {
   useOverlay(onClose);
   const query = useLoad<TurnCreditDetail>(() => adminApi.turnCreditDetail(userId), [userId]);
@@ -514,11 +559,15 @@ function TurnCreditDrawer({ userId, onChanged, onClose }: { userId: string; onCh
   const [count, setCount] = useState(50);
   const [campaignCode, setCampaignCode] = useState("V015_GRAY");
   const [sourceReference, setSourceReference] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
+  const [validity, setValidity] = useState<CreditValidity>("PERMANENT");
+  const [customDate, setCustomDate] = useState(() => shanghaiDate(new Date(Date.now() + 7 * 86_400_000)));
+  const [customTime, setCustomTime] = useState("23:59");
   const [reason, setReason] = useState("灰度测试回合");
   const [historyView, setHistoryView] = useState<"grants" | "ledger">("grants");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [pendingGrant, setPendingGrant] = useState<PendingCreditGrant | null>(null);
+  const [lastGrant, setLastGrant] = useState<TurnCreditDetail["operation"] | null>(null);
   const [revokeGrant, setRevokeGrant] = useState<TurnCreditGrant | null>(null);
   const [revokeReason, setRevokeReason] = useState("");
   const operationId = useRef("");
@@ -527,21 +576,41 @@ function TurnCreditDrawer({ userId, onChanged, onClose }: { userId: string; onCh
     setReason(value.reason);
     setCampaignCode(value.value === "PLAYTEST" ? "V015_GRAY" : "");
   };
-  const grant = async () => {
-    if (busy) return;
+  const resolveExpiry = () => {
+    if (validity === "PERMANENT") return "";
+    if (validity === "SEVEN_DAYS") return new Date(Date.now() + 7 * 86_400_000).toISOString();
+    if (validity === "THIRTY_DAYS") return new Date(Date.now() + 30 * 86_400_000).toISOString();
+    return shanghaiLocalToInstant(customDate, customTime);
+  };
+  const prepareGrant = () => {
+    setNotice("");
+    if (query.data?.user.status !== "ACTIVE") return setNotice("该玩家账号当前不可用，不能赠送回合。");
+    const expiresAt = resolveExpiry();
+    if (validity === "CUSTOM" && (!expiresAt || new Date(expiresAt).getTime() < Date.now() + 5 * 60_000)) {
+      return setNotice("自定义到期时间至少应晚于当前北京时间5分钟。");
+    }
+    setPendingGrant({ expiresAt });
+  };
+  const grant = async (command: PendingCreditGrant) => {
+    if (busy || !query.data) return;
     if (!operationId.current) operationId.current = crypto.randomUUID();
     setBusy(true); setNotice("");
     try {
-      await adminApi.grantTurnCredits(userId, {
+      const result = await adminApi.grantTurnCredits(userId, {
         operationId: operationId.current, grantType, count, campaignCode: campaignCode.trim(),
-        sourceReference: sourceReference.trim(), expiresAt: expiresAt ? new Date(expiresAt).toISOString() : "",
+        sourceReference: sourceReference.trim(), expiresAt: command.expiresAt,
         reason: reason.trim(),
       });
       operationId.current = "";
-      setNotice(`赠送成功：${query.data?.user.email ?? "该玩家"} 已增加 ${count} 个可用回合。`);
+      setPendingGrant(null);
+      setLastGrant(result.operation ?? {
+        grantId: result.grants[0]?.id ?? "—", count, balanceAfter: result.balance.available,
+        expiresAt: command.expiresAt || null, idempotent: false,
+      });
       query.reload();
       onChanged();
     } catch (error) {
+      setPendingGrant(null);
       setNotice(error instanceof Error ? error.message : "赠送失败，请稍后重试");
     } finally {
       setBusy(false);
@@ -561,29 +630,40 @@ function TurnCreditDrawer({ userId, onChanged, onClose }: { userId: string; onCh
     }
   };
   const balance = query.data?.balance;
+  const minimumCustomExpiry = new Date(Date.now() + 5 * 60_000);
+  const minimumCustomDate = shanghaiDate(minimumCustomExpiry);
+  const minimumCustomTime = shanghaiTime(minimumCustomExpiry);
   return <div className="drawer-mask" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <aside aria-labelledby="credit-drawer-title" aria-modal="true" className="drawer credit-drawer" role="dialog">
       <header className="drawer-header"><div><p className="kicker">TURN SUPPORT</p><h2 id="credit-drawer-title">{query.data?.user.email || "正在读取玩家…"}</h2></div><button aria-label="关闭回合赠送" className="drawer-close" onClick={onClose}>×</button></header>
       <State loading={query.loading} error={query.error}>{query.data && balance && <>
         <section className="credit-account-summary">
-          <div><span>当前可用</span><strong>{num(balance.available)}<small> 回</small></strong><p>该账号下所有命卷共同使用</p></div>
+          <div><span>当前可用 · {query.data.user.status === "ACTIVE" ? "账号正常" : "账号不可用"}</span><strong>{num(balance.available)}<small> 回</small></strong><p>该账号下所有命卷共同使用</p></div>
           <dl><div><dt>已使用</dt><dd>{num(balance.consumed)}</dd></div><div><dt>暂时占用</dt><dd>{num(balance.reserved)}</dd></div><div><dt>累计获得</dt><dd>{num(balance.granted)}</dd></div></dl>
         </section>
         {!balance.ledgerInitialized && <p className="inline-warning">这是旧账号。首次赠送时系统会自动衔接原有额度和已用回合，无需人工换算。</p>}
         <section className="credit-grant-flow">
-          <header><span>赠送回合</span><strong>选择一种赠送原因</strong></header>
-          <div className="credit-source-grid">{GRANT_SOURCE_OPTIONS.map((item) => <button aria-pressed={grantType === item.value} key={item.value} onClick={() => selectSource(item)} type="button"><strong>{item.label}</strong><small>{item.help}</small></button>)}</div>
-          <div className="credit-amount-section">
-            <label>赠送数量<input aria-label="赠送数量" max="1000" min="1" type="number" value={count} onChange={(event) => setCount(Number(event.currentTarget.value))} /></label>
-            <div aria-label="常用赠送数量" className="credit-amount-options">{[10, 20, 50, 100].map((amount) => <button aria-pressed={count === amount} key={amount} onClick={() => setCount(amount)} type="button">{amount} 回</button>)}</div>
-          </div>
-          <label>操作说明<input maxLength={240} placeholder="说明为什么赠送，方便以后核对" value={reason} onChange={(event) => setReason(event.currentTarget.value)} /></label>
-          <details className="credit-advanced"><summary>补充记录信息（可不填）</summary><div className="form-grid">
-            <label>反馈或活动编号<input maxLength={160} placeholder="例如 WX-问题编号" value={sourceReference} onChange={(event) => setSourceReference(event.currentTarget.value)} /></label>
-            <label>活动批次<input maxLength={64} placeholder="例如 V015_GRAY" value={campaignCode} onChange={(event) => setCampaignCode(event.currentTarget.value)} /></label>
-            <label className="full">到期时间<input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.currentTarget.value)} /><small>留空表示长期有效</small></label>
-          </div></details>
-          <div className="credit-confirm-row"><p>确认后，<strong>{query.data.user.email}</strong> 将增加 <strong>{num(count)} 回</strong>；原有余额不会被覆盖。</p><button className="primary" disabled={busy || count < 1 || count > 1000 || !reason.trim()} onClick={() => void grant()}>{busy ? "正在处理…" : `确认赠送 ${count} 回`}</button></div>
+          {lastGrant ? <div className="credit-success-panel" role="status">
+            <span>赠送完成</span><h3>{num(lastGrant.count)} 回已到账</h3><p>玩家当前共有 <strong>{num(lastGrant.balanceAfter)} 回</strong>可用。{lastGrant.expiresAt ? `本批次将在 ${fmt(lastGrant.expiresAt)} 到期。` : "本批次长期有效。"}</p>
+            <dl><div><dt>玩家账号</dt><dd>{query.data.user.email}</dd></div><div><dt>赠送批次</dt><dd title={lastGrant.grantId}>{shortId(lastGrant.grantId)}</dd></div></dl>
+            <button className="secondary" onClick={() => { setLastGrant(null); setNotice(""); }}>再赠送一笔</button>
+          </div> : <>
+            <header><span>赠送回合</span><strong>选择一种赠送原因</strong></header>
+            <div className="credit-source-grid">{GRANT_SOURCE_OPTIONS.map((item) => <button aria-pressed={grantType === item.value} key={item.value} onClick={() => selectSource(item)} type="button"><strong>{item.label}</strong><small>{item.help}</small></button>)}</div>
+            <div className="credit-amount-section">
+              <label>赠送数量<input aria-label="赠送数量" max="1000" min="1" type="number" value={count} onChange={(event) => setCount(Number(event.currentTarget.value))} /></label>
+              <div aria-label="常用赠送数量" className="credit-amount-options">{[10, 20, 50, 100].map((amount) => <button aria-pressed={count === amount} key={amount} onClick={() => setCount(amount)} type="button">{amount} 回</button>)}</div>
+            </div>
+            <label>操作说明<input maxLength={240} placeholder="说明为什么赠送，方便以后核对" value={reason} onChange={(event) => setReason(event.currentTarget.value)} /></label>
+            <fieldset className="credit-validity"><legend>有效期</legend><div>{CREDIT_VALIDITY_OPTIONS.map((item) => <button aria-pressed={validity === item.value} key={item.value} onClick={() => setValidity(item.value)} type="button"><strong>{item.label}</strong><small>{item.help}</small></button>)}</div>
+              {validity === "CUSTOM" && <div className="credit-custom-expiry"><label>到期日期<input min={minimumCustomDate} type="date" value={customDate} onChange={(event) => setCustomDate(event.currentTarget.value)} /></label><label>到期时刻<input min={customDate === minimumCustomDate ? minimumCustomTime : undefined} type="time" value={customTime} onChange={(event) => setCustomTime(event.currentTarget.value)} /></label><p>北京时间（UTC+8） · {customDate && customTime ? `${customDate} ${customTime} 到期` : "请选择完整时间"}</p></div>}
+            </fieldset>
+            <details className="credit-advanced"><summary>补充内部记录（可不填）</summary><div className="form-grid">
+              <label>反馈或活动编号<input maxLength={160} placeholder="例如 WX-问题编号" value={sourceReference} onChange={(event) => setSourceReference(event.currentTarget.value)} /></label>
+              <label>内部活动批次<input maxLength={64} placeholder="例如 V015_GRAY" value={campaignCode} onChange={(event) => setCampaignCode(event.currentTarget.value)} /></label>
+            </div></details>
+            <div className="credit-confirm-row"><p>下一步会再次核对账号、数量和有效期，确认后才会到账。</p><button className="primary" disabled={busy || query.data.user.status !== "ACTIVE" || count < 1 || count > 1000 || !reason.trim()} onClick={prepareGrant}>{query.data.user.status === "ACTIVE" ? "核对并继续" : "账号不可用"}</button></div>
+          </>}
         </section>
         {notice && <p className="notice" role="status">{notice}</p>}
         <section className="credit-history">
@@ -600,6 +680,7 @@ function TurnCreditDrawer({ userId, onChanged, onClose }: { userId: string; onCh
         </section>
       </>}</State>
     </aside>
+    {pendingGrant && query.data && balance && <CreditGrantConfirmation balance={balance.available} busy={busy} count={count} email={query.data.user.email} expiresAt={pendingGrant.expiresAt} onCancel={() => !busy && setPendingGrant(null)} onConfirm={() => void grant(pendingGrant)} reason={reason} />}
   </div>;
 }
 function TurnRanking({ rows, onSelect }: { rows: TurnRankingItem[]; onSelect: (userId: string) => void }) {
@@ -759,7 +840,8 @@ function AccessControlPage() {
   const [mode, setMode] = useState<AccessControl["mode"]>("OPEN");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
-  const [resumeAt, setResumeAt] = useState("");
+  const [resumeDate, setResumeDate] = useState("");
+  const [resumeTime, setResumeTime] = useState("12:00");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -767,12 +849,15 @@ function AccessControlPage() {
   useEffect(() => {
     if (!query.data) return;
     setMode(query.data.mode); setTitle(query.data.title); setMessage(query.data.message);
-    setResumeAt(query.data.resumeAt ? new Date(query.data.resumeAt).toISOString().slice(0, 16) : "");
+    const resume = query.data.resumeAt ? new Date(query.data.resumeAt) : null;
+    setResumeDate(resume ? shanghaiDate(resume) : "");
+    setResumeTime(resume ? shanghaiTime(resume) : "12:00");
   }, [query.data]);
   const save = async () => {
     setBusy(true); setNotice("");
     try {
-      await adminApi.updateAccessControl({ mode, title, message, resumeAt: resumeAt ? new Date(resumeAt).toISOString() : "" });
+      const resumeAt = resumeDate ? shanghaiLocalToInstant(resumeDate, resumeTime) : "";
+      await adminApi.updateAccessControl({ mode, title, message, resumeAt });
       setNotice(mode === "WHITELIST" ? "灰度白名单已开启，非名单玩家将收到更新提示。" : "全量访问已恢复。");
       query.reload();
     } catch (reason) { setNotice(reason instanceof Error ? reason.message : "保存失败"); }
@@ -800,7 +885,7 @@ function AccessControlPage() {
       <label>访问模式<select value={mode} onChange={(event) => setMode(event.currentTarget.value as AccessControl["mode"])}><option value="OPEN">全部开放</option><option value="WHITELIST">仅白名单</option></select></label>
       <label>更新提示标题<input maxLength={80} value={title} onChange={(event) => setTitle(event.currentTarget.value)} /></label>
       <label>更新提示内容<textarea maxLength={220} rows={5} value={message} onChange={(event) => setMessage(event.currentTarget.value)} /></label>
-      <label>预计恢复时间（可不填）<input type="datetime-local" value={resumeAt} onChange={(event) => setResumeAt(event.currentTarget.value)} /></label>
+      <fieldset className="access-resume"><legend>预计恢复时间（可不填）</legend><div><label>恢复日期<input min={shanghaiDate()} type="date" value={resumeDate} onChange={(event) => setResumeDate(event.currentTarget.value)} /></label><label>恢复时刻<input disabled={!resumeDate} type="time" value={resumeTime} onChange={(event) => setResumeTime(event.currentTarget.value)} /></label></div><p>北京时间（UTC+8）{resumeDate ? ` · ${resumeDate} ${resumeTime}` : " · 未设置具体恢复时间"}</p>{resumeDate && <button className="secondary" onClick={() => setResumeDate("")} type="button">清除时间</button>}</fieldset>
       <p>{mode === "WHITELIST" ? "开启后，名单账号可正常登录和游玩；其余账号即使已有会话也会被拦截，存档不会改变。" : "当前不会限制玩家进入。提示文案仍会保留，供下次灰度使用。"}</p>
       {notice && <p className="notice" role="status">{notice}</p>}
       <button className="primary" disabled={busy || !title.trim() || !message.trim()} onClick={() => void save()}>{busy ? "正在保存…" : "保存访问规则"}</button>

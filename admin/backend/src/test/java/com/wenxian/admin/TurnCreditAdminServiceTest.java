@@ -71,6 +71,8 @@ class TurnCreditAdminServiceTest {
         Instant now = Instant.now();
         jdbc.update("insert into app_user values ('user-1','player@example.com','ACTIVE',?,?)",
                 Timestamp.from(now.minusSeconds(3600)), Timestamp.from(now));
+        jdbc.update("insert into app_user values ('user-disabled','disabled@example.com','DISABLED',?,?)",
+                Timestamp.from(now.minusSeconds(3600)), Timestamp.from(now));
         jdbc.update("insert into gameplay_config values ('account_public_turn_limit','20',?)", Timestamp.from(now));
         jdbc.update("insert into user_daily_quota values ('user-1',?,3,?)", Date.valueOf("2026-08-12"), Timestamp.from(now));
         service = new TurnCreditAdminService(jdbc);
@@ -98,6 +100,14 @@ class TurnCreditAdminServiceTest {
         assertEquals(2, jdbc.queryForObject("select count(*) from turn_credit_grant", Integer.class));
         assertEquals(2, jdbc.queryForObject("select count(*) from turn_credit_ledger", Integer.class));
         assertEquals(1, jdbc.queryForObject("select count(*) from admin_operation_log", Integer.class));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> operation = (Map<String, Object>) first.get("operation");
+        assertEquals(50, operation.get("count"));
+        assertEquals(67, operation.get("balanceAfter"));
+        assertEquals(false, operation.get("idempotent"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> retriedOperation = (Map<String, Object>) second.get("operation");
+        assertEquals(true, retriedOperation.get("idempotent"));
     }
 
     @Test
@@ -117,6 +127,22 @@ class TurnCreditAdminServiceTest {
                 "select status from turn_credit_grant where id=?", String.class, grantId));
         assertEquals(1, jdbc.queryForObject(
                 "select count(*) from turn_credit_ledger where event_type='REVOKE'", Integer.class));
+    }
+
+    @Test
+    void rejectsChangedPayloadWhenRetryingSameOperation() {
+        Instant expiresAt = Instant.now().plusSeconds(3600).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        service.grant("user-1", new TurnCreditAdminService.GrantRequest(
+                "same-operation", "PLAYTEST", 10, "V015_GRAY", "tester-1", expiresAt, "灰度测试"),
+                "admin-1");
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.grant("user-1", new TurnCreditAdminService.GrantRequest(
+                        "same-operation", "PLAYTEST", 10, "V015_GRAY", "tester-1",
+                        expiresAt.plusSeconds(3600), "灰度测试"), "admin-1"));
+
+        assertEquals(409, error.getStatusCode().value());
+        assertEquals(2, jdbc.queryForObject("select count(*) from turn_credit_grant", Integer.class));
     }
 
     @Test
@@ -147,5 +173,36 @@ class TurnCreditAdminServiceTest {
         assertEquals(17, rows.getFirst().get("available"));
         assertEquals(3, rows.getFirst().get("consumed"));
         assertEquals(0, jdbc.queryForObject("select count(*) from turn_credit_grant", Integer.class));
+    }
+
+    @Test
+    void rejectsGrantForDisabledAccount() {
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.grant("user-disabled", new TurnCreditAdminService.GrantRequest(
+                        "disabled-001", "ADMIN", 10, "", "", null, "人工赠送"), "admin-1"));
+
+        assertEquals(409, error.getStatusCode().value());
+        assertTrue(error.getReason().contains("不可用"));
+        assertEquals(0, jdbc.queryForObject(
+                "select count(*) from turn_credit_grant where user_id='user-disabled'", Integer.class));
+    }
+
+    @Test
+    void projectsDueGrantAsExpiredBeforeCleanupJobRuns() {
+        service.grant("user-1", new TurnCreditAdminService.GrantRequest(
+                "expiring-001", "ACTIVITY", 5, "", "", Instant.now().plusSeconds(3600), "限时活动"),
+                "admin-1");
+        jdbc.update("update turn_credit_grant set expires_at=? where grant_type='ACTIVITY'",
+                Timestamp.from(Instant.now().minusSeconds(60)));
+
+        Map<String, Object> detail = service.detail("user-1");
+        @SuppressWarnings("unchecked")
+        var grants = (java.util.List<Map<String, Object>>) detail.get("grants");
+        Map<String, Object> activity = grants.stream()
+                .filter(item -> "ACTIVITY".equals(item.get("grantType"))).findFirst().orElseThrow();
+
+        assertEquals("EXPIRED", activity.get("status"));
+        assertEquals(0, activity.get("available"));
+        assertEquals(5, activity.get("expired"));
     }
 }
