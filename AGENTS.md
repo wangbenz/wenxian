@@ -77,6 +77,10 @@
 - Server secrets belong only in `/opt/wenxian-test/application-secret.yml` and `/opt/wenxian-admin/application-secret.yml` (or environment variables). Never commit database passwords, API keys, temporary client option files, dumps, or production data.
 - Before a database cutover, stop both backends, create an off-server backup, import into an empty target database, and compare every table's exact row count before switching connection settings.
 - After database or deployment changes, verify both backend processes, `/api/v1/health`, one database-backed public endpoint, and the admin login route before reopening the service.
+- Process-level `game.auth.isolated-access` is only for a separate invited-test backend. A formal public release must disable it,
+  keep shared `game_access_mode=WHITELIST` for the first online smoke test, and switch the shared mode to `OPEN` only after verification.
+  For emergency public maintenance, use the shared database whitelist and dynamic notice; do not turn the production service into a
+  permanent environment-variable email list. The complete mode matrix and release/rollback runbook live in `docs/architecture.md`.
 
 ## Verification
 
