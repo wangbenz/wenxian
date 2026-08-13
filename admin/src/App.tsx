@@ -637,7 +637,7 @@ function TurnCreditDrawer({ userId, onChanged, onClose }: { userId: string; onCh
     try {
       await adminApi.revokeTurnCredits(userId, revokeGrant.id, revokeReason.trim());
       setNotice(`已撤销该批次剩余的 ${revokeGrant.available} 个回合，玩家已使用的回合不受影响。`);
-      setRevokeGrant(null); setRevokeReason(""); query.reload(); onChanged();
+      setLastGrant(null); setRevokeGrant(null); setRevokeReason(""); query.reload(); onChanged();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "撤销失败，请刷新后重试");
     } finally {
