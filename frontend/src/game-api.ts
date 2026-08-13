@@ -345,10 +345,10 @@ export type StoryGenerationSettings = {
 };
 export type StoryCreateSave = {
   worldCode: string; customWorld?: string; playerName: string; race: string; gender: string;
-  origin: string; opening?: string; storyTone?: string;
+  origin: string; opening?: string; storyTone?: string; startingRealm?: string;
 };
 export type StoryCharacterRoute = {
-  id: string; title: string; origin: string; opening: string; preference: string;
+  id: string; title: string; origin: string; opening: string; preference: string; startingRealm: string;
 };
 export type StoryCharacterRouteRequest = {
   worldCode: string; customWorld?: string; playerName: string; race: string; gender: string;
@@ -604,9 +604,9 @@ export const gameApi = {
   storyCreateSave: (draft: StoryCreateSave) => request<StorySaveContract>("/api/v1/story/saves", {
     method: "POST", body: JSON.stringify({ ...draft, storyPreference: draft.storyTone, storyTone: undefined }),
   }).then(legacySaveView),
-  storyTurn: (saveId: string, action: string, expectedRevision: number) => request<StorySaveContract>(`/api/v1/story/saves/${encodeURIComponent(saveId)}/turns`, {
+  storyTurn: (saveId: string, action: string, expectedRevision: number, choiceId?: string) => request<StorySaveContract>(`/api/v1/story/saves/${encodeURIComponent(saveId)}/turns`, {
     method: "POST",
-    body: JSON.stringify({ action, expectedRevision,
+    body: JSON.stringify({ action, expectedRevision, choiceId: choiceId || undefined,
       requestId: typeof window.crypto?.randomUUID === "function" ? window.crypto.randomUUID() : `turn-${Date.now()}` }),
   }).then(legacySaveView),
   storyCorrect: (saveId: string, instruction: string, expectedRevision: number) => request<StorySaveContract>(`/api/v1/story/saves/${encodeURIComponent(saveId)}/corrections`, {

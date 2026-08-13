@@ -7,15 +7,18 @@ import com.wenxian.game.story.agent.StoryPromptContext.EntityDetail;
 import com.wenxian.game.story.agent.StoryPromptContext.EntityIndexEntry;
 import com.wenxian.game.story.agent.StoryPromptContext.KnowledgeView;
 import com.wenxian.game.story.agent.StoryPromptContext.InventoryView;
+import com.wenxian.game.story.agent.StoryPromptContext.InitialContractView;
 import com.wenxian.game.story.agent.StoryPromptContext.MemoryContext;
 import com.wenxian.game.story.agent.StoryPromptContext.MemoryView;
 import com.wenxian.game.story.agent.StoryPromptContext.NarrativeContext;
 import com.wenxian.game.story.agent.StoryPromptContext.ObjectiveContext;
 import com.wenxian.game.story.agent.StoryPromptContext.PreviousTurn;
 import com.wenxian.game.story.agent.StoryPromptContext.SystemContext;
+import com.wenxian.game.story.agent.StoryPromptContext.SourceExcerpt;
 import com.wenxian.game.story.agent.StoryPromptContext.WorldFactView;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
+import com.wenxian.game.story.domain.StoryProjection.InitialContract;
 import com.wenxian.game.story.domain.StoryProjection.KnowledgeState;
 import com.wenxian.game.story.domain.StoryProjection.MemoryState;
 import com.wenxian.game.story.domain.StoryProjection.WorldFactState;
@@ -101,13 +104,45 @@ public final class PromptContextAssembler {
                 new SystemContext(TRUST_INVARIANTS, cleanRules(request.engineRules())),
                 new ObjectiveContext(projection.worldTimeMinutes(), StoryPromptContext.WorldClock.from(projection.worldTimeMinutes()),
                         projection.coreState(), worldFacts, index, details,
-                        new InventoryView(true, currentInventory, historicalInventory), request.pendingDecision()),
+                        new InventoryView(true, currentInventory, historicalInventory), request.pendingDecision(),
+                        initialContract(projection.initialContract()), sourceExcerpts(projection, request)),
                 new CognitionContext(cognition),
                 new MemoryContext(memories),
                 new NarrativeContext(blank(request.rollingSummary()), request.previousTurn()),
                 new ActionContext(request.playerAction().strip(), request.explicitDurationMinutes(),
-                        expectedEndClock(projection.worldTimeMinutes(), request.explicitDurationMinutes()))
+                        expectedEndClock(projection.worldTimeMinutes(), request.explicitDurationMinutes()), null,
+                        request.selectedChoice())
         );
+    }
+
+    private InitialContractView initialContract(InitialContract value) {
+        InitialContract source = value == null ? InitialContract.empty() : value;
+        return new InitialContractView(source.protagonistName(), source.race(), source.gender(), source.origin(),
+                source.startingRealm(), source.storyPreference(), source.worldCode(), source.worldName(), source.worldPremise(),
+                source.cultivationStyle(), source.openingRegion(), source.openingNarrative());
+    }
+
+    private List<SourceExcerpt> sourceExcerpts(StoryProjection projection, ContextRequest request) {
+        List<SourceExcerpt> sources = new ArrayList<>();
+        InitialContract initial = projection.initialContract();
+        if (initial != null && present(initial.origin())) {
+            sources.add(new SourceExcerpt("initial:origin", "INITIAL_ORIGIN", "此身来处", initial.origin()));
+        }
+        if (initial != null && present(initial.openingNarrative())) {
+            sources.add(new SourceExcerpt("initial:opening", "INITIAL_OPENING", "入世开场",
+                    initial.openingNarrative()));
+        }
+        PreviousTurn previous = request.previousTurn();
+        if (previous != null && present(previous.narrative())) {
+            sources.add(new SourceExcerpt("turn:" + previous.sequence(), "PREVIOUS_TURN",
+                    blank(previous.title()), previous.narrative()));
+        }
+        StoryPromptContext.SelectedChoice choice = request.selectedChoice();
+        if (choice != null) {
+            sources.add(new SourceExcerpt("choice:" + choice.id(), "SELECTED_CHOICE",
+                    blank(choice.title()), blank(choice.description())));
+        }
+        return List.copyOf(sources);
     }
 
     private StoryPromptContext.WorldClock expectedEndClock(long currentMinutes, Long elapsedMinutes) {
@@ -234,17 +269,27 @@ public final class PromptContextAssembler {
             String rollingSummary,
             PreviousTurn previousTurn,
             StoryPromptContext.PendingDecision pendingDecision,
-            Long explicitDurationMinutes
+            Long explicitDurationMinutes,
+            StoryPromptContext.SelectedChoice selectedChoice
     ) {
         public ContextRequest(String playerAction, List<String> engineRules, ContextSelection selection,
                               String rollingSummary, PreviousTurn previousTurn) {
-            this(playerAction, engineRules, selection, rollingSummary, previousTurn, null, null);
+            this(playerAction, engineRules, selection, rollingSummary, previousTurn, null, null, null);
         }
 
         public ContextRequest(String playerAction, List<String> engineRules, ContextSelection selection,
                               String rollingSummary, PreviousTurn previousTurn,
                               StoryPromptContext.PendingDecision pendingDecision) {
-            this(playerAction, engineRules, selection, rollingSummary, previousTurn, pendingDecision, null);
+            this(playerAction, engineRules, selection, rollingSummary, previousTurn, pendingDecision, null, null);
+        }
+
+        /** 兼容系统选项来源加入前的调用方。 */
+        public ContextRequest(String playerAction, List<String> engineRules, ContextSelection selection,
+                              String rollingSummary, PreviousTurn previousTurn,
+                              StoryPromptContext.PendingDecision pendingDecision,
+                              Long explicitDurationMinutes) {
+            this(playerAction, engineRules, selection, rollingSummary, previousTurn, pendingDecision,
+                    explicitDurationMinutes, null);
         }
 
         public ContextRequest {

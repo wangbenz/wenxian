@@ -42,6 +42,8 @@
 | 世界扩展/转变/修订 | `story_turn.state_patch_json` + `story_state_correction` | 修订类型、前后值和生效版本能否完整审计 |
 | 客观事件 | `story_turn.state_patch_json` | 是否足以重建关键状态，不引入完整事件溯源 |
 | 当前状态 | `story_save.state_json` + `story_entity` | Reducer 是否能成为唯一写入口 |
+| 初始事实契约 | `story_save.state_json._trustedProjection.initialContract` | 创建时写入，普通回合只读 |
+| 场景来源引用 | 初始契约 + 最近 `story_turn` + 当前 `choices_json` | 不要求所有来源名词立即建永久实体 |
 | 人物认知 | `story_memory` 或实体扩展属性 | 必须标明认知主体，不能与客观事实混用 |
 | 物品数量 | `story_entity.attributes_json` | 只在正文明确数量后启用，未知数量不能伪造为 1 |
 | 玩家决定检查点 | `story_turn.state_patch_json` | 用于回放与质量检查，不作为战力规则 |
@@ -209,7 +211,7 @@ Reducer 最终接受和提交的事实概要。
 
 **权威性**：当前主角、世界时间、当前位置、当前处境和使用的引擎以本表为准。
 
-`state_json._trustedProjection` 保存带结构版本的当前世界事实与人物认知投影；
+`state_json._trustedProjection` 保存带结构版本的初始事实契约、当前世界事实与人物认知投影；
 `state_json._trustedScene.pendingDecision` 只在正文停于重大决定且等待玩家亲自回答时存在。
 下一回合不再等待决定时必须清除该字段，旧命卷缺少此扩展时按“当前无待决定事项”读取。
 
@@ -311,6 +313,12 @@ Reducer 最终接受和提交的事实概要。
 `story_save.state_json._trustedProjection` 为当前中性投影保留区，包含独立 `schemaVersion`、
 带稳定 ID 和 revision 的 `worldFacts`，以及带认知主体、对象和证据引用的 `knowledge`。
 该子结构升级使用状态映射器逐级处理，不通过产品版本号建立新表。
+
+其中 `initialContract` 记录 `protagonistName/race/gender/origin/startingRealm/storyPreference` 与
+`worldCode/worldName/worldPremise/cultivationStyle/openingRegion/openingNarrative`。新命卷在创建事务中写入；
+旧命卷缺少或只留下空节点时，读取阶段先从现有主角、世界和开场字段构造兼容契约，并在下一次可信写入时
+一次性回填，不需要数据库迁移。历史数据无法证明开局境界时写入“历史命卷未记录”，不得用当前境界反推。
+该节点是后续回合的只读可信来源，Reducer 必须原样保留，不会因为滚动摘要或模型正文变化而被覆盖。
 
 ## 10. `story_state_correction`：修正审计表
 

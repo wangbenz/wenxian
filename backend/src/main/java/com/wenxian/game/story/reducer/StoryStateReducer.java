@@ -79,7 +79,7 @@ public final class StoryStateReducer {
             throw new IllegalArgumentException("世界时间超出可保存范围", error);
         }
         StoryProjection next = new StoryProjection(nextTime, applyCore(before.coreState(), proposal.coreState()),
-                entities, worldFacts, knowledge, memories);
+                entities, worldFacts, knowledge, memories, before.initialContract());
         StoryPatch accepted = new StoryPatch(proposal.title(), proposal.narrative(), proposal.time(),
                 proposal.coreState(), acceptedEntities, acceptedWorldFacts, proposal.knowledge(),
                 proposal.memories(), proposal.decisionCheckpoint(), proposal.choices(), proposal.rollingSummary());

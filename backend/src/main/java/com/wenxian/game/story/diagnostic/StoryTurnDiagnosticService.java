@@ -23,7 +23,7 @@ import java.util.UUID;
  */
 @Service
 public class StoryTurnDiagnosticService {
-    public static final String PROMPT_VERSION = "trusted-story-turn-v1";
+    public static final String PROMPT_VERSION = "trusted-story-turn-v2";
 
     private final StoryTurnDiagnosticRepository repository;
     private final ObjectMapper mapper;
@@ -116,6 +116,12 @@ public class StoryTurnDiagnosticService {
             value.put("previousTurn", context.narrative().previousTurn() == null
                     ? 0 : context.narrative().previousTurn().sequence());
             value.put("pendingDecisionIncluded", context.objective().pendingDecision() != null);
+            value.put("initialContractIncluded", context.objective().initialContract() != null
+                    && !context.objective().initialContract().origin().isBlank());
+            value.set("sourceRefs", owner.mapper.valueToTree(context.objective().sourceExcerpts().stream()
+                    .map(StoryPromptContext.SourceExcerpt::ref).toList()));
+            value.put("selectedChoice", context.action().selectedChoice() == null
+                    ? "" : context.action().selectedChoice().id());
             if (context.action().explicitDurationMinutes() != null) {
                 value.put("explicitDurationMinutes", context.action().explicitDurationMinutes());
             }
@@ -124,13 +130,15 @@ public class StoryTurnDiagnosticService {
         }
 
         public void actionResolved(StoryActionContract contract) {
+            actionContract.put("actionMode", contract.actionMode().name());
             actionContract.put("itemActionDetected", contract.itemActionDetected());
             actionContract.put("conflictPresent", contract.conflict().present());
             actionContract.set("references", owner.mapper.valueToTree(contract.references().stream()
                     .map(ref -> owner.mapper.createObjectNode()
                             .put("resolution", ref.resolution() == null ? "" : ref.resolution().name())
                             .put("entityId", text(ref.entityId())).put("entityType", text(ref.entityType()))
-                            .put("canonicalName", text(ref.canonicalName())).put("role", text(ref.role())))
+                            .put("canonicalName", text(ref.canonicalName())).put("role", text(ref.role()))
+                            .set("evidenceRefs", owner.mapper.valueToTree(ref.evidenceRefs())))
                     .toList()));
             actionContract.set("itemTransitions", owner.mapper.valueToTree(contract.itemTransitions()));
             actionContract.set("characterPreconditions", owner.mapper.valueToTree(contract.characterPreconditions()));

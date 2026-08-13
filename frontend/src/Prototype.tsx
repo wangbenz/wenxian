@@ -1432,6 +1432,7 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
         gender: STORY_GENDER_NAMES[request.gender] ?? request.gender,
         origin: request.originPremise.trim(), opening: selectedRoute?.opening,
         storyTone: request.preference.trim() || "自由探索，不预设唯一道路",
+        startingRealm: selectedRoute?.startingRealm,
       }));
     } else {
       created = restartTargetId ? await gameApi.restartSave(restartTargetId, request) : await gameApi.createSave(request);
@@ -1485,7 +1486,8 @@ function LegacyPrototype({ v014 = false }: { v014?: boolean }) {
     const next = v014
       ? storySnapshotView(await gameApi.storyTurn(game.saveId, inputType === "CHOICE"
         ? (() => { const selected = choices.find((choice) => choice.id === payload.choiceId); return selected ? `${selected.label}：${selected.hint}` : "观察当前局势"; })()
-        : (payload.content ?? "观察当前局势"), snapshot.revision))
+        : (payload.content ?? "观察当前局势"), snapshot.revision,
+        inputType === "CHOICE" ? payload.choiceId : undefined))
       : await gameApi.turn(game.saveId, snapshot.revision, inputType, payload);
     storeSnapshot(next);
     await refreshSaves();

@@ -25,6 +25,20 @@ class V014CharacterRouteAgentTest {
         assertEquals(3, routes.size());
         assertEquals("route-1", routes.getFirst().id());
         assertEquals("石中初醒", routes.getFirst().title());
+        assertEquals("境界未明", routes.getFirst().startingRealm());
+    }
+
+    @Test
+    void keepsStartingRealmConsistentWithPowerfulOrigin() {
+        var routes = agent.parse("""
+                {"routes":[
+                  {"title":"狐主临世","origin":"九尾天狐一脉之主，修为冠绝北荒。","opening":"你在妖庭来使面前醒来。","preference":"爽文与势力经营。","startingRealm":"妖王境"},
+                  {"title":"旧王归山","origin":"昔日妖王散去修为后重归故地。","opening":"旧部正在山门外等候。","preference":"重修与旧缘。","startingRealm":"启灵"},
+                  {"title":"山野幼狐","origin":"山野白狐初次生出灵智。","opening":"猎户的脚步正在逼近。","preference":"自由成长。","startingRealm":"启灵"}
+                ]}
+                """);
+
+        assertEquals("妖王境", routes.getFirst().startingRealm());
     }
 
     @Test

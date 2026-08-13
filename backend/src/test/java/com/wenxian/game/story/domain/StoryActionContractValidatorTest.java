@@ -1,6 +1,7 @@
 package com.wenxian.game.story.domain;
 
 import com.wenxian.game.story.domain.StoryActionContract.CharacterPrecondition;
+import com.wenxian.game.story.domain.StoryActionContract.ActionMode;
 import com.wenxian.game.story.domain.StoryActionContract.Conflict;
 import com.wenxian.game.story.domain.StoryActionContract.EntityReference;
 import com.wenxian.game.story.domain.StoryActionContract.ItemTransition;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -133,6 +135,54 @@ class StoryActionContractValidatorTest {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> validator.validate(projection(new CustodyValue(HolderType.PLAYER, null)), contract));
         assertTrue(error.getMessage().contains("只有可转移物品"));
+    }
+
+    @Test
+    void acceptsSceneEntityEstablishedByAProvidedSource() {
+        EntityReference oldZhou = new EntityReference("老周", ReferenceResolution.ESTABLISHED,
+                null, "CHARACTER", "老周", "TARGET", null, List.of("turn:12"));
+        StoryActionContract contract = new StoryActionContract("尝试追上老周询问", ActionMode.ATTEMPT,
+                false, List.of(oldZhou), List.of(), List.of(), null, "询问后停下",
+                new Conflict(false, "", ""));
+
+        assertDoesNotThrow(() -> validator.validate(
+                projection(new CustodyValue(HolderType.PLAYER, null)), contract, Set.of("turn:12")));
+    }
+
+    @Test
+    void rejectsEstablishedReferenceWhoseEvidenceWasNotActuallyProvided() {
+        EntityReference oldZhou = new EntityReference("老周", ReferenceResolution.ESTABLISHED,
+                null, "CHARACTER", "老周", "TARGET", null, List.of("turn:999"));
+        StoryActionContract contract = new StoryActionContract("询问老周", ActionMode.ATTEMPT,
+                false, List.of(oldZhou), List.of(), List.of(), null, "",
+                new Conflict(false, "", ""));
+
+        assertThrows(StoryActionPreconditionException.class, () -> validator.validate(
+                projection(new CustodyValue(HolderType.PLAYER, null)), contract, Set.of("turn:12")));
+    }
+
+    @Test
+    void allowsUnknownTargetWhenPlayerIsOnlyTryingToFindIt() {
+        EntityReference sword = new EntityReference("传说中的仙剑", ReferenceResolution.UNRESOLVED,
+                null, "ITEM", "传说中的仙剑", "TARGET", null, List.of());
+        StoryActionContract contract = new StoryActionContract("尝试寻找仙剑", ActionMode.ATTEMPT,
+                false, List.of(sword), List.of(), List.of(), null, "找到线索后停下",
+                new Conflict(false, "", ""));
+
+        assertDoesNotThrow(() -> validator.validate(
+                projection(new CustodyValue(HolderType.PLAYER, null)), contract, Set.of()));
+    }
+
+    @Test
+    void rejectsUnknownTargetWhenPlayerClaimsItAlreadyBelongsToThem() {
+        EntityReference sword = new EntityReference("我行囊里的仙剑", ReferenceResolution.UNRESOLVED,
+                null, "ITEM", "仙剑", "SOURCE", new CustodyValue(HolderType.PLAYER, null), List.of());
+        StoryActionContract contract = new StoryActionContract("使用我已有的仙剑", ActionMode.ASSERT_FACT,
+                true, List.of(sword), List.of(), List.of(), null, "",
+                new Conflict(false, "", ""));
+
+        assertThrows(StoryActionPreconditionException.class, () -> validator.validate(
+                projection(new CustodyValue(HolderType.PLAYER, null)), contract, Set.of()));
     }
 
     private StoryActionContract contract(CustodyValue from, CustodyValue target) {

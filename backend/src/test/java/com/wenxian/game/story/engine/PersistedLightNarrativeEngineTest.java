@@ -221,7 +221,7 @@ class PersistedLightNarrativeEngineTest {
                     core(), 3, "V0.14", "V0.14", Instant.now()));
             PersistedLightNarrativeEngine engine = engine(database, saves, entities, memories);
             CreateSaveRequest request = new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
-                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索");
+                    "宗门少主，已经筑基。", "你在山门晨钟中醒来。", "自由探索", "筑基初期");
 
             var created = engine.create(USER, request);
 
@@ -230,6 +230,10 @@ class PersistedLightNarrativeEngineTest {
             assertEquals(2, saves.findOwned(USER.userId(), created.saveId()).orElseThrow().activeSlotNo());
             assertEquals(2, saves.countActive(USER.userId()));
             assertEquals("楚星河", created.state().protagonist().name());
+            assertEquals("筑基初期", created.state().protagonist().realm());
+            StoryProjection createdProjection = new StoryProjectionPersistenceMapper(mapper).load(
+                    saves.findOwned(USER.userId(), created.saveId()).orElseThrow(), List.of(), List.of());
+            assertEquals("筑基初期", createdProjection.initialContract().startingRealm());
             assertEquals("你在山门晨钟中醒来。", jdbc.queryForObject(
                     "select rolling_summary from story_conversation where save_id=?", String.class,
                     created.saveId()));
@@ -318,7 +322,7 @@ class PersistedLightNarrativeEngineTest {
             assertTrue(unknown.inPossession());
             assertEquals(1, jdbc.queryForObject("select count(*) from story_turn where save_id=?",
                     Integer.class, created.saveId()));
-            assertEquals("trusted-story-turn-v1", jdbc.queryForObject(
+            assertEquals("trusted-story-turn-v2", jdbc.queryForObject(
                     "select prompt_version from story_turn where save_id=?", String.class, created.saveId()));
             String storedPatch = jdbc.queryForObject(
                     "select state_patch_json from story_turn where save_id=?", String.class, created.saveId());
@@ -345,6 +349,40 @@ class PersistedLightNarrativeEngineTest {
                     Integer.class, USER.userId()), "成功额度必须与回合在同一事务中只记录一次");
         } finally {
             database.shutdown();
+        }
+    }
+
+    @Test
+    void selectedSystemChoiceBecomesTraceableContextSource() {
+        try (TrustedRuntime runtime = trustedRuntime(turnPatch("察看山门", "你依照眼前提示察看山门，没有替自己作出新的重大决定。",
+                15, List.of(), List.of(), new DecisionCheckpoint(false, null)))) {
+            var current = runtime.engine().get(USER, runtime.saveId());
+            var choice = current.state().choices().getFirst();
+
+            runtime.engine().takeTurn(USER, runtime.saveId(), new TurnRequest(
+                    choice.title() + "：" + choice.description(), "request-selected-choice",
+                    current.revision(), choice.id()));
+
+            StoryPromptContext context = runtime.generatedContexts().getFirst();
+            assertEquals(choice.id(), context.action().selectedChoice().id());
+            assertTrue(context.objective().sourceExcerpts().stream()
+                    .anyMatch(source -> ("choice:" + choice.id()).equals(source.ref())));
+        }
+    }
+
+    @Test
+    void staleSystemChoiceIsRejectedBeforeCallingNarrativeAgent() {
+        try (TrustedRuntime runtime = trustedRuntime()) {
+            var current = runtime.engine().get(USER, runtime.saveId());
+
+            GameApiException error = assertThrows(GameApiException.class,
+                    () -> runtime.engine().takeTurn(USER, runtime.saveId(), new TurnRequest(
+                            "执行过期选项", "request-stale-choice", current.revision(), "choice-stale")));
+
+            assertEquals("ACTION_PRECONDITION_FAILED", error.code());
+            assertTrue(error.getMessage().contains("已经不属于当前场景"));
+            assertTrue(runtime.generatedContexts().isEmpty());
+            assertEquals(0, runtime.engine().get(USER, runtime.saveId()).turnNumber());
         }
     }
 

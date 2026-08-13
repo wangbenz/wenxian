@@ -84,38 +84,49 @@ public class StoryTurnPreparationService {
 
     /** 生成并归并一份尚未提交的回合结果。 */
     public Prepared prepare(StoredSave saved, String requestId, String playerAction, StoryModelRoute route) {
+        return prepare(saved, requestId, playerAction, null, route);
+    }
+
+    /**
+     * 生成并归并一份尚未提交的回合结果；choiceId 非空时必须属于当前命卷快照。
+     */
+    public Prepared prepare(StoredSave saved, String requestId, String playerAction, String choiceId,
+                            StoryModelRoute route) {
         if (saved == null) throw new IllegalArgumentException("回合准备缺少命卷");
         if (requestId == null || requestId.isBlank()) throw new IllegalArgumentException("回合准备缺少请求号");
         if (playerAction == null || playerAction.isBlank()) throw new IllegalArgumentException("玩家行动不能为空");
         StoryTurnDiagnosticService.Session diagnostic = diagnostics == null ? null
                 : diagnostics.begin(saved.id(), requestId.strip(), saved.turnNumber() + 1, saved.revision());
         try {
-            return prepareObserved(saved, playerAction, route, diagnostic);
+            return prepareObserved(saved, playerAction, choiceId, route, diagnostic);
         } catch (RuntimeException error) {
             if (diagnostic != null) diagnostic.failed("PREPARATION_FAILED", error);
             throw error;
         }
     }
 
-    private Prepared prepareObserved(StoredSave saved, String playerAction, StoryModelRoute route,
+    private Prepared prepareObserved(StoredSave saved, String playerAction, String choiceId, StoryModelRoute route,
                                      StoryTurnDiagnosticService.Session diagnostic) {
         List<Entity> existingEntities = entities.listAll(saved.id());
         StoryProjection before = projections.load(saved, existingEntities,
                 memories.recentActive(saved.id(), RECENT_MEMORY_LIMIT));
         var checkpoint = projections.loadDecisionCheckpoint(saved.state());
         StoryPromptContext.PreviousTurn previous = previousTurn(saved.id());
+        StoryPromptContext.SelectedChoice selectedChoice = selectedChoice(saved.state(), choiceId);
         Long explicitDurationMinutes = explicitDuration(playerAction, before.worldTimeMinutes());
         StoryPromptContext context = contexts.assemble(before, new ContextRequest(playerAction,
                 worldSeedRules(saved.state()), selection(before, existingEntities), conversations.summary(saved.id()),
                 previous, checkpoint == null ? null : new PendingDecision(checkpoint.prompt()),
-                explicitDurationMinutes));
+                explicitDurationMinutes, selectedChoice));
         if (diagnostic != null) diagnostic.context(context);
         StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
                 saved.id(), saved.turnNumber() + 1);
         StoryTurnAgent.ResolvedAction resolvedAction = agent.resolveAction(context, route, invocation);
         var actionContract = contractCanonicalizer.canonicalize(before, resolvedAction.contract());
         if (diagnostic != null) diagnostic.actionResolved(actionContract);
-        actionContracts.validate(before, actionContract);
+        actionContracts.validate(before, actionContract, context.objective().sourceExcerpts().stream()
+                .map(StoryPromptContext.SourceExcerpt::ref)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet()));
         context = context.withActionContract(actionContract);
         StoryTurnAgent.Generated generation = agent.generate(context, route, invocation);
         generation = prependModelResults(resolvedAction.modelResults(), generation);
@@ -174,6 +185,23 @@ public class StoryTurnPreparationService {
     private Long explicitDuration(String playerAction, long worldTimeMinutes) {
         Integer minutes = ExplicitDurationParser.parseMinutes(playerAction, worldTimeMinutes);
         return minutes == null ? null : minutes.longValue();
+    }
+
+    private StoryPromptContext.SelectedChoice selectedChoice(JsonNode state, String choiceId) {
+        if (choiceId == null || choiceId.isBlank()) return null;
+        JsonNode choices = state == null ? null : state.path("choices");
+        if (choices != null && choices.isArray()) {
+            for (JsonNode choice : choices) {
+                if (choiceId.strip().equals(choice.path("id").asText(""))) {
+                    String title = choice.path("title").asText("").strip();
+                    String description = choice.path("description").asText("").strip();
+                    if (title.isBlank()) throw new IllegalStateException("当前系统选项缺少行动标题");
+                    return new StoryPromptContext.SelectedChoice(choiceId.strip(), title, description);
+                }
+            }
+        }
+        throw new com.wenxian.game.story.domain.StoryActionPreconditionException(
+                "这个选项已经不属于当前场景。", "请刷新命卷后选择当前显示的行动，或直接输入新的行动。");
     }
 
     private StoryTurnAgent.Generated combine(StoryTurnAgent.Generated first, StoryTurnAgent.Generated repaired) {

@@ -36,8 +36,15 @@ public final class StoryApiModels {
             @NotBlank @Size(max = 20) String gender,
             @NotBlank @Size(max = 160) String origin,
             @Size(max = 240) String opening,
-            @JsonAlias("storyTone") @Size(max = 160) String storyPreference
-    ) {}
+            @JsonAlias("storyTone") @Size(max = 160) String storyPreference,
+            @Size(max = 40) String startingRealm
+    ) {
+        /** 兼容旧客户端；未明确开局境界时记为“境界未明”，而不是擅自降为凡俗。 */
+        public CreateSaveRequest(String worldCode, String customWorld, String playerName, String race,
+                                 String gender, String origin, String opening, String storyPreference) {
+            this(worldCode, customWorld, playerName, race, gender, origin, opening, storyPreference, null);
+        }
+    }
 
     public record CharacterRouteRequest(
             @NotBlank @Pattern(regexp = "[A-Z_]{3,40}") String worldCode,
@@ -50,15 +57,25 @@ public final class StoryApiModels {
     ) {}
 
     public record CharacterRoute(String id, String title, String origin,
-                                 String opening, String preference) {}
+                                 String opening, String preference, String startingRealm) {
+        public CharacterRoute(String id, String title, String origin, String opening, String preference) {
+            this(id, title, origin, opening, preference, "境界未明");
+        }
+    }
 
     public record CharacterRouteResponse(List<CharacterRoute> routes) {}
 
     public record TurnRequest(
             @NotBlank @Size(min = 1, max = 1000) String action,
             @NotBlank @Size(max = 80) String requestId,
-            @Positive long expectedRevision
-    ) {}
+            @Positive long expectedRevision,
+            @Size(max = 100) String choiceId
+    ) {
+        /** 兼容自由输入和旧 H5；只有点击系统选项时才携带 choiceId。 */
+        public TurnRequest(String action, String requestId, long expectedRevision) {
+            this(action, requestId, expectedRevision, null);
+        }
+    }
 
     public record CorrectionRequest(
             @NotBlank @Size(min = 2, max = 500) String instruction,

@@ -14,6 +14,7 @@ import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
+import com.wenxian.game.story.domain.StoryProjection.InitialContract;
 import com.wenxian.game.story.domain.StoryProjection.KnowledgeState;
 import com.wenxian.game.story.domain.StoryProjection.MemoryState;
 import com.wenxian.game.story.domain.StoryProjection.WorldFactState;
@@ -72,7 +73,7 @@ public final class StoryProjectionPersistenceMapper {
                         value.importance(), List.of()))
                 .toList();
         return new StoryProjection(Math.max(0, state.path("worldTimeMinutes").asLong(0)), core,
-                entityStates, worldFacts, knowledge, memoryStates);
+                entityStates, worldFacts, knowledge, memoryStates, initialContract(state));
     }
 
     /** 将中性核心投影写回 state_json，同时保留世界模板、主角姓名、正文和选项等现有字段。 */
@@ -96,8 +97,31 @@ public final class StoryProjectionPersistenceMapper {
         trusted.set("knowledge", mapper.valueToTree(projection.knowledge().values().stream()
                 .sorted(Comparator.comparing(KnowledgeState::subjectRef)
                         .thenComparing(KnowledgeState::topicRef)).toList()));
+        // 新命卷在创建事务中已经写入初始契约；历史命卷首次经过可信回合时才有机会完成一次性回填。
+        // 此后始终保留已有值，普通回合不能借剧情更新角色根源或世界初始设定。
+        JsonNode storedInitial = trusted.path("initialContract");
+        if (!storedInitial.isObject()
+                || initialContractEmpty(mapper.convertValue(storedInitial, InitialContract.class))) {
+            trusted.set("initialContract", mapper.valueToTree(projection.initialContract()));
+        }
         state.set(TRUSTED_PROJECTION, trusted);
         return state;
+    }
+
+    /**
+     * 创建命卷时一次性保存玩家确认的根源契约；普通回合不得调用本方法改写它。
+     */
+    public ObjectNode writeInitialContract(JsonNode state, InitialContract contract) {
+        if (contract == null) throw new IllegalArgumentException("初始事实契约不能为空");
+        ObjectNode result = state instanceof ObjectNode object ? object.deepCopy() : mapper.createObjectNode();
+        ObjectNode trusted = result.path(TRUSTED_PROJECTION) instanceof ObjectNode object
+                ? object.deepCopy() : mapper.createObjectNode();
+        trusted.put("schemaVersion", TRUSTED_SCHEMA_VERSION);
+        trusted.set("initialContract", mapper.valueToTree(contract));
+        if (!trusted.has("worldFacts")) trusted.putArray("worldFacts");
+        if (!trusted.has("knowledge")) trusted.putArray("knowledge");
+        result.set(TRUSTED_PROJECTION, trusted);
+        return result;
     }
 
     /**
@@ -294,6 +318,49 @@ public final class StoryProjectionPersistenceMapper {
             throw new IllegalStateException("命卷可信投影结构版本不受支持");
         }
         return trusted;
+    }
+
+    /**
+     * 从命卷创建时已经保存的角色与世界字段构建只读初始契约。
+     *
+     * <p>旧命卷没有独立的初始契约表，因此这里直接读取创建后一直保留的根源字段；正文与滚动摘要
+     * 不参与该契约，避免后续模型叙述反向覆盖玩家最初确认的设定。</p>
+     */
+    private InitialContract initialContract(JsonNode state) {
+        JsonNode trusted = trustedProjection(state);
+        JsonNode stored = trusted.path("initialContract");
+        if (stored.isObject()) {
+            InitialContract contract = mapper.convertValue(stored, InitialContract.class);
+            if (!initialContractEmpty(contract)) return contract;
+        }
+        JsonNode protagonist = state == null ? null : state.path("protagonist");
+        JsonNode world = state == null ? null : state.path("world");
+        String openingNarrative = state != null && state.path("turnNumber").asInt(0) == 0
+                ? text(state, "narrative", "") : "";
+        int turnNumber = state == null ? 0 : state.path("turnNumber").asInt(0);
+        return new InitialContract(
+                text(protagonist, "name", ""),
+                text(protagonist, "race", ""),
+                text(protagonist, "gender", ""),
+                text(protagonist, "origin", ""),
+                turnNumber == 0 ? text(protagonist, "realm", "") : "历史命卷未记录",
+                text(protagonist, "storyTone", text(protagonist, "storyPreference", "")),
+                text(world, "code", ""),
+                text(world, "name", ""),
+                text(world, "premise", ""),
+                text(world, "cultivationStyle", ""),
+                text(world, "openingRegion", ""),
+                openingNarrative);
+    }
+
+    private boolean initialContractEmpty(InitialContract contract) {
+        return contract == null || (contract.protagonistName().isBlank()
+                && contract.race().isBlank()
+                && contract.gender().isBlank()
+                && contract.origin().isBlank()
+                && contract.worldCode().isBlank()
+                && contract.worldName().isBlank()
+                && contract.openingNarrative().isBlank());
     }
 
     private Boolean booleanValue(JsonNode value) {

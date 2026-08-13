@@ -39,7 +39,11 @@ public final class V014ApiModels {
     ) {}
 
     public record CharacterRoute(String id, String title, String origin,
-                                 String opening, String preference) {}
+                                 String opening, String preference, String startingRealm) {
+        public CharacterRoute(String id, String title, String origin, String opening, String preference) {
+            this(id, title, origin, opening, preference, "境界未明");
+        }
+    }
 
     public record CharacterRouteResponse(List<CharacterRoute> routes) {}
 

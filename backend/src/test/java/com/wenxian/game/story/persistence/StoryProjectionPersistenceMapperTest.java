@@ -12,6 +12,7 @@ import com.wenxian.game.story.domain.StoryPatch.RelationshipValue;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
+import com.wenxian.game.story.domain.StoryProjection.InitialContract;
 import com.wenxian.game.story.domain.StoryProjection.KnowledgeState;
 import com.wenxian.game.story.domain.StoryProjection.WorldFactState;
 import com.wenxian.game.story.persistence.StoryMemoryRepository.StoredMemory;
@@ -204,6 +205,50 @@ class StoryProjectionPersistenceMapperTest {
         mapper.writeDecisionCheckpoint(state, new DecisionCheckpoint(false, null));
         assertFalse(state.has(StoryProjectionPersistenceMapper.TRUSTED_SCENE));
         assertNull(mapper.loadDecisionCheckpoint(state));
+    }
+
+    @Test
+    void preservesInitialContractAcrossLaterProjectionWrites() {
+        InitialContract initial = new InitialContract("柳青", "灵族", "女", "矿石成灵，随身带着醒尘剑",
+                "凝魄境", "爽快探索", "XUANXU", "玄墟界", "诸道并存", "修行不拘一途", "青岐州",
+                "你在矿洞深处睁开眼睛。柳青儿正在洞口等你。 ");
+        ObjectNode created = mapper.writeInitialContract(baseState(), initial);
+        StoryProjection loaded = mapper.load(save(created), List.of(), List.of());
+        ObjectNode afterTurn = mapper.writeState(created, loaded);
+        StoryProjection reloaded = mapper.load(save(afterTurn), List.of(), List.of());
+
+        assertEquals(initial.origin(), reloaded.initialContract().origin());
+        assertEquals(initial.openingNarrative().strip(), reloaded.initialContract().openingNarrative());
+        assertEquals("柳青", reloaded.initialContract().protagonistName());
+        assertEquals("凝魄境", reloaded.initialContract().startingRealm());
+    }
+
+    @Test
+    void backfillsLegacyInitialContractOnceWithoutPretendingCurrentRealmWasStartingRealm() {
+        ObjectNode legacy = baseState();
+        legacy.put("turnNumber", 37);
+        legacy.withObject("protagonist")
+                .put("race", "妖族")
+                .put("gender", "女")
+                .put("origin", "山中白狐得月华化形")
+                .put("realm", "金丹初期");
+
+        StoryProjection loaded = mapper.load(save(legacy), List.of(), List.of());
+        ObjectNode firstTrustedWrite = mapper.writeState(legacy, loaded);
+        StoryProjection reloaded = mapper.load(save(firstTrustedWrite), List.of(), List.of());
+
+        assertEquals("山中白狐得月华化形", reloaded.initialContract().origin());
+        assertEquals("历史命卷未记录", reloaded.initialContract().startingRealm());
+        assertEquals("陆沉", reloaded.initialContract().protagonistName());
+
+        firstTrustedWrite.withObject("protagonist").put("origin", "错误覆盖").put("realm", "化神");
+        StoryProjection changedCurrentState = mapper.load(save(firstTrustedWrite), List.of(), List.of());
+        ObjectNode secondTrustedWrite = mapper.writeState(firstTrustedWrite, changedCurrentState);
+        StoryProjection finalProjection = mapper.load(save(secondTrustedWrite), List.of(), List.of());
+
+        assertEquals("山中白狐得月华化形", finalProjection.initialContract().origin(),
+                "初始契约回填后不能再随当前状态变化");
+        assertEquals("历史命卷未记录", finalProjection.initialContract().startingRealm());
     }
 
     private ObjectNode baseState() {

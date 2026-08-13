@@ -6,6 +6,7 @@ import com.wenxian.game.story.agent.PromptContextAssembler.ContextSelection;
 import com.wenxian.game.story.agent.PromptContextAssembler.KnowledgeRef;
 import com.wenxian.game.story.agent.StoryPromptContext.PendingDecision;
 import com.wenxian.game.story.agent.StoryPromptContext.PreviousTurn;
+import com.wenxian.game.story.agent.StoryPromptContext.SelectedChoice;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
@@ -14,6 +15,7 @@ import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
+import com.wenxian.game.story.domain.StoryProjection.InitialContract;
 import com.wenxian.game.story.domain.StoryProjection.KnowledgeState;
 import com.wenxian.game.story.domain.StoryProjection.MemoryState;
 import com.wenxian.game.story.domain.StoryProjection.WorldFactState;
@@ -61,12 +63,30 @@ class PromptContextAssemblerTest {
         assertEquals(null, context.action().expectedEndClock());
         assertEquals("第9日 13:45（下午）", context.objective().worldClock().display());
         assertEquals("下午", context.objective().worldClock().phase());
+        assertEquals("器物化灵", context.objective().initialContract().origin());
+        assertTrue(context.objective().sourceExcerpts().stream()
+                .anyMatch(value -> "initial:origin".equals(value.ref())));
+        assertTrue(context.objective().sourceExcerpts().stream()
+                .anyMatch(value -> "turn:12".equals(value.ref())));
         assertTrue(context.system().invariants().stream().anyMatch(value -> value.contains("重大不可逆决定")));
         assertTrue(context.objective().currentInventory().complete());
         assertEquals(List.of("item-herbs"), context.objective().currentInventory().items().stream()
                 .map(StoryPromptContext.EntityIndexEntry::id).toList());
         assertEquals(List.of("item-sold-sword"), context.objective().currentInventory().historicalItems().stream()
                 .map(StoryPromptContext.EntityIndexEntry::id).toList());
+    }
+
+    @Test
+    void carriesSelectedChoiceAsTraceableActionSource() {
+        SelectedChoice choice = new SelectedChoice("choice-zhou", "询问老周", "向驿站里的老周打听前路。");
+        StoryPromptContext context = assembler.assemble(projection(), new ContextRequest(
+                "询问老周：向驿站里的老周打听前路。", List.of(), ContextSelection.empty(), "", null,
+                null, null, choice));
+
+        assertEquals(choice, context.action().selectedChoice());
+        assertEquals("choice:choice-zhou", context.objective().sourceExcerpts().stream()
+                .filter(value -> "SELECTED_CHOICE".equals(value.sourceType()))
+                .findFirst().orElseThrow().ref());
     }
 
     @Test
@@ -191,6 +211,8 @@ class PromptContextAssemblerTest {
                         soldSword.id(), soldSword),
                 Map.of(worldFact.id(), worldFact),
                 Map.of("mentor-belief", belief),
-                List.of(memory));
+                List.of(memory),
+                new InitialContract("岑照", "灵族", "女", "器物化灵", "自由探索",
+                        "XUANXU", "玄墟界", "诸道并存", "修行体系开放", "青石镇", "你在古镜中醒来。"));
     }
 }

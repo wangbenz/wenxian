@@ -111,7 +111,7 @@ public class V014StoryEngineAdapter implements StoryEngine {
                             request.preferenceSeed()));
             return new CharacterRouteResponse(result.routes().stream()
                     .map(route -> new CharacterRoute(route.id(), route.title(), route.origin(),
-                            route.opening(), route.preference()))
+                            route.opening(), route.preference(), route.startingRealm()))
                     .toList());
         });
     }

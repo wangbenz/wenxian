@@ -71,6 +71,34 @@ class StoryActionContractPatchValidatorTest {
     }
 
     @Test
+    void establishedItemMutationMustPromoteTheSourceItemIntoStableState() {
+        StoryActionContract contract = new StoryActionContract("服用根源中的醒尘丹", true,
+                List.of(new EntityReference("醒尘丹", ReferenceResolution.ESTABLISHED, null, "ITEM",
+                        "醒尘丹", "SOURCE", new CustodyValue(HolderType.PLAYER, null),
+                        List.of("initial:origin"))),
+                List.of(), List.of(), "服用后停下", new Conflict(false, "", ""));
+        StoryPatch candidate = patch(new EntityPatch(EntityOperation.CREATE, null, "ITEM",
+                "醒尘丹", "已经服用", "根源中携带的丹药已经消耗", null,
+                new QuantityValue(true, 0), false, new CustodyValue(HolderType.NONE, null), null, null));
+
+        assertDoesNotThrow(() -> validator.validate(contract, candidate));
+    }
+
+    @Test
+    void establishedItemMutationCannotDisappearOnlyInNarrative() {
+        StoryActionContract contract = new StoryActionContract("服用根源中的醒尘丹", true,
+                List.of(new EntityReference("醒尘丹", ReferenceResolution.ESTABLISHED, null, "ITEM",
+                        "醒尘丹", "SOURCE", new CustodyValue(HolderType.PLAYER, null),
+                        List.of("initial:origin"))),
+                List.of(), List.of(), "服用后停下", new Conflict(false, "", ""));
+        StoryPatch unrelated = patch(new EntityPatch(EntityOperation.CREATE, null, "ITEM",
+                "空瓷瓶", "留在手中", "服药后留下的瓷瓶", null,
+                new QuantityValue(true, 1), true, new CustodyValue(HolderType.PLAYER, null), null, null));
+
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(contract, unrelated));
+    }
+
+    @Test
     void acceptsPartialConsumptionWhenQuantityDropsAndRemainingStackStaysWithPlayer() {
         StoryActionContract contract = partialContract();
         StoryPatch candidate = patch(new EntityPatch(EntityOperation.UPDATE, "item-pill", "ITEM",

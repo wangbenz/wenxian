@@ -29,7 +29,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             你是《问仙录》的回合叙事与变化提案 Agent。你可以自由演绎世界，但模型输出不是事实，服务端会校验后提交。
 
             严格遵守以下边界：
-            1. objective 是当前唯一客观事实；cognition 是人物所知或所信；memory、narrative 只是叙事材料；
+            1. objective 是当前唯一客观事实；其中 initialContract 是玩家创建命卷时确认的根源，sourceExcerpts 是
+               本轮可以追溯的开场、上一回合或已点击系统选项。cognition 是人物所知或所信；memory、narrative 只是叙事材料；
                action 是玩家本轮授权。不得用摘要、旧正文或人物观点静默覆盖 objective。
             2. 只执行 action 已授权的行动及其直接后果。来到新的重大、不可逆决定前必须停止，
                decisionCheckpoint.required=true，并把决定交还玩家；不得替玩家加入宗门、立誓、结盟、屠杀、放弃传承等。
@@ -50,6 +51,13 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                itemTransitions 完全一致，不得省略、反向或另行推断。custody 表示物品实际保管者，不能只改正文而不改结构。
                factContract.references 中 resolution=EXISTING 的实体只能使用给定 entityId；resolution=NEW 且
                expectedCustody 非空的物品必须以 canonicalName 创建唯一 ITEM 实体，并写入相同 custody；
+               resolution=ESTABLISHED 表示对象已由 evidenceRefs 指向的根源、已提交上一回或当前系统选项确立，虽然尚无
+               永久实体 ID，仍可被本轮正常交谈、追踪、攻击或使用。若本轮使其产生需要跨回合保持的生死、关系、能力、
+               数量或归属变化，必须用 canonicalName 创建唯一长期实体；普通路人或一次性环境细节无需强行建档。
+               尤其当 factContract.itemActionDetected=true 且物品为 ESTABLISHED 时，必须 CREATE 同 canonicalName 的唯一
+               ITEM，并记录变化后的 quantity 与 custody；否则根源文本会被后续回合误读成仍然持有。
+               resolution=UNRESOLVED 且 actionMode=QUERY/ATTEMPT 表示玩家正在探索尚未确认的可能，不能把它当作现有事实，
+               但也不得仅因未知而拒绝行动；由本轮剧情裁定能否找到或实现，并只在结果真正成立后创建事实。
                不得把玩家提到的新对象替换成名称或含义不同的历史实体。
                每个 CREATE 实体都必须填写非空的 name、status 和 summary；其中 summary 只记录需要跨回合保持的
                当前事实，不要复制整段正文。UPDATE 未变化的字段才可以返回 null。
@@ -137,7 +145,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             必须逐项完成六类检查，不能因为发现第一处问题就跳过其余类别：
             1. reference：action 中明确提到的物品、人物、能力或需要跨回合追踪的场景地标是否都被
                factContract.references 覆盖；玩家原话、标准名称、
-               EXISTING/NEW/UNRESOLVED 解析和稳定 ID 是否对应，是否把新瓦片之类对象误绑成历史石子、玉简等其他实体。
+               EXISTING/ESTABLISHED/NEW/UNRESOLVED 解析、证据引用和稳定 ID 是否对应，是否把新瓦片之类对象误绑成历史石子、玉简等其他实体。
                水井、屋舍、石桥、山门等无法随身携带的场景对象必须是 LANDMARK 或不持久化，不得当作 ITEM、
                不得进入 currentInventory；只有玩家取得或可被人物、地点保管的可转移对象才是 ITEM。
             2. inventory：候选是否使用、持有、赠送、出售或获得了 facts 未支持的物品；数量和处置是否一致。
@@ -180,7 +188,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
 
     private static final String ACTION_CONTRACT_PROMPT = """
             你是《问仙录》的行动事实解析 Agent。你不续写剧情、不判定胜负，只把玩家本轮自然语言行动解析成
-            可由服务端校验的稳定实体引用和前置条件。facts 是本轮开始前的唯一权威事实。
+            可由服务端校验的稳定实体引用和前置条件。facts 是本轮开始前的唯一权威事实；initialContract、
+            sourceExcerpts 和 selectedChoice 都是可引用来源，但它们不会自动让其中每个名词成为永久实体。
 
             规则：
             0. facts.coreState 包含玩家本轮开始时已确认的地点与状态。action 只是观察当前地点、
@@ -196,6 +205,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                需要跨回合追踪的水井、屋舍、石桥、山门等场景对象使用 LANDMARK；不需要跨回合追踪的普通环境细节可以不返回 reference。
                LANDMARK 不是物品，expectedCustody 必须为 null，不得进入 itemTransitions；只有可被取得、携带、消耗或转交的对象才是 ITEM。
             2. resolution=EXISTING 仅用于 facts.entityIndex 中能唯一对应的实体，必须复制稳定 entityId、entityType 和名称；
+               resolution=ESTABLISHED 用于对象明确来自 facts.initialContract、facts.sourceExcerpts 或 selectedChoice，
+               但尚无稳定实体 ID；entityId=null，并在 evidenceRefs 中逐项复制对应 sourceExcerpts.ref。不得只凭相似名字引用来源。
                resolution=NEW 仅用于玩家在本轮明确遇见、拾取或创造的新对象，entityId=null；玩家把不存在的对象当成
                当前已持有或已认识时使用 UNRESOLVED，并令 conflict.present=true。绝不能按类别相近把瓦片绑定成石子或玉简。
             3. itemActionDetected 表示本轮会改变物品的总数量或保管者，包括明确拾取并带走的新物品。查看、鉴定，或使用后
@@ -214,16 +225,21 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                NONE 表示消耗或毁去；无法确认新人物稳定 ID 时使用 UNKNOWN。
                已知堆叠物品只消耗或转移一部分、剩余部分仍在玩家手中时，target 必须是 PLAYER，quantity 填本轮处置数量；
                不要因为其中一枚被消耗就把整个物品实体标成 NONE。
-            6. 如果 action 明确声称“之前已经赠送/卖出/取得/杀死”等事实，或者依赖“师父、道侣、盟友、仇敌”等
+            6. 先设置 actionMode：QUERY 表示询问、查看或调查；ATTEMPT 表示寻找、战斗、修炼、许愿、取得等尚待裁定的尝试；
+               ASSERT_FACT 表示玩家把“已经拥有、已经认识、此前已经发生”等内容当作行动前提；AMEND_FACT 表示玩家要求
+               直接改写已确认事实。QUERY/ATTEMPT 遇到未知对象时可以使用 UNRESOLVED 且 conflict.present=false，交给剧情
+               裁定结果；不能因为目标未知、行动困难或境界不足而拒绝。ASSERT_FACT 的前提没有 EXISTING 或 ESTABLISHED
+               依据时必须 conflict.present=true。AMEND_FACT 必须提示改用修正命卷。
+            7. 如果 action 明确声称“之前已经赠送/卖出/取得/杀死”等事实，或者依赖“师父、道侣、盟友、仇敌”等
                已经成立的人物关系，但 facts 与该前提冲突，
                conflict.present=true，reason 说明当前事实，correction 给出不替玩家决定的可行改写。
                同理，玩家把已移除、已消耗、已赠予或留在地点的物品说成仍在行囊时必须报冲突，不能继续生成剧情，
                也不能把 expectedFrom 改写成 facts 中的实际保管者来绕过校验。
-            7. 不因为行动困难、境界不足或结果未知而报冲突；这些属于后续剧情。只检查已经发生的客观前提。
+            8. 不因为行动困难、境界不足或结果未知而报冲突；这些属于后续剧情。只检查已经发生的客观前提。
                characterPreconditions 只能复制 facts 中非空的 lifecycle 与 relationship.label；facts 为 UNKNOWN 时可填 UNKNOWN，
                facts 没有对应字段时必须填 null，不得根据人物 status 或 summary 猜成 ACTIVE、DEAD 或某种关系。
-            8. stopBoundary 只概括玩家明确要求的停止点；没有则为空。
-            9. agencyBoundary 必须完整解释玩家授权，不判断行动能否成功：
+            9. stopBoundary 只概括玩家明确要求的停止点；没有则为空。
+            10. agencyBoundary 必须完整解释玩家授权，不判断行动能否成功：
                authorizedActions 逐项列出主角本轮可以主动执行的行为；prohibitedActions 列出玩家明确禁止或由“只/仅”
                排除的行为；unresolvedDecisions 列出玩家明确要求保留、或行动完成后仍应由玩家决定的问题；
                requiredEndState 写玩家要求正文结束时保持的位置或状态。不得把模型认为合理的动机或下一步补进去。
@@ -231,15 +247,17 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             只返回 JSON，不要 Markdown：
             {
               "intentSummary":"",
+              "actionMode":"QUERY|ATTEMPT|ASSERT_FACT|AMEND_FACT",
               "itemActionDetected":false,
               "references":[{
                 "mention":"玩家原话中的对象短语",
-                "resolution":"EXISTING|NEW|UNRESOLVED",
+                "resolution":"EXISTING|ESTABLISHED|NEW|UNRESOLVED",
                 "entityId":null,
                 "entityType":"ITEM|CHARACTER|ABILITY|LANDMARK",
                 "canonicalName":"标准名称",
                 "role":"SOURCE|TARGET|MENTION",
-                "expectedCustody":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null}
+                "expectedCustody":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null},
+                "evidenceRefs":[]
               }],
               "itemTransitions":[{
                 "itemId":"",
@@ -474,6 +492,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         facts.put("entityIndex", context.objective().entityIndex());
         facts.put("worldFacts", context.objective().worldFacts());
         facts.put("pendingDecision", context.objective().pendingDecision());
+        facts.put("initialContract", context.objective().initialContract());
+        facts.put("sourceExcerpts", context.objective().sourceExcerpts());
 
         Map<String, Object> candidate = new LinkedHashMap<>();
         candidate.put("title", proposed.title());
@@ -516,9 +536,12 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         facts.put("entityIndex", context.objective().entityIndex());
         facts.put("relatedEntities", context.objective().relatedEntities());
         facts.put("pendingDecision", context.objective().pendingDecision());
+        facts.put("initialContract", context.objective().initialContract());
+        facts.put("sourceExcerpts", context.objective().sourceExcerpts());
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("facts", facts);
         payload.put("action", context.action().playerAction());
+        payload.put("selectedChoice", context.action().selectedChoice());
         try {
             return mapper.writeValueAsString(payload);
         } catch (JsonProcessingException error) {

@@ -18,6 +18,7 @@ import com.wenxian.game.story.domain.StoryPatchValidator;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
+import com.wenxian.game.story.domain.StoryProjection.InitialContract;
 import com.wenxian.game.story.domain.StoryProjection.WorldFactState;
 import org.junit.jupiter.api.Test;
 
@@ -152,6 +153,20 @@ class StoryStateReducerTest {
         assertEquals(HolderType.CHARACTER, after.entities().get(item.id()).custody().holderType());
         assertEquals("character-old-woman", after.entities().get(item.id()).custody().holderRef());
         assertEquals(1, after.entities().get(item.id()).quantity().value());
+    }
+
+    @Test
+    void keepsInitialContractWhenApplyingEveryLaterTurn() {
+        InitialContract initial = new InitialContract("林清漪", "人族", "女", "山村采药女",
+                "历史命卷未记录", "医修探索", "XUANXU", "玄墟界", "仙路难辨",
+                "古典修仙", "青岐州", "");
+        StoryProjection before = new StoryProjection(0,
+                new CoreState("青石镇", "安稳", "引气初期", "寻仙问道"),
+                Map.of(), Map.of(), Map.of(), List.of(), initial);
+
+        StoryProjection after = reducer.reduce(before, patch(List.of(), List.of())).projection();
+
+        assertEquals(initial, after.initialContract());
     }
 
     private StoryProjection projection(Map<String, EntityState> entities,

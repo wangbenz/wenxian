@@ -3,6 +3,7 @@ package com.wenxian.game.story.domain;
 import com.wenxian.game.story.domain.StoryActionContract.CharacterPrecondition;
 import com.wenxian.game.story.domain.StoryActionContract.EntityReference;
 import com.wenxian.game.story.domain.StoryActionContract.ItemTransition;
+import com.wenxian.game.story.domain.StoryActionContract.ActionMode;
 import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
 import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
 import com.wenxian.game.story.domain.StoryPatch.HolderType;
@@ -17,17 +18,36 @@ import com.wenxian.game.story.domain.StoryProjection.EntityState;
 public final class StoryActionContractValidator {
 
     public void validate(StoryProjection projection, StoryActionContract contract) {
+        validate(projection, contract, java.util.Set.of());
+    }
+
+    /**
+     * sourceRefs 是本轮上下文中真实提供给模型的来源目录；只允许 ESTABLISHED 引用指向这些来源。
+     */
+    public void validate(StoryProjection projection, StoryActionContract contract,
+                         java.util.Set<String> sourceRefs) {
         if (projection == null) throw new IllegalArgumentException("行动契约缺少当前事实投影");
         if (contract == null) throw new IllegalArgumentException("行动契约不能为空");
+        java.util.Set<String> availableSources = sourceRefs == null ? java.util.Set.of() : java.util.Set.copyOf(sourceRefs);
         if (contract.conflict().present()) {
             throw new StoryActionPreconditionException(contract.conflict().reason(),
                     contract.conflict().correction());
         }
+        if (contract.actionMode() == ActionMode.AMEND_FACT) {
+            throw new StoryActionPreconditionException(
+                    "这段输入是在修改已经落定的命卷事实，不属于普通行动。",
+                    "请使用“修正命卷”预览改动，确认后再写入。");
+        }
         boolean createsTrackedItem = contract.references().stream().anyMatch(this::createsTrackedItem);
-        if (contract.itemActionDetected() && contract.itemTransitions().isEmpty() && !createsTrackedItem) {
+        boolean changesExistingItem = contract.references().stream().anyMatch(value -> value != null
+                && value.resolution() == ReferenceResolution.EXISTING
+                && "ITEM".equalsIgnoreCase(value.entityType()));
+        if (contract.itemActionDetected() && changesExistingItem
+                && contract.itemTransitions().isEmpty() && !createsTrackedItem) {
             throw new IllegalArgumentException("行动契约识别到物品处置，但没有返回物品归属变化");
         }
-        contract.references().forEach(reference -> validateReference(projection, contract, reference));
+        contract.references().forEach(reference -> validateReference(
+                projection, contract, reference, availableSources));
         for (ItemTransition transition : contract.itemTransitions()) validateItem(projection, transition);
         for (CharacterPrecondition condition : contract.characterPreconditions()) {
             EntityState character = require(projection, condition.characterId(), "CHARACTER");
@@ -51,7 +71,7 @@ public final class StoryActionContractValidator {
     }
 
     private void validateReference(StoryProjection projection, StoryActionContract contract,
-                                   EntityReference reference) {
+                                   EntityReference reference, java.util.Set<String> availableSources) {
         if (reference == null) throw new IllegalArgumentException("行动契约实体引用不能为空");
         if (reference.resolution() == null) throw new IllegalArgumentException("行动契约实体引用缺少解析类型");
         if (blank(reference.mention())) throw new IllegalArgumentException("行动契约实体引用缺少玩家原始提及");
@@ -76,6 +96,27 @@ public final class StoryActionContractValidator {
                     }
                 }
             }
+            case ESTABLISHED -> {
+                if (!blank(reference.entityId())) {
+                    throw new IllegalArgumentException("来源已确立但未晋升的引用不能伪造稳定实体ID");
+                }
+                if (reference.evidenceRefs().isEmpty()) {
+                    throw new IllegalArgumentException("来源已确立的引用必须包含证据来源："
+                            + reference.canonicalName());
+                }
+                if (reference.evidenceRefs().stream().noneMatch(availableSources::contains)) {
+                    throw new StoryActionPreconditionException(
+                            "当前命卷无法验证“" + reference.canonicalName() + "”的来源。",
+                            "请刷新命卷后重试，或改为调查、寻找、询问等尝试性行动。");
+                }
+                if (reference.expectedCustody() != null) {
+                    CustodyValue custody = normalized(reference.expectedCustody());
+                    if (custody == null || custody.holderType() == HolderType.UNKNOWN) {
+                        throw new IllegalArgumentException("来源已确立物品的保管前提不能写成未知");
+                    }
+                    validateHolderReference(projection, custody);
+                }
+            }
             case NEW -> {
                 if (!blank(reference.entityId())) throw new IllegalArgumentException("新实体引用不能绑定已有稳定ID");
                 if (reference.expectedCustody() != null) {
@@ -87,10 +128,10 @@ public final class StoryActionContractValidator {
                 }
             }
             case UNRESOLVED -> {
-                if (!contract.conflict().present()) {
+                if (contract.actionMode() == ActionMode.ASSERT_FACT && !contract.conflict().present()) {
                     throw new StoryActionPreconditionException(
-                            "当前命卷中无法确认玩家提到的“" + reference.mention().strip() + "”。",
-                            "请先在剧情中确认该对象，或改为操作当前已经记录的实体。");
+                            "当前命卷中没有证据支持“" + reference.mention().strip() + "”已经成立。",
+                            "可以改为寻找、调查、询问或尝试获得，而不是直接声明它已经属于你。");
                 }
             }
         }

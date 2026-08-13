@@ -13,6 +13,7 @@ import java.util.List;
  */
 public record StoryActionContract(
         String intentSummary,
+        ActionMode actionMode,
         boolean itemActionDetected,
         List<EntityReference> references,
         List<ItemTransition> itemTransitions,
@@ -23,6 +24,7 @@ public record StoryActionContract(
 ) {
     public StoryActionContract {
         intentSummary = text(intentSummary);
+        actionMode = actionMode == null ? ActionMode.ATTEMPT : actionMode;
         references = safe(references);
         itemTransitions = safe(itemTransitions);
         characterPreconditions = safe(characterPreconditions);
@@ -37,6 +39,15 @@ public record StoryActionContract(
         conflict = conflict == null ? new Conflict(false, "", "") : conflict;
     }
 
+    /** 兼容行动语义模式加入前的调用方；普通游戏行动默认视为尝试。 */
+    public StoryActionContract(String intentSummary, boolean itemActionDetected,
+                               List<EntityReference> references, List<ItemTransition> itemTransitions,
+                               List<CharacterPrecondition> characterPreconditions,
+                               PlayerAgencyBoundary agencyBoundary, String stopBoundary, Conflict conflict) {
+        this(intentSummary, ActionMode.ATTEMPT, itemActionDetected, references, itemTransitions,
+                characterPreconditions, agencyBoundary, stopBoundary, conflict);
+    }
+
     /** 兼容行动授权边界加入前的测试替身和调用方。 */
     public StoryActionContract(String intentSummary, boolean itemActionDetected,
                                List<EntityReference> references, List<ItemTransition> itemTransitions,
@@ -44,6 +55,17 @@ public record StoryActionContract(
                                Conflict conflict) {
         this(intentSummary, itemActionDetected, references, itemTransitions, characterPreconditions,
                 null, stopBoundary, conflict);
+    }
+
+    /**
+     * 玩家输入对事实的语义关系。QUERY/ATTEMPT 允许探索尚未确认的可能；ASSERT_FACT 依赖既有事实；
+     * AMEND_FACT 必须进入显式命卷修正流程，不能伪装成普通剧情回合。
+     */
+    public enum ActionMode {
+        QUERY,
+        ATTEMPT,
+        ASSERT_FACT,
+        AMEND_FACT
     }
 
     /**
@@ -61,15 +83,28 @@ public record StoryActionContract(
             String entityType,
             String canonicalName,
             String role,
-            CustodyValue expectedCustody
+            CustodyValue expectedCustody,
+            List<String> evidenceRefs
     ) {
+        public EntityReference {
+            evidenceRefs = safe(evidenceRefs);
+        }
+
+        /** 兼容来源引用加入前的实体契约。 */
+        public EntityReference(String mention, ReferenceResolution resolution, String entityId,
+                               String entityType, String canonicalName, String role,
+                               CustodyValue expectedCustody) {
+            this(mention, resolution, entityId, entityType, canonicalName, role, expectedCustody, List.of());
+        }
+
         public EntityReference(String entityId, String entityType, String role) {
-            this("", ReferenceResolution.EXISTING, entityId, entityType, "", role, null);
+            this("", ReferenceResolution.EXISTING, entityId, entityType, "", role, null, List.of());
         }
     }
 
     public enum ReferenceResolution {
         EXISTING,
+        ESTABLISHED,
         NEW,
         UNRESOLVED
     }

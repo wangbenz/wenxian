@@ -23,8 +23,18 @@ public record StoryProjection(
         Map<String, EntityState> entities,
         Map<String, WorldFactState> worldFacts,
         Map<String, KnowledgeState> knowledge,
-        List<MemoryState> memories
+        List<MemoryState> memories,
+        InitialContract initialContract
 ) {
+    /** 兼容尚未提供角色根源契约的测试和旧调用方。 */
+    public StoryProjection(long worldTimeMinutes, CoreState coreState,
+                           Map<String, EntityState> entities,
+                           Map<String, WorldFactState> worldFacts,
+                           Map<String, KnowledgeState> knowledge,
+                           List<MemoryState> memories) {
+        this(worldTimeMinutes, coreState, entities, worldFacts, knowledge, memories, InitialContract.empty());
+    }
+
     public StoryProjection {
         if (worldTimeMinutes < 0) throw new IllegalArgumentException("世界时间不能为负数");
         if (coreState == null) throw new IllegalArgumentException("核心状态不能为空");
@@ -32,9 +42,63 @@ public record StoryProjection(
         worldFacts = worldFacts == null ? Map.of() : Map.copyOf(worldFacts);
         knowledge = knowledge == null ? Map.of() : Map.copyOf(knowledge);
         memories = memories == null ? List.of() : List.copyOf(memories);
+        initialContract = initialContract == null ? InitialContract.empty() : initialContract;
     }
 
     public record CoreState(String location, String condition, String realm, String lifeGoal) {}
+
+    /**
+     * 创建命卷时由玩家确认的角色根源与世界起点。
+     *
+     * <p>这些内容是后续模型可引用的客观来源，但不把根源文本中的每个名词立即升级为永久实体。
+     * 当人物、物品或地点在后续行动中产生长期变化时，再由 StoryPatch 晋升为稳定实体。</p>
+     */
+    public record InitialContract(
+            String protagonistName,
+            String race,
+            String gender,
+            String origin,
+            String startingRealm,
+            String storyPreference,
+            String worldCode,
+            String worldName,
+            String worldPremise,
+            String cultivationStyle,
+            String openingRegion,
+            String openingNarrative
+    ) {
+        public InitialContract {
+            protagonistName = text(protagonistName);
+            race = text(race);
+            gender = text(gender);
+            origin = text(origin);
+            startingRealm = text(startingRealm);
+            storyPreference = text(storyPreference);
+            worldCode = text(worldCode);
+            worldName = text(worldName);
+            worldPremise = text(worldPremise);
+            cultivationStyle = text(cultivationStyle);
+            openingRegion = text(openingRegion);
+            openingNarrative = text(openingNarrative);
+        }
+
+        /** 兼容尚未把开局境界纳入根源契约的旧调用方。 */
+        public InitialContract(String protagonistName, String race, String gender, String origin,
+                               String storyPreference, String worldCode, String worldName,
+                               String worldPremise, String cultivationStyle, String openingRegion,
+                               String openingNarrative) {
+            this(protagonistName, race, gender, origin, "", storyPreference, worldCode, worldName,
+                    worldPremise, cultivationStyle, openingRegion, openingNarrative);
+        }
+
+        public static InitialContract empty() {
+            return new InitialContract("", "", "", "", "", "", "", "", "", "", "", "");
+        }
+
+        private static String text(String value) {
+            return value == null ? "" : value.strip();
+        }
+    }
 
     public record EntityState(
             String id,

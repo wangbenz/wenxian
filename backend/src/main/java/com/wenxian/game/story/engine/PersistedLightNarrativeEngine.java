@@ -17,6 +17,7 @@ import com.wenxian.game.credit.PlatformTurnAccessService;
 import com.wenxian.game.story.application.StoryTurnPreparationService;
 import com.wenxian.game.story.domain.StoryActionPreconditionException;
 import com.wenxian.game.story.domain.StoryPatch;
+import com.wenxian.game.story.domain.StoryProjection.InitialContract;
 import com.wenxian.game.story.model.StoryApiModels.Ability;
 import com.wenxian.game.story.model.StoryApiModels.BootstrapResponse;
 import com.wenxian.game.story.model.StoryApiModels.CharacterRouteRequest;
@@ -205,7 +206,8 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                         request.gender(), request.roleSeed(), request.preferenceSeed()));
         return new CharacterRouteResponse(result.routes().stream()
                 .map(route -> new com.wenxian.game.story.model.StoryApiModels.CharacterRoute(
-                        route.id(), route.title(), route.origin(), route.opening(), route.preference()))
+                        route.id(), route.title(), route.origin(), route.opening(), route.preference(),
+                        route.startingRealm()))
                 .toList());
     }
 
@@ -234,7 +236,8 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         String preference = text(request.storyPreference(), "自由探索，机缘与风险并存");
         V014State.Protagonist protagonist = new V014State.Protagonist(
                 request.playerName().strip(), request.race().strip(), request.gender().strip(),
-                request.origin().strip(), initialRealm(request.race()), "尚未定下，随此生经历逐渐形成", preference);
+                request.origin().strip(), text(request.startingRealm(), "境界未明"),
+                "尚未定下，随此生经历逐渐形成", preference);
         String opening = text(request.opening(), "你的人生并非从同一扇门开始。此刻，你身在"
                 + world.openingRegion() + "，过往出身已经落定，前路却仍由自己选择。");
         V014State state = new V014State(14, saveId, 0, "ACTIVE", world, protagonist, 0,
@@ -246,9 +249,13 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                 List.of(new V014State.Memory(id("memory"), "此生来处", protagonist.origin(), 0, "KEY")));
         String release = releases.current();
         Instant now = Instant.now();
+        ObjectNode initialState = projections.writeInitialContract(coreState(state), new InitialContract(
+                protagonist.name(), protagonist.race(), protagonist.gender(), protagonist.origin(),
+                protagonist.realm(), protagonist.storyTone(), world.code(), world.name(), world.premise(),
+                world.cultivationStyle(), world.openingRegion(), opening));
         saves.insert(new com.wenxian.game.story.persistence.StoryPersistenceModels.NewSave(
                 saveId, user.userId(), slotNo, activeSlotNo, "ACTIVE", world.code(), ENGINE_CODE, ENGINE_VERSION,
-                STATE_SCHEMA_VERSION, "NATIVE", release, null, null, coreState(state), 0,
+                STATE_SCHEMA_VERSION, "NATIVE", release, null, null, initialState, 0,
                 release, release, now));
         appendNewMemories(saveId, state);
         conversations.initialize(saveId, opening, 0);
@@ -366,7 +373,8 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                 resolvedRoute.credentialSource());
         StoryTurnPreparationService.Prepared prepared;
         try {
-            prepared = trustedTurnPreparation.prepare(saved, request.requestId(), request.action(), route);
+            prepared = trustedTurnPreparation.prepare(saved, request.requestId(), request.action(),
+                    request.choiceId(), route);
         } catch (RuntimeException error) {
             releaseTurnAfterFailure(turnPermit, "可信剧情生成或审阅失败，释放平台回合", error);
             if (resolvedRoute.hasCustomCredential() && causedByAuthentication(error)) {

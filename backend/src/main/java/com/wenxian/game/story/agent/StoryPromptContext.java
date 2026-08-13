@@ -40,20 +40,32 @@ public record StoryPromptContext(
             List<EntityIndexEntry> entityIndex,
             List<EntityDetail> relatedEntities,
             InventoryView currentInventory,
-            PendingDecision pendingDecision
+            PendingDecision pendingDecision,
+            InitialContractView initialContract,
+            List<SourceExcerpt> sourceExcerpts
     ) {
         public ObjectiveContext(long worldTimeMinutes, CoreState protagonist,
                                 List<WorldFactView> worldFacts, List<EntityIndexEntry> entityIndex,
                                 List<EntityDetail> relatedEntities) {
             this(worldTimeMinutes, WorldClock.from(worldTimeMinutes), protagonist, worldFacts, entityIndex, relatedEntities,
-                    new InventoryView(true, List.of(), List.of()), null);
+                    new InventoryView(true, List.of(), List.of()), null, InitialContractView.empty(), List.of());
         }
 
         public ObjectiveContext(long worldTimeMinutes, CoreState protagonist,
                                 List<WorldFactView> worldFacts, List<EntityIndexEntry> entityIndex,
                                 List<EntityDetail> relatedEntities, PendingDecision pendingDecision) {
             this(worldTimeMinutes, WorldClock.from(worldTimeMinutes), protagonist, worldFacts, entityIndex, relatedEntities,
-                    new InventoryView(true, List.of(), List.of()), pendingDecision);
+                    new InventoryView(true, List.of(), List.of()), pendingDecision,
+                    InitialContractView.empty(), List.of());
+        }
+
+        /** 兼容初始契约和来源目录加入前的构造方式。 */
+        public ObjectiveContext(long worldTimeMinutes, WorldClock worldClock, CoreState protagonist,
+                                List<WorldFactView> worldFacts, List<EntityIndexEntry> entityIndex,
+                                List<EntityDetail> relatedEntities, InventoryView currentInventory,
+                                PendingDecision pendingDecision) {
+            this(worldTimeMinutes, worldClock, protagonist, worldFacts, entityIndex, relatedEntities,
+                    currentInventory, pendingDecision, InitialContractView.empty(), List.of());
         }
 
         public ObjectiveContext {
@@ -63,8 +75,44 @@ public record StoryPromptContext(
             relatedEntities = safe(relatedEntities);
             currentInventory = currentInventory == null
                     ? new InventoryView(true, List.of(), List.of()) : currentInventory;
+            initialContract = initialContract == null ? InitialContractView.empty() : initialContract;
+            sourceExcerpts = safe(sourceExcerpts);
         }
     }
+
+    /** 创建命卷时由玩家确认的角色与世界根源，只读且始终进入客观上下文。 */
+    public record InitialContractView(
+            String protagonistName,
+            String race,
+            String gender,
+            String origin,
+            String startingRealm,
+            String storyPreference,
+            String worldCode,
+            String worldName,
+            String worldPremise,
+            String cultivationStyle,
+            String openingRegion,
+            String openingNarrative
+    ) {
+        /** 兼容尚未携带开局境界的旧测试上下文。 */
+        public InitialContractView(String protagonistName, String race, String gender, String origin,
+                                   String storyPreference, String worldCode, String worldName,
+                                   String worldPremise, String cultivationStyle, String openingRegion,
+                                   String openingNarrative) {
+            this(protagonistName, race, gender, origin, "", storyPreference, worldCode, worldName,
+                    worldPremise, cultivationStyle, openingRegion, openingNarrative);
+        }
+
+        public static InitialContractView empty() {
+            return new InitialContractView("", "", "", "", "", "", "", "", "", "", "", "");
+        }
+    }
+
+    /**
+     * 当前行动可引用的已提交来源。它证明某个对象由系统或玩家此前确立，但不会自动把所有名词晋升为永久实体。
+     */
+    public record SourceExcerpt(String ref, String sourceType, String title, String content) {}
 
     /**
      * 供模型理解的可读世界时钟。总分钟仍是服务端计算依据；日序、时刻和昼夜阶段只用于避免正文把
@@ -125,15 +173,24 @@ public record StoryPromptContext(
      * 预计结束时刻；模型必须叙述完整时间跨度，不能只写终点画面后让正文与日历脱节。
      */
     public record ActionContext(String playerAction, Long explicitDurationMinutes, WorldClock expectedEndClock,
-                                StoryActionContract factContract) {
+                                StoryActionContract factContract, SelectedChoice selectedChoice) {
         public ActionContext(String playerAction) {
-            this(playerAction, null, null, null);
+            this(playerAction, null, null, null, null);
         }
 
         public ActionContext(String playerAction, Long explicitDurationMinutes, WorldClock expectedEndClock) {
-            this(playerAction, explicitDurationMinutes, expectedEndClock, null);
+            this(playerAction, explicitDurationMinutes, expectedEndClock, null, null);
+        }
+
+        /** 兼容系统选项来源加入前的调用方。 */
+        public ActionContext(String playerAction, Long explicitDurationMinutes, WorldClock expectedEndClock,
+                             StoryActionContract factContract) {
+            this(playerAction, explicitDurationMinutes, expectedEndClock, factContract, null);
         }
     }
+
+    /** 玩家本轮点击的服务端选项；ID 用于证明行动来自当前修订，文字仍只是授权建议。 */
+    public record SelectedChoice(String id, String title, String description) {}
 
     public record WorldFactView(String id, String statement, int revision) {}
 
@@ -202,7 +259,7 @@ public record StoryPromptContext(
         ActionContext current = action;
         return new StoryPromptContext(system, objective, cognition, memory, narrative,
                 new ActionContext(current.playerAction(), current.explicitDurationMinutes(),
-                        current.expectedEndClock(), contract));
+                        current.expectedEndClock(), contract, current.selectedChoice()));
     }
 
     public record KnowledgeView(
