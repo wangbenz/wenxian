@@ -75,6 +75,21 @@ const shanghaiLocalToInstant = (dateValue: string, timeValue: string) => {
   if (![year, month, day, hour, minute].every(Number.isFinite)) return "";
   return new Date(Date.UTC(year, month - 1, day, hour - 8, minute)).toISOString();
 };
+
+// HTTP 内测地址不一定提供 randomUUID；操作编号只承担幂等职责，因此保留安全随机优先和兼容回退。
+const createClientOperationId = () => {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  try {
+    const random = new Uint32Array(4);
+    globalThis.crypto?.getRandomValues(random);
+    if (random.some((value) => value !== 0)) {
+      return `op-${Date.now().toString(36)}-${Array.from(random, (value) => value.toString(36)).join("")}`;
+    }
+  } catch {
+    // 继续使用非安全随机回退；服务端唯一索引仍会阻止操作编号碰撞造成重复到账。
+  }
+  return `op-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+};
 const num = (value: number) => new Intl.NumberFormat("zh-CN").format(value || 0);
 const compactNum = (value: number) => new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(value || 0);
 const latency = (value: number) => value ? `${(value / 1000).toFixed(1)} 秒` : "—";
@@ -593,7 +608,7 @@ function TurnCreditDrawer({ userId, onChanged, onClose }: { userId: string; onCh
   };
   const grant = async (command: PendingCreditGrant) => {
     if (busy || !query.data) return;
-    if (!operationId.current) operationId.current = crypto.randomUUID();
+    if (!operationId.current) operationId.current = createClientOperationId();
     setBusy(true); setNotice("");
     try {
       const result = await adminApi.grantTurnCredits(userId, {
