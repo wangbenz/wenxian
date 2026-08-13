@@ -121,6 +121,13 @@ class PersistedLightNarrativeEngineTest {
             entities.insert(new Entity("entity-elsewhere", "story-v014-test", "ITEM", "山门石碑", "留在山门",
                     true, "由地点保管的历史物品事实", storedElsewhereAttributes,
                     1, 3, Instant.now(), Instant.now()));
+            ObjectNode legacyCharacterAttributes = mapper.createObjectNode();
+            legacyCharacterAttributes.put("identity", "村中老妇");
+            legacyCharacterAttributes.put("relationship", "忘年之交");
+            legacyCharacterAttributes.put("lastKnownLocation", "石溪村村尾");
+            entities.insert(new Entity("character-legacy", "story-v014-test", "CHARACTER", "老妇人",
+                    "现替玩家保管已经取回的断剑尖", true, "旧版自由文本可能已过期",
+                    legacyCharacterAttributes, 1, 3, Instant.now(), Instant.now()));
             memories.insert("story-v014-test", new StoredMemory("memory-origin", "EVENT", "此生来处", "山村少年",
                     0, 0, "KEY"));
             jdbc.update("""
@@ -145,6 +152,8 @@ class PersistedLightNarrativeEngineTest {
             assertFalse(result.state().inventory().stream()
                     .anyMatch(item -> "entity-elsewhere".equals(item.id())),
                     "由地点保管的历史物品不应出现在当前行囊");
+            assertEquals("UNKNOWN", result.state().characters().getFirst().status(),
+                    "旧人物自由状态不能作为角色页可信现状");
             assertEquals("此生来处", result.state().memories().getFirst().title());
 
             StoryTurnRepository turns = new StoryTurnRepository(jdbc, mapper);
@@ -315,6 +324,18 @@ class PersistedLightNarrativeEngineTest {
                     "select state_patch_json from story_turn where save_id=?", String.class, created.saveId());
             assertTrue(storedPatch.contains(unknown.id()), "回合必须保存 Reducer 分配后的稳定实体ID");
             assertEquals(2, memories.recentActive(created.saveId(), 20).size());
+            assertEquals("COMMITTED", jdbc.queryForObject("""
+                    select status from story_turn_diagnostic where save_id=? and request_id=?
+                    """, String.class, created.saveId(), request.requestId()));
+            String contextManifest = jdbc.queryForObject("""
+                    select context_manifest_json from story_turn_diagnostic where save_id=? and request_id=?
+                    """, String.class, created.saveId(), request.requestId());
+            assertTrue(contextManifest.contains("item-pills"));
+            assertFalse(contextManifest.contains("服下一枚清心丹"), "诊断清单不能复制完整玩家输入或正文");
+            String commitSummary = jdbc.queryForObject("""
+                    select commit_summary_json from story_turn_diagnostic where save_id=? and request_id=?
+                    """, String.class, created.saveId(), request.requestId());
+            assertTrue(commitSummary.contains(unknown.id()));
 
             var retry = engine.takeTurn(USER, created.saveId(), request);
             assertEquals(1, retry.turnNumber());
@@ -353,7 +374,8 @@ class PersistedLightNarrativeEngineTest {
                     projection.entities().get("character-trusted-test").lifecycle());
             assertEquals(1, response.state().characters().size());
             assertEquals("闻溪", response.state().characters().getFirst().name());
-            assertEquals("旧居只余遗物", response.state().characters().getFirst().status());
+            assertEquals("DEAD", response.state().characters().getFirst().status(),
+                    "角色页只能读取可信生命周期，不能继续透传人物自由状态");
             assertEquals(2, runtime.jdbc().queryForObject(
                     "select count(*) from story_turn where save_id=?", Integer.class, runtime.saveId()));
         }
@@ -653,6 +675,15 @@ class PersistedLightNarrativeEngineTest {
                     "select prompt_tokens from story_turn where save_id=?", Integer.class, created.saveId()));
             assertEquals(270, jdbc.queryForObject(
                     "select completion_tokens from story_turn where save_id=?", Integer.class, created.saveId()));
+            String proposalTrace = jdbc.queryForObject("""
+                    select proposal_trace_json from story_turn_diagnostic where save_id=? and request_id=?
+                    """, String.class, created.saveId(), "request-semantic-repair");
+            assertTrue(proposalTrace.contains("INITIAL_PROPOSAL"));
+            assertTrue(proposalTrace.contains("REPAIRED_PROPOSAL"));
+            String reviewTrace = jdbc.queryForObject("""
+                    select review_trace_json from story_turn_diagnostic where save_id=? and request_id=?
+                    """, String.class, created.saveId(), "request-semantic-repair");
+            assertTrue(reviewTrace.contains("INITIAL_VALIDATION"));
         } finally {
             database.shutdown();
         }
@@ -1109,8 +1140,11 @@ class PersistedLightNarrativeEngineTest {
         StoryProjectionPersistenceMapper projections = new StoryProjectionPersistenceMapper(mapper);
         StoryStateReducer trustedReducer = new StoryStateReducer(new StoryPatchValidator(),
                 prefix -> prefix + "-trusted-test");
+        var diagnostics = new com.wenxian.game.story.diagnostic.StoryTurnDiagnosticService(
+                new com.wenxian.game.story.diagnostic.StoryTurnDiagnosticRepository(jdbc, mapper), mapper, true);
         StoryTurnPreparationService preparation = new StoryTurnPreparationService(entities, memories,
-                conversations, turns, projections, new PromptContextAssembler(), trustedAgent, trustedReducer);
+                conversations, turns, projections, new PromptContextAssembler(), trustedAgent, trustedReducer,
+                diagnostics);
         GameVersionService releases = new GameVersionService(jdbc);
         TransactionTemplate transactions = new TransactionTemplate(new DataSourceTransactionManager(database));
         var creditService = new com.wenxian.game.credit.TurnCreditService(

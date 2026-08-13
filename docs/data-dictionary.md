@@ -71,6 +71,29 @@
 注册批次留存表，主键为 `(cohort_date, retention_day)`。保存批次注册人数、完成首回合人数和对应天数留存人数；
 `retention_day` 首版支持 1、3、7、14。历史回算和实时采集通过 `data_origin` 区分。
 
+## 3.1 可信回合诊断
+
+### `story_turn_diagnostic`
+
+可信回合的旁路诊断快照。每个 `(save_id, request_id)` 只保留一条持续更新的轨迹，记录本轮实际加载的
+稳定实体、世界事实、人物认知、关键记忆、摘要使用情况、行动契约、首次/修复提案概要、独立审阅结果以及
+Reducer 最终接受和提交的事实概要。
+
+该表不是命卷事实来源，写入使用独立事务且失败不得阻断玩家回合。它禁止保存完整 Prompt、剧情正文、邮箱、
+密钥和供应商原始响应；管理台诊断页只能按账号权限查询，不能从该表修改命卷。成功回合通过
+`save_id + request_id` 与 `story_turn` 关联，失败回合则通过同一请求号与 `operation_error`、`ai_usage_log`
+交叉定位。默认不写入，仅在灰度或定向排障实例开启 `wenxian.story.turn-diagnostics-enabled` 后记录。
+
+| 关键字段 | 中文含义 |
+|---|---|
+| `status/current_stage` | 当前或最终处于装配、生成、审阅、修复、归并、提交或失败阶段 |
+| `context_manifest_json` | 稳定引用清单和选择策略，不复制具体长文本 |
+| `action_contract_json` | 模型解析出的实体引用、前置条件和玩家授权边界概要 |
+| `proposal_trace_json` | 首次与最多一次修复提案的结构化变化概要 |
+| `review_trace_json` | 独立审阅结果、拒绝原因和是否要求重写正文 |
+| `commit_summary_json` | Reducer 接受及数据库成功提交的变化概要 |
+| `failure_code/failure_detail` | 脱敏、截断且不含异常栈的失败定位信息 |
+
 ## 4. 继续保留的共享表
 
 ### `app_user`

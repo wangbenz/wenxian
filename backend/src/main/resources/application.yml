@@ -48,6 +48,8 @@ game:
 wenxian:
   story:
     trusted-turns-enabled: ${WENXIAN_TRUSTED_TURNS_ENABLED:false}
+    # 仅灰度/定向排障开启；记录上下文来源和事实提交概要，不复制完整正文与 Prompt。
+    turn-diagnostics-enabled: ${WENXIAN_STORY_TURN_DIAGNOSTICS_ENABLED:false}
     # 行动事实解析与独立语义审阅默认使用低延迟 Flash；二者均不共享正文生成上下文。
     flash-review-model: ${WENXIAN_STORY_FLASH_REVIEW_MODEL:deepseek-v4-flash}
 

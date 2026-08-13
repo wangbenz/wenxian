@@ -520,6 +520,28 @@ create table story_turn (
     constraint fk_story_turn_save foreign key (save_id) references story_save(id) on delete cascade
 );
 
+create table story_turn_diagnostic (
+    id varchar(80) primary key,
+    save_id varchar(80) not null,
+    request_id varchar(80) not null,
+    turn_number integer not null,
+    expected_revision bigint not null,
+    prompt_version varchar(64) not null,
+    status varchar(24) not null,
+    current_stage varchar(48) not null,
+    context_manifest_json clob not null,
+    action_contract_json clob not null,
+    proposal_trace_json clob not null,
+    review_trace_json clob not null,
+    commit_summary_json clob not null,
+    failure_code varchar(64) not null default '',
+    failure_detail varchar(1000) not null default '',
+    created_at timestamp not null,
+    updated_at timestamp not null,
+    unique(save_id, request_id),
+    constraint fk_story_turn_diagnostic_save foreign key (save_id) references story_save(id) on delete cascade
+);
+
 create table story_entity (
     id varchar(80) primary key,
     save_id varchar(80) not null,

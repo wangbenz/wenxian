@@ -17,6 +17,7 @@ import com.wenxian.game.story.domain.StoryActionContractPatchValidator;
 import com.wenxian.game.story.domain.ExplicitDurationParser;
 import com.wenxian.game.story.domain.StoryNarrativeFreshnessValidator;
 import com.wenxian.game.story.domain.StoryNarrativeFreshnessException;
+import com.wenxian.game.story.diagnostic.StoryTurnDiagnosticService;
 import com.wenxian.game.story.persistence.StoryConversationRepository;
 import com.wenxian.game.story.persistence.StoryEntityRepository;
 import com.wenxian.game.story.persistence.StoryMemoryRepository;
@@ -54,6 +55,7 @@ public class StoryTurnPreparationService {
     private final PromptContextAssembler contexts;
     private final StoryTurnAgent agent;
     private final StoryStateReducer reducer;
+    private final StoryTurnDiagnosticService diagnostics;
     private final StoryActionContractValidator actionContracts = new StoryActionContractValidator();
     private final StoryActionContractCanonicalizer contractCanonicalizer = new StoryActionContractCanonicalizer();
     private final StoryActionContractPatchValidator contractPatches = new StoryActionContractPatchValidator();
@@ -67,7 +69,8 @@ public class StoryTurnPreparationService {
             StoryProjectionPersistenceMapper projections,
             PromptContextAssembler contexts,
             StoryTurnAgent agent,
-            StoryStateReducer reducer) {
+            StoryStateReducer reducer,
+            StoryTurnDiagnosticService diagnostics) {
         this.entities = entities;
         this.memories = memories;
         this.conversations = conversations;
@@ -76,12 +79,26 @@ public class StoryTurnPreparationService {
         this.contexts = contexts;
         this.agent = agent;
         this.reducer = reducer;
+        this.diagnostics = diagnostics;
     }
 
     /** 生成并归并一份尚未提交的回合结果。 */
-    public Prepared prepare(StoredSave saved, String playerAction, StoryModelRoute route) {
+    public Prepared prepare(StoredSave saved, String requestId, String playerAction, StoryModelRoute route) {
         if (saved == null) throw new IllegalArgumentException("回合准备缺少命卷");
+        if (requestId == null || requestId.isBlank()) throw new IllegalArgumentException("回合准备缺少请求号");
         if (playerAction == null || playerAction.isBlank()) throw new IllegalArgumentException("玩家行动不能为空");
+        StoryTurnDiagnosticService.Session diagnostic = diagnostics == null ? null
+                : diagnostics.begin(saved.id(), requestId.strip(), saved.turnNumber() + 1, saved.revision());
+        try {
+            return prepareObserved(saved, playerAction, route, diagnostic);
+        } catch (RuntimeException error) {
+            if (diagnostic != null) diagnostic.failed("PREPARATION_FAILED", error);
+            throw error;
+        }
+    }
+
+    private Prepared prepareObserved(StoredSave saved, String playerAction, StoryModelRoute route,
+                                     StoryTurnDiagnosticService.Session diagnostic) {
         List<Entity> existingEntities = entities.listAll(saved.id());
         StoryProjection before = projections.load(saved, existingEntities,
                 memories.recentActive(saved.id(), RECENT_MEMORY_LIMIT));
@@ -92,18 +109,22 @@ public class StoryTurnPreparationService {
                 worldSeedRules(saved.state()), selection(before, existingEntities), conversations.summary(saved.id()),
                 previous, checkpoint == null ? null : new PendingDecision(checkpoint.prompt()),
                 explicitDurationMinutes));
+        if (diagnostic != null) diagnostic.context(context);
         StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
                 saved.id(), saved.turnNumber() + 1);
         StoryTurnAgent.ResolvedAction resolvedAction = agent.resolveAction(context, route, invocation);
         var actionContract = contractCanonicalizer.canonicalize(before, resolvedAction.contract());
+        if (diagnostic != null) diagnostic.actionResolved(actionContract);
         actionContracts.validate(before, actionContract);
         context = context.withActionContract(actionContract);
         StoryTurnAgent.Generated generation = agent.generate(context, route, invocation);
         generation = prependModelResults(resolvedAction.modelResults(), generation);
+        if (diagnostic != null) diagnostic.proposal("INITIAL_PROPOSAL", generation.patch());
         StoryStateReducer.Applied applied;
         try {
             rejectRepeatedNarrative(previous, generation.patch());
             StoryTurnAgent.Review review = agent.review(context, route, invocation, generation.patch());
+            if (diagnostic != null) diagnostic.review("INITIAL_REVIEW", review);
             generation = appendReview(generation, review);
             rejectReview(review);
             contractPatches.validate(before, actionContract, generation.patch());
@@ -115,10 +136,17 @@ public class StoryTurnPreparationService {
                             generation.patch(), rejected.getMessage())
                     : agent.repairRejected(context, route, invocation,
                             generation.patch(), rejected.getMessage());
+            if (diagnostic != null) {
+                diagnostic.rejected("INITIAL_VALIDATION", rejected,
+                        rejected instanceof StoryNarrativeFreshnessException
+                                || rejected instanceof ReviewRejectedException review && review.requiresFreshNarrative);
+                diagnostic.proposal("REPAIRED_PROPOSAL", repaired.patch());
+            }
             generation = combine(generation, repaired);
             try {
                 rejectRepeatedNarrative(previous, repaired.patch());
                 StoryTurnAgent.Review review = agent.review(context, route, invocation, repaired.patch());
+                if (diagnostic != null) diagnostic.review("REPAIRED_REVIEW", review);
                 generation = appendReview(generation, review);
                 rejectReview(review);
                 contractPatches.validate(before, actionContract, repaired.patch());
@@ -128,7 +156,8 @@ public class StoryTurnPreparationService {
                 throw failedAgain;
             }
         }
-        return new Prepared(before, applied, existingEntities, generation);
+        if (diagnostic != null) diagnostic.reduced(applied);
+        return new Prepared(before, applied, existingEntities, generation, diagnostic);
     }
 
     /**
@@ -230,7 +259,8 @@ public class StoryTurnPreparationService {
             StoryProjection before,
             StoryStateReducer.Applied applied,
             List<Entity> existingEntities,
-            StoryTurnAgent.Generated generation
+            StoryTurnAgent.Generated generation,
+            StoryTurnDiagnosticService.Session diagnostic
     ) {
         public Prepared {
             existingEntities = existingEntities == null ? List.of() : List.copyOf(existingEntities);

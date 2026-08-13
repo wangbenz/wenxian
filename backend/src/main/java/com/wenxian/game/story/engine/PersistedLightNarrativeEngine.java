@@ -366,7 +366,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                 resolvedRoute.credentialSource());
         StoryTurnPreparationService.Prepared prepared;
         try {
-            prepared = trustedTurnPreparation.prepare(saved, request.action(), route);
+            prepared = trustedTurnPreparation.prepare(saved, request.requestId(), request.action(), route);
         } catch (RuntimeException error) {
             releaseTurnAfterFailure(turnPermit, "可信剧情生成或审阅失败，释放平台回合", error);
             if (resolvedRoute.hasCustomCredential() && causedByAuthentication(error)) {
@@ -400,6 +400,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
             trustedTurnCommit.commit(user.userId(), saved, request.requestId(), request.action(),
                     prepared, route, turnPermit);
         } catch (RuntimeException error) {
+            if (prepared.diagnostic() != null) prepared.diagnostic().failed("COMMIT_FAILED", error);
             releaseTurnAfterFailure(turnPermit, "可信剧情事务未能提交，释放平台回合", error);
             if (error instanceof OptimisticLockingFailureException) {
                 throw new GameApiException(HttpStatus.CONFLICT, "STATE_CONFLICT", "STATE",
@@ -565,7 +566,7 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                 case "CHARACTER" -> characters.add(new V014State.Character(entity.id(), entity.name(),
                         attributes.path("tier").asText("KNOWN"),
                         attributes.path("identity").asText("身份未明"),
-                        attributes.path("relationship").asText("初次相识"), entity.status(),
+                        attributes.path("relationship").asText("初次相识"), characterLifecycle(attributes),
                         attributes.path("lastKnownLocation").asText("未知"), true));
                 default -> { /* 势力和地点尚不属于当前轻叙事角色页，保留在实体表但不塞入旧状态模型。 */ }
             }
@@ -576,6 +577,20 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
         return new V014State(14, saved.id(), saved.turnNumber(), saved.status(), core.world(), core.protagonist(),
                 core.worldTimeMinutes(), core.currentLocation(), core.condition(), core.sceneTitle(), core.narrative(),
                 core.choices(), inventory, abilities, characters, stateMemories);
+    }
+
+    /**
+     * 角色页只展示结构化生命周期，不再透传旧版人物自由状态。
+     *
+     * <p>旧状态中可能混有“替玩家保管某物”等已经过期的物品叙述；物品归属只由 ITEM.custody 决定。
+     * 尚未形成可信生命周期的旧人物统一显示 UNKNOWN，不能根据自然语言猜测生死或位置。</p>
+     */
+    private String characterLifecycle(JsonNode attributes) {
+        String lifecycle = attributes == null ? "" : attributes.path("_trusted").path("lifecycle").asText("");
+        return switch (lifecycle) {
+            case "ACTIVE", "MISSING", "DORMANT", "DEAD" -> lifecycle;
+            default -> "UNKNOWN";
+        };
     }
 
     private ObjectNode coreState(V014State state) {

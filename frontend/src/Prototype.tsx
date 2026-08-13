@@ -136,7 +136,7 @@ function storySnapshotView(source: StorySaveResponse): ApiSnapshot {
       lifeGoal: state.protagonist.lifeGoal, goal: state.protagonist.lifeGoal, burden: state.protagonist.storyTone,
       realm: state.protagonist.realm, constitution: state.condition, vitality: 75, silver: 0, insight: 0, suspicion: 0 },
     characters: state.characters.filter((person) => person.tracked !== false).map((person) => ({ id: person.id, name: person.name, identity: person.identity,
-      state: person.status === "ALIVE" ? "尚在人世" : person.status === "DEAD" ? "已故" : person.status === "MISSING" ? "下落不明" : person.status || "近况未明",
+      state: person.status === "ALIVE" || person.status === "ACTIVE" ? "尚在人世" : person.status === "DEAD" ? "已故" : person.status === "MISSING" ? "下落不明" : person.status === "DORMANT" ? "暂时沉寂" : "近况未明",
       location: person.lastKnownLocation, relation: person.relationship, lastSeenAt: state.worldTimeMinutes })),
     events: [...state.memories].reverse().map((memory) => ({ id: memory.id, title: memory.title, detail: memory.summary,
       at: memory.worldTimeMinutes + minutesPerYear, kind: memory.importance === "KEY" ? "world" : "decision" })),

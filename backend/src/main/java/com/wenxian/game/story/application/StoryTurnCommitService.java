@@ -6,6 +6,7 @@ import com.wenxian.game.service.GameVersionService;
 import com.wenxian.game.credit.PlatformTurnAccessService;
 import com.wenxian.game.story.agent.StoryModelRoute;
 import com.wenxian.game.story.domain.StoryPatch;
+import com.wenxian.game.story.diagnostic.StoryTurnDiagnosticService;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.persistence.StoryConversationRepository;
 import com.wenxian.game.story.persistence.StoryEntityRepository;
@@ -35,7 +36,7 @@ import java.util.UUID;
  */
 @Service
 public class StoryTurnCommitService {
-    private static final String PROMPT_VERSION = "trusted-story-turn-v1";
+    private static final String PROMPT_VERSION = StoryTurnDiagnosticService.PROMPT_VERSION;
 
     private final StorySaveRepository saves;
     private final StoryTurnRepository turns;
@@ -78,6 +79,10 @@ public class StoryTurnCommitService {
         Committed committed = transactions.execute(status -> commitInTransaction(
                 userId, saved, requestId, playerAction, prepared, route, turnPermit));
         if (committed == null) throw new IllegalStateException("可信回合事务没有返回结果");
+        if (prepared.diagnostic() != null) {
+            prepared.diagnostic().committed(committed.revision(), committed.turnNumber(),
+                    committed.acceptedPatch(), prepared.applied().projection().worldTimeMinutes());
+        }
         return committed;
     }
 
