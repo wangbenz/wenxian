@@ -155,6 +155,16 @@ com.wenxian.game.story
 
 如果 V0.15 只调整 H5、Prompt 或模型，数据表和引擎版本不变。增加状态字段只升级 `state_schema_version`。重大但仍兼容的玩法调整升级 `engine_version`。只有玩法根本不同才增加新的 `engine_code`。
 
+### 6.1 独立灰度访问边界
+
+正式环境的开放/维护状态继续由共享 RDS 中的 `gameplay_config.game_access_mode` 与
+`game_access_whitelist` 管理。独立灰度进程可通过 `game.auth.isolated-access` 外部配置启用
+自己的邮箱名单；启用后，该进程完全忽略共享数据库的正式访问模式，并禁止注册新账号。
+
+独立名单只存在于服务端进程配置，不写入玩家表，也不增加产品版本专用数据表。登录和既有会话
+每次解析账号时都经过同一 `AccessPolicyService`，因此未受邀账号即使持有旧会话也不能绕过限制。
+关闭独立开关即可回到共享访问策略，回滚不涉及数据库迁移。
+
 ## 7. 权威数据划分
 
 - `story_turn`：不可变的玩家行动、已接受变化、剧情和模型用量，是客观事件的审计来源；

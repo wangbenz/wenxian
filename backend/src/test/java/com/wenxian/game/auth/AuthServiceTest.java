@@ -15,6 +15,44 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AuthServiceTest {
     @Test
+    void isolatedProcessAllowlistDoesNotReuseSharedAccessMode() {
+        EmbeddedDatabase database = new EmbeddedDatabaseBuilder()
+                .setType(EmbeddedDatabaseType.H2).addScript("schema-h2.sql").build();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            AuthService initial = new AuthService(jdbc, "LEGACY-INVITE", 30);
+            AuthService.LoginOutcome invited = initial.register(
+                    "Invited@Example.com", "password123", "10.0.0.41");
+            AuthService.LoginOutcome ordinary = initial.register(
+                    "ordinary@example.com", "password123", "10.0.0.42");
+            java.sql.Timestamp now = java.sql.Timestamp.from(java.time.Instant.now());
+
+            // 共享配置故意只允许 ordinary；独立进程仍必须只认自己的 invited 名单。
+            jdbc.update("insert into game_access_whitelist(id,user_id,note,created_by,created_at,updated_at) values ('access-isolated',?,'正式名单','test',?,?)",
+                    ordinary.user().userId(), now, now);
+            jdbc.update("merge into gameplay_config(config_key,config_value,updated_at) key(config_key) values ('game_access_mode','WHITELIST',?)", now);
+            AccessPolicyService isolatedPolicy = new AccessPolicyService(jdbc, true,
+                    "invited@example.com", "受邀测试", "仅受邀账号可进入", "");
+            AuthService isolated = new AuthService(jdbc, "LEGACY-INVITE", 30, 12,
+                    "test-ip-pepper", 1, 5, isolatedPolicy);
+
+            assertTrue(isolatedPolicy.status().restricted());
+            assertEquals("受邀测试", isolatedPolicy.status().title());
+            assertNotNull(isolated.login("invited@example.com", "password123", "10.0.0.43"),
+                    "独立名单账号不应被共享数据库名单拦截");
+            assertThrows(GameMaintenanceException.class,
+                    () -> isolated.login("ordinary@example.com", "password123", "10.0.0.44"),
+                    "共享数据库名单账号不能绕过独立灰度名单");
+            assertThrows(GameMaintenanceException.class,
+                    () -> isolated.register("new@example.com", "password123", "10.0.0.45"));
+            assertThrows(GameMaintenanceException.class, () -> isolated.requireUser(ordinary.rawToken()));
+            assertNotNull(isolated.requireUser(invited.rawToken()));
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
     void whitelistModeAllowsOnlyConfiguredTestAccounts() {
         EmbeddedDatabase database = new EmbeddedDatabaseBuilder()
                 .setType(EmbeddedDatabaseType.H2).addScript("schema-h2.sql").build();

@@ -40,6 +40,13 @@ game:
     ip-hash-pepper: ${WENXIAN_IP_HASH_PEPPER:wenxian-local-ip-pepper-change-me}
     registrations-per-ip-per-day: ${WENXIAN_REGISTRATIONS_PER_IP_PER_DAY:1}
     login-failures-per-window: ${WENXIAN_LOGIN_FAILURES_PER_WINDOW:5}
+    # 独立灰度进程专用。启用后只认进程环境中的账号名单，不读取共享 RDS 的正式白名单模式。
+    isolated-access:
+      enabled: ${WENXIAN_ISOLATED_ACCESS_ENABLED:false}
+      allowed-emails: ${WENXIAN_ISOLATED_ACCESS_ALLOWED_EMAILS:}
+      title: ${WENXIAN_ISOLATED_ACCESS_TITLE:当前版本正在受邀测试}
+      message: ${WENXIAN_ISOLATED_ACCESS_MESSAGE:当前版本仅向受邀账号开放，请使用收到的测试账号进入。}
+      resume-at: ${WENXIAN_ISOLATED_ACCESS_RESUME_AT:}
   ai-config-master-key: ${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}
   ai-config-force-environment: ${WENXIAN_AI_CONFIG_FORCE_ENVIRONMENT:false}
   story-correction-token-secret: ${WENXIAN_STORY_CORRECTION_TOKEN_SECRET:${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}}

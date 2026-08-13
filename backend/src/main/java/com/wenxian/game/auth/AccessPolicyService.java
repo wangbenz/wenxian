@@ -1,26 +1,66 @@
 package com.wenxian.game.auth;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+/**
+ * 账号访问策略的唯一判定入口。
+ *
+ * <p>正式环境默认读取数据库中的开放/白名单配置。独立灰度进程可通过外部配置启用
+ * 进程级账号名单；启用后完全忽略共享数据库的正式访问模式，避免灰度开关误伤线上玩家。
+ * 该服务只决定注册、登录和既有会话是否可继续，不创建或修改玩家账号。</p>
+ */
 @Service
 public class AccessPolicyService {
     public static final String MODE_OPEN = "OPEN";
     public static final String MODE_WHITELIST = "WHITELIST";
     private static final String DEFAULT_TITLE = "命卷暂时封存";
     private static final String DEFAULT_MESSAGE = "游戏正在更新中，请稍后再回来。";
+    private static final String DEFAULT_ISOLATED_TITLE = "当前版本正在受邀测试";
+    private static final String DEFAULT_ISOLATED_MESSAGE = "当前版本仅向受邀账号开放，请使用收到的测试账号进入。";
 
     private final JdbcTemplate jdbc;
+    private final boolean isolatedAccessEnabled;
+    private final Set<String> isolatedAllowedEmails;
+    private final String isolatedTitle;
+    private final String isolatedMessage;
+    private final String isolatedResumeAt;
 
-    public AccessPolicyService(JdbcTemplate jdbc) {
+    @Autowired
+    public AccessPolicyService(
+            JdbcTemplate jdbc,
+            @Value("${game.auth.isolated-access.enabled:false}") boolean isolatedAccessEnabled,
+            @Value("${game.auth.isolated-access.allowed-emails:}") String isolatedAllowedEmails,
+            @Value("${game.auth.isolated-access.title:" + DEFAULT_ISOLATED_TITLE + "}") String isolatedTitle,
+            @Value("${game.auth.isolated-access.message:" + DEFAULT_ISOLATED_MESSAGE + "}") String isolatedMessage,
+            @Value("${game.auth.isolated-access.resume-at:}") String isolatedResumeAt) {
         this.jdbc = jdbc;
+        this.isolatedAccessEnabled = isolatedAccessEnabled;
+        this.isolatedAllowedEmails = parseEmails(isolatedAllowedEmails);
+        this.isolatedTitle = text(isolatedTitle, DEFAULT_ISOLATED_TITLE);
+        this.isolatedMessage = text(isolatedMessage, DEFAULT_ISOLATED_MESSAGE);
+        this.isolatedResumeAt = isolatedResumeAt == null ? "" : isolatedResumeAt.strip();
+        if (isolatedAccessEnabled && this.isolatedAllowedEmails.isEmpty()) {
+            throw new IllegalStateException("独立访问限制已开启，但没有配置任何允许账号");
+        }
+    }
+
+    /** 兼容单元测试和未启用独立灰度访问的轻量构造。 */
+    public AccessPolicyService(JdbcTemplate jdbc) {
+        this(jdbc, false, "", DEFAULT_ISOLATED_TITLE, DEFAULT_ISOLATED_MESSAGE, "");
     }
 
     @PostConstruct
@@ -33,6 +73,9 @@ public class AccessPolicyService {
     }
 
     public AccessStatus status() {
+        if (isolatedAccessEnabled) {
+            return new AccessStatus(true, isolatedTitle, isolatedMessage, isolatedResumeAt);
+        }
         Map<String, String> values = new LinkedHashMap<>();
         jdbc.query("""
                 select config_key, config_value from gameplay_config
@@ -48,6 +91,12 @@ public class AccessPolicyService {
     }
 
     public void assertAllowed(String userId) {
+        if (isolatedAccessEnabled) {
+            String email = jdbc.query("select email from app_user where id=? and status='ACTIVE'",
+                    (row, index) -> row.getString(1), userId).stream().findFirst().orElse("");
+            if (isolatedAllowedEmails.contains(normalizeEmail(email))) return;
+            throw new GameMaintenanceException(isolatedTitle, isolatedMessage, isolatedResumeAt);
+        }
         AccessStatus status = status();
         if (!status.restricted()) return;
         Integer count = jdbc.queryForObject(
@@ -74,6 +123,22 @@ public class AccessPolicyService {
                     "select count(*) from gameplay_config where config_key=?", Integer.class, key);
             if (existing == null || existing == 0) throw error;
         }
+    }
+
+    private static Set<String> parseEmails(String raw) {
+        if (raw == null || raw.isBlank()) return Set.of();
+        return Arrays.stream(raw.split(","))
+                .map(AccessPolicyService::normalizeEmail)
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static String normalizeEmail(String email) {
+        return email == null ? "" : email.strip().toLowerCase(Locale.ROOT);
+    }
+
+    private static String text(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.strip();
     }
 
     public record AccessStatus(boolean restricted, String title, String message, String resumeAt) {}
