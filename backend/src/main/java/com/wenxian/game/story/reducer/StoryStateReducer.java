@@ -12,6 +12,7 @@ import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactPatch;
 import com.wenxian.game.story.domain.StoryPatchValidator;
+import com.wenxian.game.story.domain.StoryReferenceAlias;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
@@ -65,7 +66,24 @@ public final class StoryStateReducer {
         List<EntityPatch> acceptedEntities = new ArrayList<>();
         List<WorldFactPatch> acceptedWorldFacts = new ArrayList<>();
 
-        for (EntityPatch patch : proposal.entities()) acceptedEntities.add(applyEntity(entities, patch));
+        Map<String, String> aliases = new LinkedHashMap<>();
+        List<String> createdIds = new ArrayList<>(proposal.entities().size());
+        for (EntityPatch patch : proposal.entities()) {
+            if (patch.operation() != EntityOperation.CREATE) {
+                createdIds.add(null);
+                continue;
+            }
+            String id = idFactory.apply(entityPrefix(patch.entityType()));
+            createdIds.add(id);
+            String key = StoryReferenceAlias.normalizeKey(patch.referenceKey());
+            if (key != null && aliases.putIfAbsent(key, id) != null) {
+                throw new IllegalArgumentException("同一回合内引用键不能重复");
+            }
+        }
+        for (int index = 0; index < proposal.entities().size(); index++) {
+            acceptedEntities.add(applyEntity(entities, proposal.entities().get(index),
+                    createdIds.get(index), aliases));
+        }
         for (WorldFactPatch patch : proposal.worldFacts()) acceptedWorldFacts.add(applyWorldFact(worldFacts, patch));
         proposal.knowledge().forEach(value -> knowledge.put(knowledgeKey(value.subjectRef(), value.topicRef()),
                 new KnowledgeState(value.subjectRef(), value.topicRef(), value.summary(), value.evidenceRefs())));
@@ -86,17 +104,19 @@ public final class StoryStateReducer {
         return new Applied(next, accepted);
     }
 
-    private EntityPatch applyEntity(Map<String, EntityState> entities, EntityPatch patch) {
+    private EntityPatch applyEntity(Map<String, EntityState> entities, EntityPatch patch,
+                                    String allocatedId, Map<String, String> aliases) {
         if (patch.operation() == EntityOperation.CREATE) {
-            String id = idFactory.apply(entityPrefix(patch.entityType()));
-            CustodyValue custody = normalizedCustody(patch.custody(), patch.inPossession());
+            String id = allocatedId;
+            if (!present(id)) throw new IllegalArgumentException("新增实体缺少服务端预分配ID");
+            CustodyValue custody = normalizedCustody(resolveAlias(patch.custody(), aliases), patch.inPossession());
             EntityState created = new EntityState(id, normalizedType(patch.entityType()), patch.name(), patch.status(),
                     patch.summary(), copy(patch.attributes()), true, patch.quantity(), possession(custody, patch.inPossession()), custody,
                     patch.abilityState(), patch.lifecycle() == null ? null : patch.lifecycle().state(),
                     patch.relationship());
             validateEntitySemantics(created, null, patch);
             if (entities.putIfAbsent(id, created) != null) throw new IllegalArgumentException("服务端生成了重复实体ID");
-            return withEntityId(patch, id);
+            return withEntityIdAndCustody(patch, id, custody);
         }
 
         EntityState previous = entities.get(patch.entityId());
@@ -111,7 +131,7 @@ public final class StoryStateReducer {
         };
         CustodyValue custody = patch.custody() == null
                 ? normalizedCustody(previous.custody(), previous.inPossession())
-                : normalizedCustody(patch.custody(), patch.inPossession());
+                : normalizedCustody(resolveAlias(patch.custody(), aliases), patch.inPossession());
         EntityState updated = new EntityState(previous.id(), previous.entityType(),
                 text(patch.name(), previous.name()), text(patch.status(), previous.status()),
                 text(patch.summary(), previous.summary()), merge(previous.attributes(), patch.attributes()), visible,
@@ -122,7 +142,7 @@ public final class StoryStateReducer {
                 patch.relationship() == null ? previous.relationship() : patch.relationship());
         validateEntitySemantics(updated, previous, patch);
         entities.put(updated.id(), updated);
-        return patch;
+        return withEntityIdAndCustody(patch, patch.entityId(), patch.custody() == null ? null : custody);
     }
 
     private void validateEntitySemantics(EntityState next, EntityState previous, EntityPatch patch) {
@@ -201,15 +221,28 @@ public final class StoryStateReducer {
                 text(patch.lifeGoal(), before.lifeGoal()));
     }
 
-    private EntityPatch withEntityId(EntityPatch patch, String id) {
+    private EntityPatch withEntityIdAndCustody(EntityPatch patch, String id, CustodyValue custody) {
         return new EntityPatch(patch.operation(), id, patch.entityType(), patch.name(), patch.status(), patch.summary(),
-                patch.attributes(), patch.quantity(), patch.inPossession(), patch.custody(),
-                patch.abilityState(), patch.lifecycle(), patch.relationship());
+                patch.attributes(), patch.quantity(), patch.inPossession(), custody,
+                patch.abilityState(), patch.lifecycle(), patch.relationship(), patch.referenceKey());
+    }
+
+    private CustodyValue resolveAlias(CustodyValue custody, Map<String, String> aliases) {
+        if (custody == null || custody.holderType() != HolderType.CHARACTER
+                || !StoryReferenceAlias.isAlias(custody.holderRef())) {
+            return custody;
+        }
+        String key = StoryReferenceAlias.keyOf(custody.holderRef());
+        String stableId = aliases.get(key);
+        if (!present(stableId)) throw new IllegalArgumentException("回合内人物引用没有对应的新增实体：" + key);
+        return new CustodyValue(HolderType.CHARACTER, stableId);
     }
 
     private CustodyValue normalizedCustody(CustodyValue custody, Boolean inPossession) {
         if (custody != null && custody.holderType() != null) {
-            String ref = present(custody.holderRef()) ? custody.holderRef().strip() : null;
+            String ref = custody.holderType() == HolderType.CHARACTER || custody.holderType() == HolderType.LOCATION
+                    ? present(custody.holderRef()) ? custody.holderRef().strip() : null
+                    : null;
             CustodyValue normalized = new CustodyValue(custody.holderType(), ref);
             Boolean derived = possession(normalized, inPossession);
             if (inPossession != null && !inPossession.equals(derived)) {

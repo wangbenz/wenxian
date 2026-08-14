@@ -63,14 +63,28 @@ public record StoryPatch(
             CustodyValue custody,
             AbilityState abilityState,
             LifecycleValue lifecycle,
-            RelationshipValue relationship
+            RelationshipValue relationship,
+            String referenceKey
     ) {
+        public EntityPatch {
+            referenceKey = referenceKey == null ? "" : referenceKey.strip();
+        }
+
+        /** 兼容回合内引用键加入前的完整实体补丁。 */
+        public EntityPatch(EntityOperation operation, String entityId, String entityType, String name,
+                           String status, String summary, JsonNode attributes, QuantityValue quantity,
+                           Boolean inPossession, CustodyValue custody, AbilityState abilityState,
+                           LifecycleValue lifecycle, RelationshipValue relationship) {
+            this(operation, entityId, entityType, name, status, summary, attributes, quantity,
+                    inPossession, custody, abilityState, lifecycle, relationship, "");
+        }
+
         /** 兼容尚未显式提供持有者的旧提案和测试；新模型提案应优先填写 custody。 */
         public EntityPatch(EntityOperation operation, String entityId, String entityType, String name,
                            String status, String summary, JsonNode attributes, QuantityValue quantity,
                            Boolean inPossession, AbilityState abilityState, LifecycleValue lifecycle) {
             this(operation, entityId, entityType, name, status, summary, attributes, quantity,
-                    inPossession, null, abilityState, lifecycle, null);
+                    inPossession, null, abilityState, lifecycle, null, "");
         }
 
         /** 兼容已经显式提供物品保管关系、但尚未提供人物关系字段的调用方。 */
@@ -79,7 +93,7 @@ public record StoryPatch(
                            Boolean inPossession, CustodyValue custody, AbilityState abilityState,
                            LifecycleValue lifecycle) {
             this(operation, entityId, entityType, name, status, summary, attributes, quantity,
-                    inPossession, custody, abilityState, lifecycle, null);
+                    inPossession, custody, abilityState, lifecycle, null, "");
         }
     }
 

@@ -9,6 +9,9 @@ import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
 
 import java.util.Objects;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 检查候选 StoryPatch 是否真正实现了生成前已确认的行动事实契约。
@@ -27,7 +30,15 @@ public final class StoryActionContractPatchValidator {
      */
     public void validate(StoryProjection before, StoryActionContract contract, StoryPatch patch) {
         if (contract == null || patch == null) throw new IllegalArgumentException("行动契约校验缺少候选提案");
-        for (ItemTransition transition : contract.itemTransitions()) validateTransition(before, transition, patch);
+        Map<String, StoryActionContract.EntityReference> referencesByKey = contract.references().stream()
+                .filter(value -> value != null && value.referenceKey() != null && !value.referenceKey().isBlank())
+                .collect(Collectors.toMap(value -> StoryReferenceAlias.normalizeKey(value.referenceKey()),
+                        Function.identity(), (left, right) -> {
+                            throw new IllegalArgumentException("行动契约存在重复的回合内引用键");
+                        }));
+        for (ItemTransition transition : contract.itemTransitions()) {
+            validateTransition(before, referencesByKey, transition, patch);
+        }
         contract.references().stream()
                 .filter(value -> value != null && value.resolution() == ReferenceResolution.NEW)
                 .filter(value -> "ITEM".equalsIgnoreCase(value.entityType()) && value.expectedCustody() != null)
@@ -76,7 +87,9 @@ public final class StoryActionContractPatchValidator {
         }
     }
 
-    private void validateTransition(StoryProjection before, ItemTransition transition, StoryPatch patch) {
+    private void validateTransition(StoryProjection before,
+                                    Map<String, StoryActionContract.EntityReference> referencesByKey,
+                                    ItemTransition transition, StoryPatch patch) {
         EntityPatch entityPatch = patch.entities().stream()
                 .filter(value -> value != null && transition.itemId().equals(value.entityId()))
                 .findFirst()
@@ -88,7 +101,33 @@ public final class StoryActionContractPatchValidator {
             throw new IllegalArgumentException("物品状态补丁没有落实行动契约中的目标保管者："
                     + transition.itemId());
         }
+        validateReferencedHolder(referencesByKey, transition, patch);
         validatePartialQuantity(before, transition, entityPatch);
+    }
+
+    private void validateReferencedHolder(
+            Map<String, StoryActionContract.EntityReference> referencesByKey,
+            ItemTransition transition, StoryPatch patch) {
+        String key = StoryReferenceAlias.normalizeKey(transition.targetReferenceKey());
+        if (key == null || transition.target() == null
+                || !StoryReferenceAlias.isAlias(transition.target().holderRef())) {
+            return;
+        }
+        StoryActionContract.EntityReference reference = referencesByKey.get(key);
+        if (reference == null) throw new IllegalArgumentException("物品人物目标缺少行动引用：" + key);
+        var matches = patch.entities().stream()
+                .filter(value -> value != null && value.operation() == StoryPatch.EntityOperation.CREATE)
+                .filter(value -> "CHARACTER".equalsIgnoreCase(value.entityType()))
+                .filter(value -> key.equals(StoryReferenceAlias.normalizeKey(value.referenceKey())))
+                .toList();
+        if (matches.size() != 1) {
+            throw new IllegalArgumentException("来源人物接收物品时没有晋升为唯一人物记录："
+                    + reference.canonicalName());
+        }
+        if (!reference.canonicalName().equals(matches.getFirst().name())) {
+            throw new IllegalArgumentException("来源人物晋升记录与行动引用名称不一致："
+                    + reference.canonicalName());
+        }
     }
 
     private void validatePartialQuantity(StoryProjection before, ItemTransition transition, EntityPatch patch) {
@@ -116,7 +155,9 @@ public final class StoryActionContractPatchValidator {
 
     private CustodyValue normalized(CustodyValue value) {
         if (value == null || value.holderType() == null) return null;
-        String ref = value.holderRef() == null || value.holderRef().isBlank() ? null : value.holderRef().strip();
+        String ref = value.holderType() == HolderType.CHARACTER || value.holderType() == HolderType.LOCATION
+                ? value.holderRef() == null || value.holderRef().isBlank() ? null : value.holderRef().strip()
+                : null;
         return new CustodyValue(value.holderType(), ref);
     }
 

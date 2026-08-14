@@ -1,6 +1,7 @@
 package com.wenxian.game.story.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wenxian.game.story.domain.StoryActionContract;
 import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryPatchValidator;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
@@ -279,6 +280,43 @@ class ModelBackedStoryTurnAgentTest {
                 resolved.contract().agencyBoundary().authorizedActions());
         assertEquals("观察完成后仍停在石门前", resolved.contract().agencyBoundary().requiredEndState());
         assertEquals(1, resolved.modelResults().size());
+    }
+
+    @Test
+    void repairsActionContractWithoutBindingSourceCharacterToAnotherStableId() {
+        StoryModelGateway gateway = request -> {
+            assertEquals("deepseek-v4-flash", request.model());
+            assertTrue(request.userPrompt().contains("rejectedContract"));
+            assertTrue(request.userPrompt().contains("不得猜测另一个已有角色"));
+            return result("""
+                    {"intentSummary":"把玉坠交给柳青儿","actionMode":"ATTEMPT","itemActionDetected":true,
+                     "references":[
+                       {"mention":"柳字玉坠","resolution":"EXISTING","entityId":"item-jade",
+                        "entityType":"ITEM","canonicalName":"柳字玉坠","role":"SOURCE",
+                        "expectedCustody":{"holderType":"PLAYER","holderRef":null},"evidenceRefs":[],"referenceKey":"r1"},
+                       {"mention":"柳青儿","resolution":"ESTABLISHED","entityId":null,
+                        "entityType":"CHARACTER","canonicalName":"柳青儿","role":"TARGET",
+                        "expectedCustody":null,"evidenceRefs":["initial:origin"],"referenceKey":"r2"}],
+                     "itemTransitions":[{"itemId":"item-jade",
+                       "expectedFrom":{"holderType":"PLAYER","holderRef":null},
+                       "target":{"holderType":"CHARACTER","holderRef":null},"quantity":1,"targetReferenceKey":"r2"}],
+                     "characterPreconditions":[],
+                     "agencyBoundary":{"authorizedActions":["把玉坠交给柳青儿"],"prohibitedActions":[],
+                       "unresolvedDecisions":[],"requiredEndState":"玉坠由柳青儿保管"},
+                     "stopBoundary":"交付后停下","conflict":{"present":false,"reason":"","correction":""}}
+                    """, 44, 30, 110);
+        };
+        StoryActionContract rejected = new StoryActionContract("把玉坠交给柳青儿", true,
+                List.of(), List.of(), List.of(), "", new StoryActionContract.Conflict(false, "", ""));
+
+        StoryTurnAgent.ResolvedAction repaired = agent(gateway).repairActionContract(
+                context(), route(), new StoryTurnAgent.InvocationContext("save-contract-repair", 9),
+                rejected, "目标人物没有稳定引用");
+
+        assertEquals(StoryActionContract.ReferenceResolution.ESTABLISHED,
+                repaired.contract().references().get(1).resolution());
+        assertEquals("r2", repaired.contract().itemTransitions().getFirst().targetReferenceKey());
+        assertEquals(List.of("initial:origin"), repaired.contract().references().get(1).evidenceRefs());
     }
 
     @Test

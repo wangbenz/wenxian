@@ -156,6 +156,28 @@ class StoryStateReducerTest {
     }
 
     @Test
+    void resolvesTurnLocalCharacterReferenceToOneServerAssignedIdentity() {
+        EntityState item = entity("item-jade", "ITEM", "柳字玉坠",
+                new QuantityValue(true, 1), true, null, null);
+        EntityPatch gifted = new EntityPatch(EntityOperation.UPDATE, item.id(), "ITEM", null,
+                "已经交付", null, null, new QuantityValue(true, 1), false,
+                new CustodyValue(HolderType.CHARACTER, "contract-ref:r2"), null, null);
+        EntityPatch liu = new EntityPatch(EntityOperation.CREATE, null, "CHARACTER", "柳青儿",
+                "在驿站", "主角初始经历中确认的妹妹", null, null, null, null, null,
+                new LifecycleValue(LifecycleState.ACTIVE, "初始来源确认"), null, "r2");
+
+        StoryStateReducer.Applied applied = reducer.reduce(projection(Map.of(item.id(), item), Map.of()),
+                patch(List.of(gifted, liu), List.of()));
+
+        EntityState created = applied.projection().entities().get("character-generated");
+        assertEquals("柳青儿", created.name());
+        assertEquals("character-generated",
+                applied.projection().entities().get(item.id()).custody().holderRef());
+        assertEquals("character-generated",
+                applied.acceptedPatch().entities().getFirst().custody().holderRef());
+    }
+
+    @Test
     void keepsInitialContractWhenApplyingEveryLaterTurn() {
         InitialContract initial = new InitialContract("林清漪", "人族", "女", "山村采药女",
                 "历史命卷未记录", "医修探索", "XUANXU", "玄墟界", "仙路难辨",

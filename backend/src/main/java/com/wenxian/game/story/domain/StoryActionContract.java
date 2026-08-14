@@ -84,21 +84,32 @@ public record StoryActionContract(
             String canonicalName,
             String role,
             CustodyValue expectedCustody,
-            List<String> evidenceRefs
+            List<String> evidenceRefs,
+            String referenceKey
     ) {
         public EntityReference {
             evidenceRefs = safe(evidenceRefs);
+            referenceKey = text(referenceKey);
         }
 
         /** 兼容来源引用加入前的实体契约。 */
         public EntityReference(String mention, ReferenceResolution resolution, String entityId,
                                String entityType, String canonicalName, String role,
                                CustodyValue expectedCustody) {
-            this(mention, resolution, entityId, entityType, canonicalName, role, expectedCustody, List.of());
+            this(mention, resolution, entityId, entityType, canonicalName, role, expectedCustody,
+                    List.of(), "");
+        }
+
+        /** 兼容回合内引用键加入前、已经提供来源证据的调用方。 */
+        public EntityReference(String mention, ReferenceResolution resolution, String entityId,
+                               String entityType, String canonicalName, String role,
+                               CustodyValue expectedCustody, List<String> evidenceRefs) {
+            this(mention, resolution, entityId, entityType, canonicalName, role, expectedCustody,
+                    evidenceRefs, "");
         }
 
         public EntityReference(String entityId, String entityType, String role) {
-            this("", ReferenceResolution.EXISTING, entityId, entityType, "", role, null, List.of());
+            this("", ReferenceResolution.EXISTING, entityId, entityType, "", role, null, List.of(), "");
         }
     }
 
@@ -111,7 +122,17 @@ public record StoryActionContract(
 
     /** quantity 为空表示整件或数量未知；有值时表示玩家本轮明确处置的数量。 */
     public record ItemTransition(String itemId, CustodyValue expectedFrom,
-                                 CustodyValue target, Integer quantity) {}
+                                 CustodyValue target, Integer quantity, String targetReferenceKey) {
+        public ItemTransition {
+            targetReferenceKey = text(targetReferenceKey);
+        }
+
+        /** 兼容只涉及既有稳定实体的物品变化。 */
+        public ItemTransition(String itemId, CustodyValue expectedFrom,
+                              CustodyValue target, Integer quantity) {
+            this(itemId, expectedFrom, target, quantity, "");
+        }
+    }
 
     /** 玩家行动明确依赖某个人物既有身份关系时，同时记录当前已确认关系名称。 */
     public record CharacterPrecondition(String characterId, LifecycleState requiredLifecycle,

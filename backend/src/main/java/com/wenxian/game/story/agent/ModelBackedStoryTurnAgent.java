@@ -81,6 +81,9 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                changeReason，且不得只改 attributes.relationship 来绕过关系审计。
                人物 status 与 summary 只能描述人物自身近况，不得重复记录某件物品由谁保管。物品保管的唯一客观来源
                是 ITEM.custody；即使旧人物文本曾提到保管物品，也不能用它覆盖或补写 custody。
+               当 factContract.itemTransitions.target.holderRef 为 contract-ref:rN 时，表示该人物来自初始设定、来源片段
+               或本轮新出现，尚无正式 ID。必须同时 CREATE 唯一 CHARACTER，令其 referenceKey=rN，并让物品补丁继续
+               使用同一个 contract-ref:rN；不得改绑为 entityIndex 中另一个已有角色。服务端提交时会统一换成正式 ID。
             6. time 必须写本轮实际经过分钟。玩家明确说一月、三年等时必须完整换算；世界未另定历法时按一年360日、
                一月30日计算。若被打断，resolution=INTERRUPTED，并返回实际时长与 interruptionReason，正文必须一致。
                objective.worldClock 是当前可读时刻，正文开场的昼夜、晨昏与它必须一致；只有 time.elapsedMinutes
@@ -101,6 +104,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
               "coreState":{"location":null,"condition":null,"realm":null,"lifeGoal":null},
               "entities":[{"operation":"CREATE|UPDATE|HIDE|RESTORE","entityId":null,"entityType":"ITEM|ABILITY|CHARACTER|LANDMARK或上下文已有类型",
                 "name":null,"status":null,"summary":null,"attributes":null,
+                "referenceKey":"仅当本实体对应 factContract 中的回合内引用时填写，否则为空",
                 "quantity":{"known":true,"value":1},"inPossession":true,
                 "custody":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null},
                 "abilityState":"MASTERED|TEMPORARILY_BLOCKED|LOST|UNKNOWN",
@@ -199,6 +203,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                只有玩家明确要求长期标记，或它已经成为可独立前往、交互并影响后续事件的地点时才可返回 NEW LANDMARK。
             1. action 中每一个作为独立剧情对象被查看、使用、取得或处置的物品、人物或能力都必须放入 references，
                查看但不消耗也不能省略。mention 必须保留玩家原话中的对象短语，canonicalName 是解析后的标准名称。
+               每条 reference 必须分配本次契约内唯一的 referenceKey（r1、r2……），只用于本回合交叉引用，
+               不得把它当成数据库实体 ID。
                “放入行囊、拿在手中、留在屋内/地面”等语句里的容器、身体部位和普通方位只表达保管关系，
                不是新剧情实体；除非 facts 已有稳定实体，或玩家明确把它本身作为独立对象取得/处置，否则不要为
                行囊、手、衣袖、地面、屋内等创建 reference，更不能标成 NEW ITEM。
@@ -221,8 +227,9 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                reference.expectedCustody 同样只表达玩家行动明确依赖的起始保管者；没有表达归属前提时可为 null，
                不能机械复制 facts。发生 itemTransitions 时两者必须一致。“请某人还给我”开始前依赖 CHARACTER，
                结束后才由 PLAYER 保管，不能因为句中出现“给我”就把 expectedCustody 写成 PLAYER。
-               PLAYER 的 holderRef=null；CHARACTER 必须使用 facts 中人物稳定 ID；LOCATION 可使用当前地点文字；
-               NONE 表示消耗或毁去；无法确认新人物稳定 ID 时使用 UNKNOWN。
+               PLAYER 的 holderRef=null；CHARACTER 如果是 EXISTING 人物，holderRef 使用 facts 中稳定 ID；如果是
+               ESTABLISHED 或 NEW 人物，holderRef=null，并把该人物 referenceKey 写入 targetReferenceKey；LOCATION
+               可使用当前地点文字；NONE 表示消耗或毁去。不得把目标人物绑定为 references 中没有提及的其他人物。
                已知堆叠物品只消耗或转移一部分、剩余部分仍在玩家手中时，target 必须是 PLAYER，quantity 填本轮处置数量；
                不要因为其中一枚被消耗就把整个物品实体标成 NONE。
             6. 先设置 actionMode：QUERY 表示询问、查看或调查；ATTEMPT 表示寻找、战斗、修炼、许愿、取得等尚待裁定的尝试；
@@ -257,19 +264,33 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                 "canonicalName":"标准名称",
                 "role":"SOURCE|TARGET|MENTION",
                 "expectedCustody":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null},
-                "evidenceRefs":[]
+                "evidenceRefs":[],
+                "referenceKey":"r1"
               }],
               "itemTransitions":[{
                 "itemId":"",
                 "expectedFrom":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null},
                 "target":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null},
-                "quantity":null
+                "quantity":null,
+                "targetReferenceKey":"目标为ESTABLISHED或NEW人物时填写对应referenceKey，否则为空"
               }],
               "characterPreconditions":[{"characterId":"","requiredLifecycle":"ACTIVE|MISSING|DORMANT|DEAD|UNKNOWN","requiredRelationship":null}],
               "agencyBoundary":{"authorizedActions":[],"prohibitedActions":[],"unresolvedDecisions":[],"requiredEndState":""},
               "stopBoundary":"",
               "conflict":{"present":false,"reason":"","correction":""}
             }
+            """;
+
+    private static final String ACTION_CONTRACT_REPAIR_PROMPT = """
+            下面的行动事实契约存在结构性引用错误。请根据同一份 facts、action 与 selectedChoice 只修复契约，
+            不续写剧情、不改变玩家行动，也不把事实冲突伪装成可执行。
+            特别检查：玩家提到的人物是否来自 initialContract/sourceExcerpts；ESTABLISHED 是否复制了有效 evidenceRefs；
+            每条 referenceKey 是否唯一；物品交给 ESTABLISHED/NEW 人物时，target.holderRef 必须为空并使用
+            targetReferenceKey；不得猜测另一个已有角色的稳定 ID。
+            如果 validationProblem 是物品起始保管状态冲突，必须重新阅读玩家原话：expectedCustody/expectedFrom 只表达
+            行动开始前玩家实际依赖的保管者，赠送自己当前持有的物品时应为 PLAYER；不得为迎合 facts 把玩家明确声称的
+            起始保管者改成当前记录。若玩家确实声称了与 facts 冲突的旧归属，保留该声明并设置 conflict.present=true。
+            只返回符合行动事实解析完整 JSON 契约的单个对象，不要 Markdown 或解释。
             """;
 
     private static final String AGENCY_REVIEW_PROMPT = """
@@ -392,6 +413,23 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             return new ResolvedAction(contract, List.of(result));
         } catch (JsonProcessingException error) {
             throw new IllegalArgumentException("行动事实解析未返回有效结果", error);
+        }
+    }
+
+    @Override
+    public ResolvedAction repairActionContract(StoryPromptContext context, StoryModelRoute route,
+                                               InvocationContext invocation,
+                                               StoryActionContract rejected, String problem) {
+        if (context == null || rejected == null) throw new IllegalArgumentException("行动契约修复缺少上下文");
+        if (route == null) throw new IllegalArgumentException("行动契约修复缺少模型路由");
+        StoryModelRoute contractRoute = flashReviewRoute(route);
+        StoryModelGateway.Result result = call(contractRoute, invocation, "STORY_ACTION_CONTRACT_REPAIR_FLASH",
+                ACTION_CONTRACT_PROMPT, actionContractRepairPayload(context, rejected, problem), 0.0);
+        try {
+            StoryActionContract contract = tolerantMapper.readValue(rawJson(result.text()), StoryActionContract.class);
+            return new ResolvedAction(contract, List.of(result));
+        } catch (JsonProcessingException error) {
+            throw new IllegalArgumentException("行动事实契约修复未返回有效结果", error);
         }
     }
 
@@ -546,6 +584,24 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             return mapper.writeValueAsString(payload);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("行动事实解析上下文无法序列化", error);
+        }
+    }
+
+    private String actionContractRepairPayload(StoryPromptContext context,
+                                               StoryActionContract rejected, String problem) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("instruction", ACTION_CONTRACT_REPAIR_PROMPT);
+        try {
+            payload.put("originalContext", mapper.readTree(actionContractPayload(context)));
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("行动契约修复上下文无法序列化", error);
+        }
+        payload.put("rejectedContract", rejected);
+        payload.put("validationProblem", problem == null ? "" : problem.strip());
+        try {
+            return mapper.writeValueAsString(payload);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("行动契约修复请求无法序列化", error);
         }
     }
 

@@ -11,6 +11,7 @@ import com.wenxian.game.story.agent.StoryPromptContext;
 import com.wenxian.game.story.agent.StoryPromptContext.PendingDecision;
 import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.domain.StoryProjection;
+import com.wenxian.game.story.domain.StoryActionPreconditionException;
 import com.wenxian.game.story.domain.StoryActionContractValidator;
 import com.wenxian.game.story.domain.StoryActionContractCanonicalizer;
 import com.wenxian.game.story.domain.StoryActionContractPatchValidator;
@@ -122,11 +123,30 @@ public class StoryTurnPreparationService {
         StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
                 saved.id(), saved.turnNumber() + 1);
         StoryTurnAgent.ResolvedAction resolvedAction = agent.resolveAction(context, route, invocation);
-        var actionContract = contractCanonicalizer.canonicalize(before, resolvedAction.contract());
-        if (diagnostic != null) diagnostic.actionResolved(actionContract);
-        actionContracts.validate(before, actionContract, context.objective().sourceExcerpts().stream()
+        Set<String> availableSourceRefs = context.objective().sourceExcerpts().stream()
                 .map(StoryPromptContext.SourceExcerpt::ref)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet()));
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        com.wenxian.game.story.domain.StoryActionContract actionContract;
+        try {
+            actionContract = contractCanonicalizer.canonicalize(before, resolvedAction.contract());
+            if (diagnostic != null) diagnostic.actionResolved(actionContract);
+            actionContracts.validate(before, actionContract, availableSourceRefs);
+        } catch (StoryActionPreconditionException conflict) {
+            // 已确认事实冲突是业务结论，不能交给模型“修复”后再次尝试。
+            throw conflict;
+        } catch (IllegalArgumentException structuralProblem) {
+            StoryTurnAgent.ResolvedAction repaired = agent.repairActionContract(
+                    context, route, invocation, resolvedAction.contract(), structuralProblem.getMessage());
+            resolvedAction = combine(resolvedAction, repaired);
+            try {
+                actionContract = contractCanonicalizer.canonicalize(before, repaired.contract());
+                if (diagnostic != null) diagnostic.actionResolved(actionContract);
+                actionContracts.validate(before, actionContract, availableSourceRefs);
+            } catch (IllegalArgumentException failedAgain) {
+                failedAgain.addSuppressed(structuralProblem);
+                throw failedAgain;
+            }
+        }
         context = context.withActionContract(actionContract);
         StoryTurnAgent.Generated generation = agent.generate(context, route, invocation);
         generation = prependModelResults(resolvedAction.modelResults(), generation);
@@ -208,6 +228,13 @@ public class StoryTurnPreparationService {
         List<StoryModelGateway.Result> attempts = new ArrayList<>(first.modelResults());
         attempts.addAll(repaired.modelResults());
         return new StoryTurnAgent.Generated(repaired.patch(), attempts);
+    }
+
+    private StoryTurnAgent.ResolvedAction combine(StoryTurnAgent.ResolvedAction first,
+                                                   StoryTurnAgent.ResolvedAction repaired) {
+        List<StoryModelGateway.Result> attempts = new ArrayList<>(first.modelResults());
+        attempts.addAll(repaired.modelResults());
+        return new StoryTurnAgent.ResolvedAction(repaired.contract(), attempts);
     }
 
     private StoryTurnAgent.Generated appendReview(StoryTurnAgent.Generated generated, StoryTurnAgent.Review review) {

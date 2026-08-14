@@ -119,6 +119,52 @@ class StoryActionContractPatchValidatorTest {
                 () -> validator.validate(projectionWithPills(), contract, candidate));
     }
 
+    @Test
+    void sourceCharacterReceivingItemMustBeCreatedWithMatchingTurnReference() {
+        EntityReference liu = new EntityReference("柳青儿", ReferenceResolution.ESTABLISHED,
+                null, "CHARACTER", "柳青儿", "TARGET", null,
+                List.of("initial:origin"), "r2");
+        StoryActionContract contract = new StoryActionContract("赠予柳青儿", true, List.of(liu),
+                List.of(new ItemTransition("item-sword-tip", new CustodyValue(HolderType.PLAYER, null),
+                        new CustodyValue(HolderType.CHARACTER, "contract-ref:r2"), 1, "r2")),
+                List.of(), "交付后停下", new Conflict(false, "", ""));
+        EntityPatch item = new EntityPatch(EntityOperation.UPDATE, "item-sword-tip", "ITEM",
+                null, "已经交付", null, null, new QuantityValue(true, 1), false,
+                new CustodyValue(HolderType.CHARACTER, "contract-ref:r2"), null, null);
+        EntityPatch character = new EntityPatch(EntityOperation.CREATE, null, "CHARACTER",
+                "柳青儿", "在驿站", "主角在初始经历中确认的妹妹", null, null, null,
+                null, null, new StoryPatch.LifecycleValue(StoryPatch.LifecycleState.ACTIVE, "初始来源确认"),
+                null, "r2");
+
+        assertDoesNotThrow(() -> validator.validate(contract,
+                new StoryPatch("交付", "你把玉坠交给柳青儿。",
+                        new TimePassage(5, TimeResolution.COMPLETE, null), null,
+                        List.of(item, character), List.of(), List.of(), List.of(),
+                        new StoryPatch.DecisionCheckpoint(false, null), List.of(), "已经交付。")));
+    }
+
+    @Test
+    void rejectsSourceCharacterPromotionWithWrongReferenceKey() {
+        EntityReference liu = new EntityReference("柳青儿", ReferenceResolution.ESTABLISHED,
+                null, "CHARACTER", "柳青儿", "TARGET", null,
+                List.of("initial:origin"), "r2");
+        StoryActionContract contract = new StoryActionContract("赠予柳青儿", true, List.of(liu),
+                List.of(new ItemTransition("item-sword-tip", new CustodyValue(HolderType.PLAYER, null),
+                        new CustodyValue(HolderType.CHARACTER, "contract-ref:r2"), 1, "r2")),
+                List.of(), "交付后停下", new Conflict(false, "", ""));
+        EntityPatch item = new EntityPatch(EntityOperation.UPDATE, "item-sword-tip", "ITEM",
+                null, "已经交付", null, null, new QuantityValue(true, 1), false,
+                new CustodyValue(HolderType.CHARACTER, "contract-ref:r2"), null, null);
+        EntityPatch wrong = new EntityPatch(EntityOperation.CREATE, null, "CHARACTER",
+                "老周", "在驿站", "驿站伙计", null, null, null, null, null,
+                new StoryPatch.LifecycleValue(StoryPatch.LifecycleState.ACTIVE, "本轮出现"), null, "r9");
+        StoryPatch candidate = new StoryPatch("交付", "你把玉坠交给了另一个人。",
+                new TimePassage(5, TimeResolution.COMPLETE, null), null, List.of(item, wrong), List.of(),
+                List.of(), List.of(), new StoryPatch.DecisionCheckpoint(false, null), List.of(), "未正确交付。 ");
+
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(contract, candidate));
+    }
+
     private StoryActionContract contract() {
         return new StoryActionContract("赠送断剑尖", true, List.of(),
                 List.of(new ItemTransition("item-sword-tip", new CustodyValue(HolderType.PLAYER, null),

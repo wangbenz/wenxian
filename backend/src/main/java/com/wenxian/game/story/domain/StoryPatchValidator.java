@@ -6,6 +6,9 @@ import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactPatch;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * 校验 Story Agent 变化提案的通用结构不变量。
  *
@@ -29,6 +32,7 @@ public final class StoryPatchValidator {
         require(present(patch.narrative()), "推演结果必须包含正文");
         validateTime(patch, explicitDurationMinutes);
         patch.entities().forEach(this::validateEntity);
+        validateEntityAliases(patch);
         patch.worldFacts().forEach(this::validateWorldFact);
         patch.knowledge().forEach(knowledge -> {
             require(present(knowledge.subjectRef()), "人物认知必须标明认知主体");
@@ -74,6 +78,7 @@ public final class StoryPatchValidator {
             require(present(patch.summary()), "新实体必须包含事实摘要");
         } else {
             require(present(patch.entityId()), "更新已有实体必须引用稳定ID");
+            require(!present(patch.referenceKey()), "只有本轮新增实体可以声明回合内引用键");
         }
         validateQuantity(patch.quantity());
         if (patch.custody() != null) {
@@ -81,6 +86,8 @@ public final class StoryPatchValidator {
             if (patch.custody().holderType() == StoryPatch.HolderType.CHARACTER
                     || patch.custody().holderType() == StoryPatch.HolderType.LOCATION) {
                 require(present(patch.custody().holderRef()), "人物或地点保管关系必须包含稳定引用");
+            } else {
+                require(!present(patch.custody().holderRef()), "只有人物或地点保管关系可以包含引用");
             }
         }
         if (patch.lifecycle() != null) {
@@ -89,6 +96,25 @@ public final class StoryPatchValidator {
         if (patch.relationship() != null) {
             require("CHARACTER".equalsIgnoreCase(patch.entityType()), "只有人物实体可以记录关系变化");
             require(present(patch.relationship().label()), "人物关系必须包含当前关系名称");
+        }
+    }
+
+    private void validateEntityAliases(StoryPatch patch) {
+        Map<String, EntityPatch> createsByKey = new LinkedHashMap<>();
+        for (EntityPatch entity : patch.entities()) {
+            if (entity == null || !present(entity.referenceKey())) continue;
+            String key = StoryReferenceAlias.normalizeKey(entity.referenceKey());
+            require(entity.operation() == EntityOperation.CREATE, "回合内引用键只能绑定本轮新增实体");
+            require(createsByKey.putIfAbsent(key, entity) == null, "同一回合内引用键不能重复");
+        }
+        for (EntityPatch entity : patch.entities()) {
+            if (entity == null || entity.custody() == null
+                    || entity.custody().holderType() != StoryPatch.HolderType.CHARACTER) continue;
+            String key = StoryReferenceAlias.keyOf(entity.custody().holderRef());
+            if (key == null) continue;
+            EntityPatch holder = createsByKey.get(key);
+            require(holder != null, "物品保管关系引用了未创建的回合内人物");
+            require("CHARACTER".equalsIgnoreCase(holder.entityType()), "物品保管关系的回合内引用必须指向人物");
         }
     }
 

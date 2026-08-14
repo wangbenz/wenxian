@@ -150,6 +150,71 @@ class StoryActionContractValidatorTest {
     }
 
     @Test
+    void rejectsGiftThatSilentlyBindsMentionedPersonToAnotherExistingCharacter() {
+        EntityReference liu = new EntityReference("柳青儿", ReferenceResolution.UNRESOLVED,
+                null, "CHARACTER", "柳青儿", "TARGET", null, List.of(), "r2");
+        StoryActionContract contract = new StoryActionContract("把断剑尖交给柳青儿", ActionMode.ATTEMPT,
+                true, List.of(existing("断剑尖", "item-sword-tip", "ITEM", "SOURCE"), liu),
+                List.of(new ItemTransition("item-sword-tip", new CustodyValue(HolderType.PLAYER, null),
+                        new CustodyValue(HolderType.CHARACTER, "character-old-woman"), 1, "")),
+                List.of(), null, "交付后停下", new Conflict(false, "", ""));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(projection(new CustodyValue(HolderType.PLAYER, null)), contract));
+
+        assertTrue(error.getMessage().contains("没有出现在玩家本轮的稳定实体引用"));
+    }
+
+    @Test
+    void acceptsGiftToSourceEstablishedCharacterThroughTurnLocalReference() {
+        EntityReference liu = new EntityReference("柳青儿", ReferenceResolution.ESTABLISHED,
+                null, "CHARACTER", "柳青儿", "TARGET", null,
+                List.of("initial:origin"), "r2");
+        StoryActionContract raw = new StoryActionContract("把断剑尖交给柳青儿", ActionMode.ATTEMPT,
+                true, List.of(existing("断剑尖", "item-sword-tip", "ITEM", "SOURCE"), liu),
+                List.of(new ItemTransition("item-sword-tip", new CustodyValue(HolderType.PLAYER, null),
+                        new CustodyValue(HolderType.CHARACTER, null), 1, "r2")),
+                List.of(), null, "交付后停下", new Conflict(false, "", ""));
+        StoryActionContract canonical = new StoryActionContractCanonicalizer()
+                .canonicalize(projection(new CustodyValue(HolderType.PLAYER, null)), raw);
+
+        assertDoesNotThrow(() -> validator.validate(
+                projection(new CustodyValue(HolderType.PLAYER, null)), canonical, Set.of("initial:origin")));
+        assertEquals("contract-ref:r2", canonical.itemTransitions().getFirst().target().holderRef());
+    }
+
+    @Test
+    void canonicalizerUsesTransitionStartCustodyWhenReferenceCopiedTheFinalHolder() {
+        EntityReference item = new EntityReference("柳字玉坠", ReferenceResolution.EXISTING,
+                "item-sword-tip", "ITEM", "断剑尖", "TARGET",
+                new CustodyValue(HolderType.CHARACTER, "character-old-woman"), List.of(), "r1");
+        EntityReference target = new EntityReference("老妇", ReferenceResolution.EXISTING,
+                "character-old-woman", "CHARACTER", "老妇", "TARGET", null, List.of(), "r2");
+        StoryActionContract raw = new StoryActionContract("把断剑尖交给老妇", ActionMode.ATTEMPT,
+                true, List.of(item, target),
+                List.of(new ItemTransition("item-sword-tip", new CustodyValue(HolderType.PLAYER, null),
+                        new CustodyValue(HolderType.CHARACTER, "character-old-woman"), 1, "r2")),
+                List.of(), null, "交付后停下", new Conflict(false, "", ""));
+
+        StoryActionContract canonical = new StoryActionContractCanonicalizer()
+                .canonicalize(projection(new CustodyValue(HolderType.PLAYER, null)), raw);
+
+        assertEquals(new CustodyValue(HolderType.PLAYER, null),
+                canonical.references().getFirst().expectedCustody());
+        assertDoesNotThrow(() -> validator.validate(
+                projection(new CustodyValue(HolderType.PLAYER, null)), canonical));
+    }
+
+    @Test
+    void acceptsLegacyPlayerCustodyThatStillContainsProtagonistName() {
+        StoryProjection projection = projection(new CustodyValue(HolderType.PLAYER, "温砚舟"));
+        StoryActionContract contract = contract(new CustodyValue(HolderType.PLAYER, null),
+                new CustodyValue(HolderType.CHARACTER, "character-old-woman"));
+
+        assertDoesNotThrow(() -> validator.validate(projection, contract));
+    }
+
+    @Test
     void rejectsEstablishedReferenceWhoseEvidenceWasNotActuallyProvided() {
         EntityReference oldZhou = new EntityReference("老周", ReferenceResolution.ESTABLISHED,
                 null, "CHARACTER", "老周", "TARGET", null, List.of("turn:999"));

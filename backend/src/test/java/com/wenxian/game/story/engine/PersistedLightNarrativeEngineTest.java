@@ -946,6 +946,7 @@ class PersistedLightNarrativeEngineTest {
             StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
             StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
             AtomicInteger generations = new AtomicInteger();
+            AtomicInteger contractRepairs = new AtomicInteger();
             StoryTurnAgent contractRejectingAgent = new StoryTurnAgent() {
                 @Override
                 public ResolvedAction resolveAction(StoryPromptContext context, StoryModelRoute route,
@@ -955,6 +956,14 @@ class PersistedLightNarrativeEngineTest {
                             new StoryActionContract.Conflict(true,
                                     "断剑尖仍在你的行囊，并未交给老妇。", "可以直接检查行囊，或重新描述要做的事。"));
                     return new ResolvedAction(contract, List.of());
+                }
+
+                @Override
+                public ResolvedAction repairActionContract(StoryPromptContext context, StoryModelRoute route,
+                                                           InvocationContext invocation,
+                                                           StoryActionContract rejected, String problem) {
+                    contractRepairs.incrementAndGet();
+                    return new ResolvedAction(rejected, List.of());
                 }
 
                 @Override
@@ -973,6 +982,7 @@ class PersistedLightNarrativeEngineTest {
 
             assertEquals("ACTION_PRECONDITION_FAILED", error.code());
             assertEquals(0, generations.get());
+            assertEquals(0, contractRepairs.get(), "已确认事实冲突不得再调用模型修复");
             assertFalse(error.retryable());
             assertFalse(error.turnConsumed());
             assertFalse(error.stateChanged());

@@ -36,6 +36,16 @@ public interface StoryTurnAgent {
     }
 
     /**
+     * 行动契约出现结构性引用错误时执行一次轻量修复；真实的玩家事实冲突不得通过本方法绕过。
+     * 修复结果仍须重新经过来源、稳定 ID 与保管关系校验。
+     */
+    default ResolvedAction repairActionContract(StoryPromptContext context, StoryModelRoute route,
+                                                InvocationContext invocation,
+                                                StoryActionContract rejected, String problem) {
+        return new ResolvedAction(rejected, List.of());
+    }
+
+    /**
      * 当提案已经通过 JSON 校验、但被 Reducer 的通用事实边界拒绝时，生成一次紧凑的语义修复。
      *
      * <p>默认实现保持测试替身和其他 Agent 兼容；生产模型 Agent 可以覆盖该方法。调用方最多调用一次，

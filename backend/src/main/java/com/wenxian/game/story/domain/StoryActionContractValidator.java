@@ -9,6 +9,9 @@ import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
 import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * 用权威投影校验模型已经结构化的行动前提。
  *
@@ -46,9 +49,17 @@ public final class StoryActionContractValidator {
                 && contract.itemTransitions().isEmpty() && !createsTrackedItem) {
             throw new IllegalArgumentException("行动契约识别到物品处置，但没有返回物品归属变化");
         }
-        contract.references().forEach(reference -> validateReference(
-                projection, contract, reference, availableSources));
-        for (ItemTransition transition : contract.itemTransitions()) validateItem(projection, transition);
+        Map<String, EntityReference> referencesByKey = new LinkedHashMap<>();
+        contract.references().forEach(reference -> {
+            validateReference(projection, contract, reference, availableSources);
+            String key = StoryReferenceAlias.normalizeKey(reference.referenceKey());
+            if (key != null && referencesByKey.putIfAbsent(key, reference) != null) {
+                throw new IllegalArgumentException("行动契约存在重复的回合内引用键：" + key);
+            }
+        });
+        for (ItemTransition transition : contract.itemTransitions()) {
+            validateItem(projection, contract, referencesByKey, transition);
+        }
         for (CharacterPrecondition condition : contract.characterPreconditions()) {
             EntityState character = require(projection, condition.characterId(), "CHARACTER");
             if (condition.requiredLifecycle() != null
@@ -146,7 +157,9 @@ public final class StoryActionContractValidator {
         return value == null || value.isBlank();
     }
 
-    private void validateItem(StoryProjection projection, ItemTransition transition) {
+    private void validateItem(StoryProjection projection, StoryActionContract contract,
+                              Map<String, EntityReference> referencesByKey,
+                              ItemTransition transition) {
         if (transition == null) throw new IllegalArgumentException("物品归属变化不能为空");
         EntityState item = require(projection, transition.itemId(), "ITEM");
         CustodyValue actual = normalizedCustody(item);
@@ -161,7 +174,7 @@ public final class StoryActionContractValidator {
                             + "，并非" + holderDescription(projection, expected) + "。",
                     "请按当前物品归属重新描述行动，或先调查物品实际去向。");
         }
-        validateHolderReference(projection, target);
+        validateTransitionTarget(projection, contract, referencesByKey, transition, target);
         if (transition.quantity() != null && transition.quantity() < 1) {
             throw new IllegalArgumentException("本轮处置的物品数量必须大于0");
         }
@@ -170,6 +183,50 @@ public final class StoryActionContractValidator {
             throw new StoryActionPreconditionException(
                     "“" + item.name() + "”当前数量不足，不能按本次描述处置。",
                     "请减少数量，或先确认实际持有数量。");
+        }
+    }
+
+    /**
+     * 人物保管者必须来自玩家本轮实际引用。既有人物使用稳定 ID；来源人物或本轮新人物使用回合内引用键，
+     * 禁止模型把目标人物静默绑定为投影中的另一个人物。
+     */
+    private void validateTransitionTarget(StoryProjection projection, StoryActionContract contract,
+                                          Map<String, EntityReference> referencesByKey,
+                                          ItemTransition transition, CustodyValue target) {
+        if (target.holderType() != HolderType.CHARACTER) {
+            validateHolderReference(projection, target);
+            return;
+        }
+        String aliasKey = StoryReferenceAlias.keyOf(target.holderRef());
+        String declaredKey = StoryReferenceAlias.normalizeKey(transition.targetReferenceKey());
+        if (aliasKey != null) {
+            if (declaredKey == null || !aliasKey.equals(declaredKey)) {
+                throw new IllegalArgumentException("物品人物目标的回合内引用键不一致");
+            }
+            EntityReference reference = referencesByKey.get(aliasKey);
+            if (reference == null || !"CHARACTER".equalsIgnoreCase(reference.entityType())) {
+                throw new IllegalArgumentException("物品人物目标没有对应的行动实体引用：" + aliasKey);
+            }
+            if (reference.resolution() != ReferenceResolution.ESTABLISHED
+                    && reference.resolution() != ReferenceResolution.NEW) {
+                throw new IllegalArgumentException("回合内人物引用只能指向来源人物或本轮新人物");
+            }
+            return;
+        }
+
+        validateHolderReference(projection, target);
+        boolean explicitlyReferenced = contract.references().stream().anyMatch(reference -> reference != null
+                && reference.resolution() == ReferenceResolution.EXISTING
+                && "CHARACTER".equalsIgnoreCase(reference.entityType())
+                && target.holderRef().equals(reference.entityId()));
+        if (!explicitlyReferenced) {
+            throw new IllegalArgumentException("物品目标人物没有出现在玩家本轮的稳定实体引用中");
+        }
+        if (declaredKey != null) {
+            EntityReference reference = referencesByKey.get(declaredKey);
+            if (reference == null || !target.holderRef().equals(reference.entityId())) {
+                throw new IllegalArgumentException("物品目标人物与声明的实体引用不一致");
+            }
         }
     }
 
@@ -206,7 +263,9 @@ public final class StoryActionContractValidator {
 
     private static CustodyValue normalized(CustodyValue value) {
         if (value == null || value.holderType() == null) return null;
-        String ref = value.holderRef() == null || value.holderRef().isBlank() ? null : value.holderRef().strip();
+        String ref = value.holderType() == HolderType.CHARACTER || value.holderType() == HolderType.LOCATION
+                ? value.holderRef() == null || value.holderRef().isBlank() ? null : value.holderRef().strip()
+                : null;
         return new CustodyValue(value.holderType(), ref);
     }
 
