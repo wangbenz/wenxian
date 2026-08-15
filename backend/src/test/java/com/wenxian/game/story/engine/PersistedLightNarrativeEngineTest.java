@@ -1237,6 +1237,185 @@ class PersistedLightNarrativeEngineTest {
         }
     }
 
+    @Test
+    void outcomeFirstTurnKeepsValidatedFactsFixedWhileRepairingOnlyNarrative() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            AtomicInteger reviews = new AtomicInteger();
+            StoryTurnAgent agent = new StoryTurnAgent() {
+                @Override
+                public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+                    throw new AssertionError("结果优先 Agent 不应调用旧的正文先行入口");
+                }
+
+                @Override
+                public boolean supportsOutcomeFirst() {
+                    return true;
+                }
+
+                @Override
+                public PlannedOutcome planOutcome(StoryPromptContext context, StoryModelRoute route,
+                                                   InvocationContext invocation) {
+                    StoryPatch plan = new StoryPatch("翌日启程", "你歇息一夜并在翌日抵达山溪边。",
+                            new TimePassage(1_440, TimeResolution.COMPLETE, null),
+                            new StoryPatch.CoreStatePatch("山溪边", null, null, null),
+                            List.of(), List.of(), List.of(), List.of(),
+                            new DecisionCheckpoint(false, null), List.of(), "翌日已抵达山溪边。");
+                    return new PlannedOutcome(plan, List.of(modelResult("outcome-plan")));
+                }
+
+                @Override
+                public RenderedNarrative renderNarrative(StoryPromptContext context, StoryModelRoute route,
+                                                          InvocationContext invocation, StoryPatch acceptedPlan) {
+                    return new RenderedNarrative("溪边奇遇",
+                            "你在翌日抵达山溪边，并额外捡到一枚计划中没有的筑基丹。",
+                            List.of(new StoryPatch.ChoiceDraft("沿溪而行", "观察上游。")),
+                            "你抵达山溪边并得到筑基丹。", List.of(modelResult("bad-narrative")));
+                }
+
+                @Override
+                public Review reviewOutcomeCoverage(StoryPromptContext context, StoryModelRoute route,
+                                                     InvocationContext invocation, StoryPatch acceptedPlan,
+                                                     RenderedNarrative narrative) {
+                    if (reviews.getAndIncrement() == 0) {
+                        return new Review(ReviewOutcome.REPAIR_DECISION,
+                                "正文新增了结果计划外的筑基丹", List.of(modelResult("review-rejected")));
+                    }
+                    return new Review(ReviewOutcome.ACCEPT, "", List.of(modelResult("review-accepted")));
+                }
+
+                @Override
+                public RenderedNarrative repairNarrative(StoryPromptContext context, StoryModelRoute route,
+                                                         InvocationContext invocation, StoryPatch acceptedPlan,
+                                                         RenderedNarrative rejected, String problem) {
+                    return new RenderedNarrative("翌日溪边",
+                            "你歇息一夜，翌日沿山路抵达山溪边，在水声前停下。",
+                            List.of(new StoryPatch.ChoiceDraft("沿溪而行", "观察上游。")),
+                            "你在翌日抵达山溪边。", List.of(modelResult("repaired-narrative")));
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    agent, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            engine.takeTurn(USER, created.saveId(),
+                    new TurnRequest("今夜歇息，明日再出发", "request-outcome-first", 1));
+
+            var saved = saves.findOwned(USER.userId(), created.saveId()).orElseThrow();
+            StoryProjection projection = new StoryProjectionPersistenceMapper(mapper).load(saved,
+                    entities.listAll(created.saveId()), memories.recentActive(created.saveId(), 20));
+            assertEquals(1, saved.turnNumber());
+            assertEquals(1_440L, projection.worldTimeMinutes());
+            assertEquals("山溪边", projection.coreState().location());
+            assertEquals(2, reviews.get());
+            String storedNarrative = jdbc.queryForObject(
+                    "select narrative_text from story_turn where save_id=?", String.class, created.saveId());
+            assertTrue(storedNarrative.contains("抵达山溪边"));
+            assertFalse(storedNarrative.contains("筑基丹"));
+            assertTrue(entities.listAll(created.saveId()).stream()
+                    .noneMatch(value -> "筑基丹".equals(value.name())));
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
+    void outcomeCoverageCanRepairAMissingPlanBeforeRerendering() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            AtomicInteger renders = new AtomicInteger();
+            AtomicInteger reviews = new AtomicInteger();
+            AtomicInteger planRepairs = new AtomicInteger();
+            StoryTurnAgent agent = new StoryTurnAgent() {
+                @Override
+                public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+                    throw new AssertionError("结果优先 Agent 不应调用旧入口");
+                }
+
+                @Override
+                public boolean supportsOutcomeFirst() {
+                    return true;
+                }
+
+                @Override
+                public PlannedOutcome planOutcome(StoryPromptContext context, StoryModelRoute route,
+                                                   InvocationContext invocation) {
+                    return new PlannedOutcome(plan(null), List.of(modelResult("missing-location-plan")));
+                }
+
+                @Override
+                public PlannedOutcome repairOutcomePlan(StoryPromptContext context, StoryModelRoute route,
+                                                        InvocationContext invocation, StoryPatch rejected,
+                                                        String problem) {
+                    planRepairs.incrementAndGet();
+                    return new PlannedOutcome(plan("青山门前"), List.of(modelResult("location-plan-repair")));
+                }
+
+                @Override
+                public RenderedNarrative renderNarrative(StoryPromptContext context, StoryModelRoute route,
+                                                         InvocationContext invocation, StoryPatch acceptedPlan) {
+                    renders.incrementAndGet();
+                    String location = acceptedPlan.coreState().location();
+                    return new RenderedNarrative("山门前", location == null
+                            ? "你沿着山道向前。" : "你沿着山道抵达青山门前，在石阶下停住。",
+                            List.of(new StoryPatch.ChoiceDraft("观察山门", "查看周围动静。")),
+                            location == null ? "你正在山道上。" : "你已抵达青山门前。",
+                            List.of(modelResult("render-" + renders.get())));
+                }
+
+                @Override
+                public Review reviewOutcomeCoverage(StoryPromptContext context, StoryModelRoute route,
+                                                     InvocationContext invocation, StoryPatch acceptedPlan,
+                                                     RenderedNarrative narrative) {
+                    if (reviews.getAndIncrement() == 0) {
+                        return new Review(ReviewOutcome.REPAIR_FACTS, "结果计划漏掉了最终地点",
+                                List.of(modelResult("plan-gap-review")));
+                    }
+                    return new Review(ReviewOutcome.ACCEPT, "", List.of(modelResult("plan-fixed-review")));
+                }
+
+                private StoryPatch plan(String location) {
+                    return new StoryPatch("前往山门", "你执行了前往山门的行动。",
+                            new TimePassage(60, TimeResolution.COMPLETE, null),
+                            new StoryPatch.CoreStatePatch(location, null, null, null),
+                            List.of(), List.of(), List.of(), List.of(), new DecisionCheckpoint(false, null),
+                            List.of(), location == null ? "你正在前往山门。" : "你已到青山门前。");
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    agent, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            engine.takeTurn(USER, created.saveId(),
+                    new TurnRequest("前往青山门前，到达后停下", "request-plan-coverage-repair", 1));
+
+            var saved = saves.findOwned(USER.userId(), created.saveId()).orElseThrow();
+            StoryProjection projection = new StoryProjectionPersistenceMapper(mapper).load(saved,
+                    entities.listAll(created.saveId()), memories.recentActive(created.saveId(), 20));
+            assertEquals("青山门前", projection.coreState().location());
+            assertEquals(1, planRepairs.get());
+            assertEquals(2, renders.get());
+            assertEquals(2, reviews.get());
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    private com.wenxian.game.story.agent.StoryModelGateway.Result modelResult(String id) {
+        return new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                "{}", id, "test-model", 10, 20, 5);
+    }
+
     private PersistedLightNarrativeEngine engine(EmbeddedDatabase database, StorySaveRepository saves,
                                                   StoryEntityRepository entities,
                                                   StoryMemoryRepository memories) {

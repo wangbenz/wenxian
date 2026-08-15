@@ -131,7 +131,120 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
 
     private static final String REPAIR_PROMPT = """
             下面是你刚才返回但未通过 JSON/结构校验的结果。只修复格式和契约字段，不新增剧情、事实或决定，
-            不需要重新读取完整上下文。只返回修复后的单个 JSON 对象，不要 Markdown。
+            不需要重新读取完整上下文。CREATE 必须同时有非空 name、status、summary；只为了氛围添加且无法
+            满足契约的可选新实体应直接从列表删除，不得为修一个错误又伪造保管者或稳定 ID。
+            只返回修复后的单个 JSON 对象，不要 Markdown。
+            """;
+
+    private static final String OUTCOME_PLAN_PROMPT = """
+            你是《问仙录》的回合结果规划 Agent。你不写供玩家阅读的完整剧情，只提出本轮结束时需要落定的
+            最小事实计划。objective 是回合开始前的唯一客观事实，action.factContract 是已经通过服务端校验的
+            玩家授权边界。计划仍不是正式事实，后续还会经过 Reducer 预校验和事务提交。
+
+            目标不是把开放剧情写成规则游戏，而是先回答四件事：玩家明确做的行动产生了什么直接结果、实际经过
+            多久、结束时在哪里、哪些长期事实确实改变。尚未发生的可能继续开放，不要提前规划后续章节。
+
+            严格规则：
+            1. 只执行 action 授权的行动及直接后果。新的重大不可逆决定必须停下并设置
+               decisionCheckpoint.required=true；不得替玩家决定加入、结盟、立誓、处决、放弃或下一步路线。
+            2. narrative 字段不是正文，只写一段不超过180字的 outcomeSummary，准确列出已完成结果和停止点；
+               title 是结果计划短标题；choices 必须返回空数组。rollingSummary 只更新已经发生的长期摘要。
+            3. 玩家明确时间以 action.semanticDuration、explicitDurationMinutes 和 expectedEndClock 为准。
+               完整执行时 elapsedMinutes 必须等于 explicitDurationMinutes；提前中断才使用 INTERRUPTED 并写原因。
+               “明日、半日、一个月、三年”等是行动授权，不得因为模型偏好缩成普通一回合。
+            4. coreState.location 必须是本轮结束位置，而不是开场地点。重要同行人物若随主角移动或被明确安置，
+               使用其稳定 entityId 返回 CHARACTER UPDATE，并在 attributes.lastKnownLocation 记录结束位置；
+               不要因为只更新地点而重写人物姓名、关系或生命周期。
+            5. 已有实体只用 objective.entityIndex 的稳定 entityId；新增长期实体用 CREATE。物品数量、保管者，
+               人物生命周期和关系，能力掌握状态，都必须与 action.factContract 和直接结果一致。不得从旧正文、
+               摘要或愿望恢复已经失去的物品、死亡人物或未掌握能力。
+               referenceKey 只能用于本回合 CREATE 的新实体；UPDATE/HIDE/RESTORE 既有实体必须使用稳定
+               entityId 且 referenceKey=""。
+            6. 探索未知、尝试突破或挑战强敌可以成功、失败或中断；不要因为结果尚未知就拒绝。玩家输入表达的是
+               尝试时，结果由本计划裁定，但爽点、机缘和意外只要不违背已确认事实都允许发生。
+            7. 只保存跨回合确有价值的实体、事实、记忆和关系。普通路人、景物构件、短暂情绪和招式过程不建档。
+               新人物、物品、能力的专用字段规则与 objective 中的类型约束保持一致。
+               所有 CREATE 必须同时填写非空 name、status、summary。新 ITEM 只在确有跨回合意义时建档；
+               由玩家带走就使用 custody.holderType=PLAYER。只有 objective 已有稳定地点 ID，或本回合同时以
+               referenceKey 创建了保管者时，才能使用 LOCATION/CHARACTER；普通线索可用 memory 记录，
+               不要把每一张纸条、痕迹或场景构件创建成 ITEM。
+
+            只返回一个符合 StoryPatch 结构的 JSON，不要 Markdown 或说明：
+            {
+              "title":"结果计划短标题","narrative":"不超过180字的结果摘要",
+              "time":{"elapsedMinutes":0,"resolution":"COMPLETE|INTERRUPTED","interruptionReason":null},
+              "coreState":{"location":null,"condition":null,"realm":null,"lifeGoal":null},
+              "entities":[{"operation":"CREATE|UPDATE|HIDE|RESTORE","entityId":null,
+                "entityType":"ITEM|ABILITY|CHARACTER|LANDMARK或既有类型","name":null,"status":null,
+                "summary":null,"attributes":null,
+                "quantity":{"known":true,"value":1},"inPossession":null,
+                "custody":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null},
+                "abilityState":"KNOWN|LEARNING|MASTERED|TEMPORARILY_BLOCKED|LOST或null",
+                "lifecycle":{"state":"ACTIVE|MISSING|DORMANT|DEAD|UNKNOWN","changeReason":null},
+                "relationship":{"label":"当前关系","changeReason":null},
+                "nameChange":{"explicit":true,"reason":"明确改名依据"},"referenceKey":""}],
+              "worldFacts":[{"operation":"EXPAND|TRANSFORM|REVISE","factId":null,
+                "statement":"长期事实","reason":null}],
+              "knowledge":[{"subjectRef":"稳定主体ID","topicRef":"稳定对象ID",
+                "summary":"认知摘要","evidenceRefs":[]}],
+              "memories":[{"memoryType":"EVENT|PROMISE|CLUE|RELATIONSHIP","title":"",
+                "summary":"","importance":"KEY|NORMAL","evidenceRefs":[]}],
+              "decisionCheckpoint":{"required":false,"prompt":null},"choices":[],"rollingSummary":""
+            }
+            所有嵌套字段必须使用系统契约中的对象结构，不能用自然语言字符串代替。
+            """;
+
+    private static final String OUTCOME_PLAN_REPAIR_PROMPT = """
+            下面的最小结果计划没有通过结构、稳定引用、玩家授权或 Reducer 事实边界。只修复计划本身，
+            不写完整正文，不扩展后续剧情，不改变玩家行动。保留没有问题的直接结果；若问题只是可选字段跨类型，
+            删除该可选字段。只返回修复后的完整 StoryPatch JSON。
+            """;
+
+    private static final String NARRATIVE_RENDER_PROMPT = """
+            你是《问仙录》的回合叙事 Agent。validatedOutcome 是本轮已经通过服务端预校验的唯一结果计划；
+            你只能把它演绎成第二人称“你”的玩家可见剧情，无权增删时间、地点、物品、数量、人物生死与关系、
+            能力、境界、世界事实或重大决定。
+
+            规则：
+            1. 正面写出 action 的执行过程，并完整覆盖 validatedOutcome 中的结果、实际时间尺度和最终停止位置。
+            2. 可以自由补充氛围、感官、对话、阻力和不需要长期保存的细节，但不能制造计划外的长期事实。
+            3. 不得替玩家执行 action 之后的新行动，不得补写玩家未表达的动机、承诺、路线和下一步计划。
+               到新的重大决定前停止，把选择交给玩家。
+            4. 选项是尚未发生的建议，不得当作本轮已完成事实。提供2至4个方向不同、表达清楚的行动；
+               若存在 required 决定，选项围绕该决定。不得重复上一回正文。
+            5. 篇幅服从本轮内容：普通回合保持沉浸感，短促动作可以更短，长期闭关可以跨场景概述；
+               不用未授权行动凑字数。rollingSummary 只能概括本轮已经发生且后续需要承接的内容。
+
+            只返回以下 JSON，不要返回事实补丁、Markdown 或解释：
+            {"title":"","narrative":"","choices":[{"title":"","description":""}],"rollingSummary":""}
+            """;
+
+    private static final String NARRATIVE_REPAIR_PROMPT = """
+            下面的正文没有完整覆盖 validatedOutcome，或加入了计划外长期事实、替玩家作出决定、越过停止边界。
+            validatedOutcome 不得修改。只重写 title、narrative、choices、rollingSummary，使正文严格演绎既定结果，
+            同时保留自然、沉浸和爽文空间。只返回表现层 JSON，不要事实补丁或解释。
+            """;
+
+    private static final String OUTCOME_COVERAGE_REVIEW_PROMPT = """
+            你是独立的可信回合覆盖审阅 Agent。acceptedOutcome 是已经预校验的唯一结果计划，rendered 是玩家将看到的
+            表现层正文。你不续写、不修正事实，只检查正文是否忠实演绎计划。
+
+            分别检查：
+            1. coverage：正文是否明确覆盖玩家行动、结果、时间尺度、最终地点和计划中的重要实体变化；
+            2. contradiction：正文是否与计划或回合开始前权威事实矛盾；
+            3. extraDurableFacts：正文是否新增计划中没有的物品取得/失去、数量、人物生死与关系、能力、境界、
+               世界规则、长期承诺等跨回合事实；纯氛围和一次性细节不算；
+            4. agency：正文是否替玩家执行计划之后的新行动、作出重大决定、补写动机，或越过 required 停止点。
+
+            少量钟点差异、文风、难度、战力平衡和普通场景细节不得作为拒绝理由。每项必须返回 passed 和 problem。
+            repairTarget 必须指出问题来源：全部通过为 NONE；acceptedOutcome 本身遗漏行动结果、结束地点、语义时间或包含
+            越权事实时为 PLAN；结果计划正确但 rendered 漏写、矛盾、增加事实或越权时为 NARRATIVE。不能让正文修复
+            掩盖结构计划缺项，也不能因为纯正文措辞问题重新改变既定事实。
+            只返回 JSON：
+            {"coverage":{"passed":true,"problem":""},
+             "contradiction":{"passed":true,"problem":""},
+             "extraDurableFacts":{"passed":true,"problem":""},
+             "agency":{"passed":true,"problem":""},"repairTarget":"NONE|PLAN|NARRATIVE"}
             """;
 
     private static final String SEMANTIC_REPAIR_PROMPT = """
@@ -451,6 +564,116 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
     }
 
     @Override
+    public boolean supportsOutcomeFirst() {
+        return true;
+    }
+
+    @Override
+    public PlannedOutcome planOutcome(StoryPromptContext context, StoryModelRoute route,
+                                      InvocationContext invocation) {
+        requireContext(context, route, "结果计划");
+        StoryModelRoute planningRoute = flashReviewRoute(route);
+        List<StoryModelGateway.Result> attempts = new ArrayList<>();
+        StoryModelGateway.Result result = call(planningRoute, invocation, "STORY_OUTCOME_PLAN_FLASH",
+                OUTCOME_PLAN_PROMPT, userPrompt(context), 0.1);
+        attempts.add(result);
+        try {
+            return new PlannedOutcome(parse(result.text()), attempts);
+        } catch (JsonProcessingException | IllegalArgumentException firstError) {
+            StoryModelGateway.Result repaired = call(planningRoute, invocation,
+                    "STORY_OUTCOME_PLAN_FORMAT_REPAIR_FLASH", OUTCOME_PLAN_PROMPT,
+                    repairPrompt(result.text(), firstError.getMessage()), 0.0);
+            attempts.add(repaired);
+            try {
+                return new PlannedOutcome(parse(repaired.text()), attempts);
+            } catch (JsonProcessingException | IllegalArgumentException secondError) {
+                throw new IllegalArgumentException("最小结果计划未形成可校验结果", secondError);
+            }
+        }
+    }
+
+    @Override
+    public PlannedOutcome repairOutcomePlan(StoryPromptContext context, StoryModelRoute route,
+                                            InvocationContext invocation, StoryPatch rejected,
+                                            String problem) {
+        requireContext(context, route, "结果计划修复");
+        if (rejected == null) throw new IllegalArgumentException("结果计划修复缺少原计划");
+        StoryModelRoute planningRoute = flashReviewRoute(route);
+        StoryModelGateway.Result result = call(planningRoute, invocation,
+                "STORY_OUTCOME_PLAN_SEMANTIC_REPAIR_FLASH", OUTCOME_PLAN_PROMPT,
+                outcomePlanRepairPayload(context, rejected, problem), 0.0);
+        try {
+            return new PlannedOutcome(parse(result.text()), List.of(result));
+        } catch (JsonProcessingException | IllegalArgumentException error) {
+            throw new IllegalArgumentException("结果计划自动整理后仍不符合可信协议", error);
+        }
+    }
+
+    @Override
+    public RenderedNarrative renderNarrative(StoryPromptContext context, StoryModelRoute route,
+                                             InvocationContext invocation, StoryPatch acceptedPlan) {
+        requireContext(context, route, "正文演绎");
+        if (acceptedPlan == null) throw new IllegalArgumentException("正文演绎缺少已校验结果计划");
+        List<StoryModelGateway.Result> attempts = new ArrayList<>();
+        StoryModelGateway.Result result = call(route, invocation, "STORY_NARRATIVE_RENDER",
+                NARRATIVE_RENDER_PROMPT, narrativePayload(context, acceptedPlan), 0.7);
+        attempts.add(result);
+        try {
+            return parseNarrative(result.text(), attempts);
+        } catch (JsonProcessingException | IllegalArgumentException firstError) {
+            StoryModelGateway.Result repaired = call(route, invocation, "STORY_NARRATIVE_FORMAT_REPAIR",
+                    NARRATIVE_RENDER_PROMPT, repairPrompt(result.text(), firstError.getMessage()), 0.1);
+            attempts.add(repaired);
+            try {
+                return parseNarrative(repaired.text(), attempts);
+            } catch (JsonProcessingException | IllegalArgumentException secondError) {
+                throw new IllegalArgumentException("结果计划正文未形成可展示内容", secondError);
+            }
+        }
+    }
+
+    @Override
+    public RenderedNarrative repairNarrative(StoryPromptContext context, StoryModelRoute route,
+                                             InvocationContext invocation, StoryPatch acceptedPlan,
+                                             RenderedNarrative rejected, String problem) {
+        requireContext(context, route, "正文修复");
+        if (acceptedPlan == null || rejected == null) throw new IllegalArgumentException("正文修复缺少计划或原正文");
+        StoryModelGateway.Result result = call(route, invocation, "STORY_NARRATIVE_COVERAGE_REPAIR",
+                NARRATIVE_RENDER_PROMPT, narrativeRepairPayload(context, acceptedPlan, rejected, problem), 0.3);
+        try {
+            return parseNarrative(result.text(), List.of(result));
+        } catch (JsonProcessingException | IllegalArgumentException error) {
+            throw new IllegalArgumentException("正文自动整理后仍未覆盖结果计划", error);
+        }
+    }
+
+    @Override
+    public Review reviewOutcomeCoverage(StoryPromptContext context, StoryModelRoute route,
+                                        InvocationContext invocation, StoryPatch acceptedPlan,
+                                        RenderedNarrative narrative) {
+        requireContext(context, route, "结果覆盖审阅");
+        if (acceptedPlan == null || narrative == null) throw new IllegalArgumentException("结果覆盖审阅缺少候选");
+        StoryModelRoute reviewRoute = flashReviewRoute(route);
+        List<StoryModelGateway.Result> attempts = new ArrayList<>();
+        StoryModelGateway.Result result = call(reviewRoute, invocation, "STORY_OUTCOME_COVERAGE_REVIEW_FLASH",
+                OUTCOME_COVERAGE_REVIEW_PROMPT, coverageReviewPayload(context, acceptedPlan, narrative), 0.0);
+        attempts.add(result);
+        try {
+            return coverageReview(result.text(), attempts);
+        } catch (JsonProcessingException | IllegalArgumentException firstError) {
+            StoryModelGateway.Result repaired = call(reviewRoute, invocation,
+                    "STORY_OUTCOME_COVERAGE_REVIEW_REPAIR_FLASH", OUTCOME_COVERAGE_REVIEW_PROMPT,
+                    repairPrompt(result.text(), firstError.getMessage()), 0.0);
+            attempts.add(repaired);
+            try {
+                return coverageReview(repaired.text(), attempts);
+            } catch (JsonProcessingException | IllegalArgumentException secondError) {
+                throw new IllegalArgumentException("结果覆盖审阅未返回有效结论", secondError);
+            }
+        }
+    }
+
+    @Override
     public Generated generate(StoryPromptContext context, StoryModelRoute route) {
         return generate(context, route, null);
     }
@@ -680,6 +903,115 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         return payload;
     }
 
+    private void requireContext(StoryPromptContext context, StoryModelRoute route, String operation) {
+        if (context == null || context.action() == null || context.action().playerAction() == null
+                || context.action().playerAction().isBlank()) {
+            throw new IllegalArgumentException(operation + "缺少命卷上下文或玩家行动");
+        }
+        if (route == null) throw new IllegalArgumentException(operation + "缺少模型路由");
+    }
+
+    private String outcomePlanRepairPayload(StoryPromptContext context, StoryPatch rejected, String problem) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("instruction", OUTCOME_PLAN_REPAIR_PROMPT);
+        payload.put("objective", context.objective());
+        payload.put("action", context.action());
+        payload.put("rejectedOutcome", rejected);
+        payload.put("validationProblem", problem == null ? "结果计划未通过预校验" : problem.strip());
+        return json(payload, "结果计划修复请求无法序列化");
+    }
+
+    private String narrativePayload(StoryPromptContext context, StoryPatch acceptedPlan) {
+        Map<String, Object> objective = new LinkedHashMap<>();
+        objective.put("worldClock", context.objective().worldClock());
+        objective.put("protagonist", context.objective().protagonist());
+        objective.put("currentInventory", context.objective().currentInventory());
+        objective.put("entityIndex", context.objective().entityIndex());
+        objective.put("relatedEntities", context.objective().relatedEntities());
+        objective.put("pendingDecision", context.objective().pendingDecision());
+        objective.put("initialContract", context.objective().initialContract());
+        objective.put("sourceExcerpts", context.objective().sourceExcerpts());
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("systemConstraints", context.system());
+        payload.put("objective", objective);
+        payload.put("cognition", context.cognition());
+        payload.put("memory", context.memory());
+        payload.put("previousNarrative", context.narrative());
+        payload.put("action", context.action());
+        payload.put("validatedOutcome", acceptedPlan);
+        return json(payload, "结果计划正文请求无法序列化");
+    }
+
+    private String narrativeRepairPayload(StoryPromptContext context, StoryPatch acceptedPlan,
+                                          RenderedNarrative rejected, String problem) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("instruction", NARRATIVE_REPAIR_PROMPT);
+        payload.put("action", context.action());
+        payload.put("validatedOutcome", acceptedPlan);
+        payload.put("rejectedNarrative", Map.of(
+                "title", rejected.title(),
+                "narrative", rejected.narrative(),
+                "choices", rejected.choices(),
+                "rollingSummary", rejected.rollingSummary()));
+        payload.put("reviewProblem", problem == null ? "正文未忠实覆盖结果计划" : problem.strip());
+        return json(payload, "结果计划正文修复请求无法序列化");
+    }
+
+    private String coverageReviewPayload(StoryPromptContext context, StoryPatch acceptedPlan,
+                                         RenderedNarrative narrative) {
+        Map<String, Object> facts = new LinkedHashMap<>();
+        facts.put("worldClock", context.objective().worldClock());
+        facts.put("protagonist", context.objective().protagonist());
+        facts.put("currentInventory", context.objective().currentInventory());
+        facts.put("entityIndex", context.objective().entityIndex());
+        facts.put("pendingDecision", context.objective().pendingDecision());
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("facts", facts);
+        payload.put("action", context.action());
+        payload.put("acceptedOutcome", acceptedPlan);
+        payload.put("rendered", Map.of(
+                "title", narrative.title(),
+                "narrative", narrative.narrative(),
+                "choices", narrative.choices(),
+                "rollingSummary", narrative.rollingSummary()));
+        return json(payload, "结果覆盖审阅请求无法序列化");
+    }
+
+    private RenderedNarrative parseNarrative(String raw, List<StoryModelGateway.Result> attempts)
+            throws JsonProcessingException {
+        NarrativeResponse response = tolerantMapper.readValue(rawJson(raw), NarrativeResponse.class);
+        return new RenderedNarrative(response.title(), response.narrative(), response.choices(),
+                response.rollingSummary(), attempts);
+    }
+
+    private Review coverageReview(String raw, List<StoryModelGateway.Result> attempts)
+            throws JsonProcessingException {
+        CoverageReviewResponse response = tolerantMapper.readValue(rawJson(raw), CoverageReviewResponse.class);
+        List<String> problems = response.problems();
+        CoverageRepairTarget target = response.repairTarget();
+        if (problems.isEmpty()) {
+            if (target != CoverageRepairTarget.NONE) {
+                throw new IllegalArgumentException("结果覆盖审阅全部通过时 repairTarget 必须为 NONE");
+            }
+            return new Review(ReviewOutcome.ACCEPT, "", attempts);
+        }
+        if (target == null || target == CoverageRepairTarget.NONE) {
+            throw new IllegalArgumentException("结果覆盖审阅拒绝时必须指出 PLAN 或 NARRATIVE 修复目标");
+        }
+        return new Review(target == CoverageRepairTarget.PLAN
+                ? ReviewOutcome.REPAIR_FACTS : ReviewOutcome.REPAIR_DECISION,
+                String.join("；", problems), attempts);
+    }
+
+    private String json(Object value, String errorMessage) {
+        try {
+            return mapper.writeValueAsString(value);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException(errorMessage, error);
+        }
+    }
+
     private String actionContractPayload(StoryPromptContext context) {
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("worldClock", context.objective().worldClock());
@@ -867,6 +1199,37 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         int start = value.indexOf('{');
         int end = value.lastIndexOf('}');
         return start >= 0 && end > start ? value.substring(start, end + 1) : value;
+    }
+
+    private record NarrativeResponse(String title, String narrative, List<StoryPatch.ChoiceDraft> choices,
+                                     String rollingSummary) {}
+
+    private record CoverageReviewResponse(ReviewCheck coverage, ReviewCheck contradiction,
+                                          ReviewCheck extraDurableFacts, ReviewCheck agency,
+                                          CoverageRepairTarget repairTarget) {
+        private List<String> problems() {
+            List<String> values = new ArrayList<>();
+            collect(values, "结果覆盖", coverage);
+            collect(values, "事实矛盾", contradiction);
+            collect(values, "计划外长期事实", extraDurableFacts);
+            collect(values, "玩家决定边界", agency);
+            return List.copyOf(values);
+        }
+
+        private void collect(List<String> values, String label, ReviewCheck check) {
+            if (check == null || check.passed() == null) {
+                throw new IllegalArgumentException("结果覆盖审阅缺少“" + label + "”检查结果");
+            }
+            if (check.passed()) return;
+            String detail = check.problem() == null ? "" : check.problem().strip();
+            values.add(label + "：" + (detail.isBlank() ? "审阅未通过" : detail));
+        }
+    }
+
+    private enum CoverageRepairTarget {
+        NONE,
+        PLAN,
+        NARRATIVE
     }
 
     private record ReviewResponse(ReviewCheck reference, ReviewCheck inventory, ReviewCheck authorization,

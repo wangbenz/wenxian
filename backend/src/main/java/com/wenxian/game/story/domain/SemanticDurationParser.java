@@ -16,6 +16,9 @@ public final class SemanticDurationParser {
                     + "(?<!第)(半|\\d+|[零〇一二两三四五六七八九十百千万]+)(?:个)?(年|月|天|日)");
     private static final Pattern UNTIL_PHASE = Pattern.compile(
             "(?:到|直至|直到)(清晨|天亮|黎明|上午|正午|午后|下午|黄昏|傍晚|入夜|夜晚|夜深|深夜)");
+    private static final Pattern NEXT_DAY_ACTION = Pattern.compile(
+            "(?:明日|次日|翌日|第二天)(?:清晨|一早)?(?:再|便|就|即)?"
+                    + "(?:出发|启程|动身|行动|继续|前往|赶路|修炼|探查|查看|进入|离开|返回|去|走)");
 
     private SemanticDurationParser() {}
 
@@ -26,11 +29,23 @@ public final class SemanticDurationParser {
             return Optional.of(new SemanticDuration(SemanticDuration.Unit.PHASE, 1,
                     normalizedPhase(phase.group(1))));
         }
+        if (NEXT_DAY_ACTION.matcher(action).find()) {
+            return Optional.of(new SemanticDuration(SemanticDuration.Unit.DAY, 1, ""));
+        }
         Matcher duration = LONG_DURATION.matcher(action);
         if (!duration.find()) return Optional.empty();
-        int value = "半".equals(duration.group(1)) ? 1 : ChineseNumber.parse(duration.group(1));
+        String amount = duration.group(1);
+        String rawUnit = duration.group(2);
+        if ("半".equals(amount)) {
+            return Optional.of(switch (rawUnit) {
+                case "年" -> new SemanticDuration(SemanticDuration.Unit.MONTH, 6, "");
+                case "月" -> new SemanticDuration(SemanticDuration.Unit.DAY, 15, "");
+                default -> new SemanticDuration(SemanticDuration.Unit.PHASE, 4, "");
+            });
+        }
+        int value = ChineseNumber.parse(amount);
         if (value < 1) return Optional.empty();
-        SemanticDuration.Unit unit = switch (duration.group(2)) {
+        SemanticDuration.Unit unit = switch (rawUnit) {
             case "年" -> SemanticDuration.Unit.YEAR;
             case "月" -> SemanticDuration.Unit.MONTH;
             default -> SemanticDuration.Unit.DAY;

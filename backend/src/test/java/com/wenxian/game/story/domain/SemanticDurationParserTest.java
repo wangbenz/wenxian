@@ -33,4 +33,16 @@ class SemanticDurationParserTest {
     void ordinaryActionDoesNotInventTimeContract() {
         assertTrue(SemanticDurationParser.parse("查看手掌上的刻痕").isEmpty());
     }
+
+    @Test
+    void recognizesNaturalNextDayAndHalfDayWithoutMinutePrecision() {
+        SemanticDuration nextDay = SemanticDurationParser.parse("今夜歇息，明日再出发").orElseThrow();
+        SemanticDuration halfDay = SemanticDurationParser.parse("继续赶路半日").orElseThrow();
+
+        assertEquals(SemanticDuration.Unit.DAY, nextDay.unit());
+        assertEquals(1_440L, nextDay.toCompatibilityMinutes(0));
+        assertEquals(SemanticDuration.Unit.PHASE, halfDay.unit());
+        assertEquals(4, halfDay.value());
+        assertEquals(720L, halfDay.toCompatibilityMinutes(0));
+    }
 }

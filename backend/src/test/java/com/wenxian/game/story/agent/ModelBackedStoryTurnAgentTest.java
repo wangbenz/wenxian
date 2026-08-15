@@ -66,6 +66,101 @@ class ModelBackedStoryTurnAgentTest {
     }
 
     @Test
+    void outcomeFirstProtocolPlansFactsBeforeRenderingAndReviewsCoverage() {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> switch (calls.incrementAndGet()) {
+            case 1 -> {
+                assertEquals("deepseek-v4-flash", request.model());
+                assertEquals(0.1, request.temperature());
+                assertTrue(request.systemPrompt().contains("回合结果规划 Agent"));
+                assertTrue(request.systemPrompt().contains("不写供玩家阅读的完整剧情"));
+                yield result(VALID_PATCH, 80, 120, 300);
+            }
+            case 2 -> {
+                assertEquals(0.7, request.temperature());
+                assertTrue(request.systemPrompt().contains("validatedOutcome"));
+                assertTrue(request.userPrompt().contains("石门之后"));
+                yield result("""
+                        {"title":"禁制显影","narrative":"你运转照影诀，石门禁制在灵光中显出层叠纹路。",
+                         "choices":[{"title":"继续观察","description":"寻找禁制薄弱处。"}],
+                         "rollingSummary":"你在石门前完成照影，禁制纹路已经显现。"}
+                        """, 90, 150, 500);
+            }
+            case 3 -> {
+                assertEquals("deepseek-v4-flash", request.model());
+                assertEquals(0.0, request.temperature());
+                assertTrue(request.systemPrompt().contains("可信回合覆盖审阅 Agent"));
+                assertTrue(request.userPrompt().contains("acceptedOutcome"));
+                yield result("""
+                        {"coverage":{"passed":true,"problem":""},
+                         "contradiction":{"passed":true,"problem":""},
+                         "extraDurableFacts":{"passed":true,"problem":""},
+                         "agency":{"passed":true,"problem":""},"repairTarget":"NONE"}
+                        """, 60, 40, 180);
+            }
+            default -> throw new AssertionError("结果优先协议产生了非预期模型调用");
+        };
+        ModelBackedStoryTurnAgent agent = agent(gateway);
+        StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext("save-outcome", 9);
+
+        assertTrue(agent.supportsOutcomeFirst());
+        StoryTurnAgent.PlannedOutcome planned = agent.planOutcome(context(), route(), invocation);
+        StoryTurnAgent.RenderedNarrative rendered = agent.renderNarrative(
+                context(), route(), invocation, planned.patch());
+        StoryTurnAgent.Review review = agent.reviewOutcomeCoverage(
+                context(), route(), invocation, planned.patch(), rendered);
+
+        assertEquals("石门之后", planned.patch().title());
+        assertEquals("禁制显影", rendered.title());
+        assertTrue(review.accepted());
+        assertEquals(3, calls.get());
+    }
+
+    @Test
+    void coverageReviewRejectsNarrativeThatInventsDurableFacts() throws Exception {
+        StoryModelGateway gateway = request -> result("""
+                {"coverage":{"passed":true,"problem":""},
+                 "contradiction":{"passed":true,"problem":""},
+                 "extraDurableFacts":{"passed":false,"problem":"正文额外写成主角获得了一枚计划外灵丹"},
+                 "agency":{"passed":true,"problem":""},"repairTarget":"NARRATIVE"}
+                """, 50, 30, 120);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch plan = mapper.readValue(VALID_PATCH, StoryPatch.class);
+        StoryTurnAgent.RenderedNarrative narrative = new StoryTurnAgent.RenderedNarrative(
+                "计划外所得", "你完成照影后，又获得了一枚灵丹。", List.of(), "",
+                List.of(result("{}", 1, 1, 1)));
+
+        StoryTurnAgent.Review review = agent(gateway).reviewOutcomeCoverage(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-outcome-review", 9), plan, narrative);
+
+        assertFalse(review.accepted());
+        assertTrue(review.requiresFreshNarrative());
+        assertTrue(review.problem().contains("计划外灵丹"));
+    }
+
+    @Test
+    void coverageReviewRoutesMissingOutcomeBackToPlanInsteadOfRewritingNarrative() throws Exception {
+        StoryModelGateway gateway = request -> result("""
+                {"coverage":{"passed":false,"problem":"结果计划漏掉玩家明确要求的最终地点"},
+                 "contradiction":{"passed":true,"problem":""},
+                 "extraDurableFacts":{"passed":true,"problem":""},
+                 "agency":{"passed":true,"problem":""},"repairTarget":"PLAN"}
+                """, 50, 30, 120);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch plan = mapper.readValue(VALID_PATCH, StoryPatch.class);
+        StoryTurnAgent.RenderedNarrative narrative = new StoryTurnAgent.RenderedNarrative(
+                "石门之后", "你在石门前完成了观察。", List.of(), "石门前的观察已完成。",
+                List.of(result("{}", 1, 1, 1)));
+
+        StoryTurnAgent.Review review = agent(gateway).reviewOutcomeCoverage(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-plan-review", 10), plan, narrative);
+
+        assertFalse(review.accepted());
+        assertEquals(StoryTurnAgent.ReviewOutcome.REPAIR_FACTS, review.outcome());
+        assertFalse(review.requiresFreshNarrative(), "计划缺项不能只通过改正文掩盖");
+    }
+
+    @Test
     void projectsFactsWithFlashWithoutAllowingProjectionToRewriteNarrative() throws Exception {
         StoryModelGateway gateway = request -> {
             assertEquals("deepseek-v4-flash", request.model());

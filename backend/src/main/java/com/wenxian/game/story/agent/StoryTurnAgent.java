@@ -26,6 +26,49 @@ public interface StoryTurnAgent {
     }
 
     /**
+     * 是否启用“先结果、后叙事”的可信回合协议。
+     *
+     * <p>默认关闭以兼容确定性测试替身和旧适配器。真实模型 Agent 开启后，调用方不会再从正文反推事实，
+     * 而是先校验最小结果计划，再让正文只负责演绎已经接受的结果。</p>
+     */
+    default boolean supportsOutcomeFirst() {
+        return false;
+    }
+
+    /** 生成本轮最小结果计划；计划是尚未提交的结构化提案，不包含供玩家阅读的完整正文。 */
+    default PlannedOutcome planOutcome(StoryPromptContext context, StoryModelRoute route,
+                                       InvocationContext invocation) {
+        throw new IllegalArgumentException("当前故事 Agent 不支持结果优先协议");
+    }
+
+    /** 结果计划未通过结构或事实边界时，只允许修复计划，不得先写正文绕过校验。 */
+    default PlannedOutcome repairOutcomePlan(StoryPromptContext context, StoryModelRoute route,
+                                             InvocationContext invocation, StoryPatch rejected,
+                                             String problem) {
+        throw new IllegalArgumentException("当前故事 Agent 不支持结果计划修复");
+    }
+
+    /** 根据已经通过预校验的结果计划演绎玩家可见正文；本方法无权增删结构化事实。 */
+    default RenderedNarrative renderNarrative(StoryPromptContext context, StoryModelRoute route,
+                                              InvocationContext invocation, StoryPatch acceptedPlan) {
+        throw new IllegalArgumentException("当前故事 Agent 不支持结果计划叙事");
+    }
+
+    /** 审阅发现正文越权、漏写或新增未计划事实时，只修正文，结果计划保持不变。 */
+    default RenderedNarrative repairNarrative(StoryPromptContext context, StoryModelRoute route,
+                                              InvocationContext invocation, StoryPatch acceptedPlan,
+                                              RenderedNarrative rejected, String problem) {
+        throw new IllegalArgumentException("当前故事 Agent 不支持结果计划正文修复");
+    }
+
+    /** 独立复核正文是否完整演绎计划、没有替玩家决定，也没有制造计划外长期事实。 */
+    default Review reviewOutcomeCoverage(StoryPromptContext context, StoryModelRoute route,
+                                         InvocationContext invocation, StoryPatch acceptedPlan,
+                                         RenderedNarrative narrative) {
+        return new Review(true, "", List.of());
+    }
+
+    /**
      * 从已经完成的剧情草稿中提取需要长期保存的事实变化。
      *
      * <p>默认实现保持确定性测试替身兼容；生产 Agent 使用独立轻量模型完成投影。剧情草稿不是权威事实，
@@ -174,6 +217,34 @@ public interface StoryTurnAgent {
         public ProjectedFacts {
             if (patch == null) throw new IllegalArgumentException("事实投影不能为空");
             modelResults = modelResults == null ? List.of() : List.copyOf(modelResults);
+        }
+    }
+
+    /** 结果优先协议中的最小事实计划及其模型调用。 */
+    record PlannedOutcome(StoryPatch patch, List<StoryModelGateway.Result> modelResults) {
+        public PlannedOutcome {
+            if (patch == null) throw new IllegalArgumentException("结果计划不能为空");
+            modelResults = modelResults == null ? List.of() : List.copyOf(modelResults);
+            if (modelResults.isEmpty()) throw new IllegalArgumentException("结果计划必须保留模型调用记录");
+        }
+    }
+
+    /**
+     * 只包含玩家可见表现层的正文结果。
+     *
+     * <p>时间、地点、实体、关系、物品、能力和世界事实均不在此对象中，避免正文生成阶段重新取得事实写权限。</p>
+     */
+    record RenderedNarrative(String title, String narrative, List<StoryPatch.ChoiceDraft> choices,
+                             String rollingSummary, List<StoryModelGateway.Result> modelResults) {
+        public RenderedNarrative {
+            title = title == null ? "" : title.strip();
+            narrative = narrative == null ? "" : narrative.strip();
+            choices = choices == null ? List.of() : List.copyOf(choices);
+            rollingSummary = rollingSummary == null ? "" : rollingSummary.strip();
+            modelResults = modelResults == null ? List.of() : List.copyOf(modelResults);
+            if (title.isBlank()) throw new IllegalArgumentException("结果计划正文缺少标题");
+            if (narrative.isBlank()) throw new IllegalArgumentException("结果计划正文不能为空");
+            if (modelResults.isEmpty()) throw new IllegalArgumentException("结果计划正文必须保留模型调用记录");
         }
     }
 }

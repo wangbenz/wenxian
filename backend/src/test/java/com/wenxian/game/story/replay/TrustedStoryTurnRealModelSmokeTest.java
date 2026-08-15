@@ -74,21 +74,20 @@ class TrustedStoryTurnRealModelSmokeTest {
         StoryModelGateway realGateway = new LangChain4jStoryModelGateway();
         StoryModelGateway observedGateway = request -> {
             StoryModelGateway.Result result = realGateway.generate(request);
-            if (request.systemPrompt().contains("可信事实投影 Agent")) {
+            if (request.systemPrompt().contains("回合结果规划 Agent")) {
                 try {
-                    StoryPatch projected = mapper.readValue(rawJson(result.text()), StoryPatch.class);
-                    new StoryPatchValidator().validate(projected);
-                    System.out.println("FACT_PROJECTION_SHAPE valid=true");
+                    StoryPatch planned = mapper.readValue(rawJson(result.text()), StoryPatch.class);
+                    new StoryPatchValidator().validate(planned);
+                    System.out.println("OUTCOME_PLAN_SHAPE valid=true");
                 } catch (Exception malformed) {
-                    System.out.println("FACT_PROJECTION_SHAPE valid=false problem=" + malformed.getMessage());
+                    System.out.println("OUTCOME_PLAN_SHAPE valid=false problem=" + malformed.getMessage());
                 }
-            } else if (request.systemPrompt().contains("回合叙事与变化提案 Agent")) {
+            } else if (request.systemPrompt().contains("结果计划演绎 Agent")) {
                 try {
-                    StoryPatch draft = mapper.readValue(rawJson(result.text()), StoryPatch.class);
-                    new StoryPatchValidator().validate(draft);
-                    System.out.println("NARRATIVE_DRAFT_SHAPE valid=true");
+                    mapper.readTree(rawJson(result.text()));
+                    System.out.println("NARRATIVE_RENDER_SHAPE valid=true");
                 } catch (Exception malformed) {
-                    System.out.println("NARRATIVE_DRAFT_SHAPE valid=false problem=" + malformed.getMessage());
+                    System.out.println("NARRATIVE_RENDER_SHAPE valid=false problem=" + malformed.getMessage());
                 }
             }
             return result;
@@ -156,7 +155,10 @@ class TrustedStoryTurnRealModelSmokeTest {
                 WorldFactOperation.EXPAND, "当前局势");
         var applied = run("agency", "问清加入宗门需要承担什么，也问问拒绝会有什么后果。",
                 projection(0, Map.of(), Map.of(fact.id(), fact)), agent, route);
-        assertTrue(applied.acceptedPatch().decisionCheckpoint().required());
+        assertEquals(fact.statement(), applied.projection().worldFacts().get(fact.id()).statement(),
+                "询问条件不能被静默改成已经入宗");
+        assertFalse(applied.acceptedPatch().narrative().contains("你已加入"));
+        assertFalse(applied.acceptedPatch().choices().isEmpty(), "询问完成后应当把后续行动交还玩家");
     }
 
     private void worldExpansion(StoryTurnAgent agent, StoryModelRoute route) {
@@ -190,44 +192,46 @@ class TrustedStoryTurnRealModelSmokeTest {
         var contract = referenceCompiler.compile(projection, resolved.contract(), List.of(), explicitDurationMinutes);
         actionContracts.validate(projection, contract);
         context = context.withActionContract(contract);
-        StoryTurnAgent.Generated narrativeDraft = agent.generate(context, route, invocation);
-        StoryTurnAgent.ProjectedFacts projected = agent.projectFacts(
-                context, route, invocation, narrativeDraft.patch());
-        StoryPatch projectedPatch = eventCompiler.compile(projection, projected.patch(), semanticDuration)
-                .normalizedPatch();
         List<com.wenxian.game.story.agent.StoryModelGateway.Result> attempts = new ArrayList<>();
         attempts.addAll(resolved.modelResults());
-        attempts.addAll(narrativeDraft.modelResults());
-        attempts.addAll(projected.modelResults());
-        StoryTurnAgent.Generated generated = new StoryTurnAgent.Generated(projectedPatch, attempts);
-        StoryStateReducer.Applied applied;
+
+        StoryTurnAgent.PlannedOutcome planned = agent.planOutcome(context, route, invocation);
+        attempts.addAll(planned.modelResults());
+        StoryPatch plan = eventCompiler.compile(projection, planned.patch(), semanticDuration).normalizedPatch();
         try {
-            StoryTurnAgent.Review review = agent.review(context, route, invocation, generated.patch());
-            attempts.addAll(review.modelResults());
-            if (!review.accepted()) throw new ReviewFailure(review.problem(), review.requiresFreshNarrative());
-            contractPatches.validate(projection, contract, generated.patch());
-            applied = reducer.reduce(projection, generated.patch(), explicitDurationMinutes);
-        } catch (IllegalArgumentException rejected) {
-            StoryTurnAgent.Generated repairedDraft = rejected instanceof ReviewFailure review
-                    && review.requiresFreshNarrative
-                    ? agent.regenerateFreshNarrative(context, route, invocation,
-                            generated.patch(), rejected.getMessage())
-                    : agent.repairRejected(context, route, invocation,
-                            generated.patch(), rejected.getMessage());
-            StoryTurnAgent.ProjectedFacts repairedFacts = agent.projectFacts(
-                    context, route, invocation, repairedDraft.patch());
-            StoryPatch repairedPatch = eventCompiler.compile(projection, repairedFacts.patch(), semanticDuration)
-                    .normalizedPatch();
-            attempts.addAll(repairedDraft.modelResults());
-            attempts.addAll(repairedFacts.modelResults());
-            StoryTurnAgent.Review review = agent.review(context, route, invocation, repairedPatch);
-            attempts.addAll(review.modelResults());
-            assertTrue(review.accepted(), "修复后的独立审阅仍拒绝：" + review.problem());
-            contractPatches.validate(projection, contract, repairedPatch);
-            generated = new StoryTurnAgent.Generated(repairedPatch, attempts);
-            applied = reducer.reduce(projection, repairedPatch, explicitDurationMinutes);
+            preflight(projection, contract, plan, explicitDurationMinutes);
+        } catch (IllegalArgumentException rejectedPlan) {
+            planned = agent.repairOutcomePlan(context, route, invocation, plan, rejectedPlan.getMessage());
+            attempts.addAll(planned.modelResults());
+            plan = eventCompiler.compile(projection, planned.patch(), semanticDuration).normalizedPatch();
+            preflight(projection, contract, plan, explicitDurationMinutes);
         }
-        generated = new StoryTurnAgent.Generated(generated.patch(), attempts);
+
+        StoryTurnAgent.RenderedNarrative rendered = agent.renderNarrative(context, route, invocation, plan);
+        attempts.addAll(rendered.modelResults());
+        StoryTurnAgent.Review review = agent.reviewOutcomeCoverage(context, route, invocation, plan, rendered);
+        attempts.addAll(review.modelResults());
+        if (!review.accepted()) {
+            if (review.outcome() == StoryTurnAgent.ReviewOutcome.REPAIR_FACTS) {
+                planned = agent.repairOutcomePlan(context, route, invocation, plan, review.problem());
+                attempts.addAll(planned.modelResults());
+                plan = eventCompiler.compile(projection, planned.patch(), semanticDuration).normalizedPatch();
+                preflight(projection, contract, plan, explicitDurationMinutes);
+                rendered = agent.renderNarrative(context, route, invocation, plan);
+                attempts.addAll(rendered.modelResults());
+            } else {
+                rendered = agent.repairNarrative(context, route, invocation, plan, rendered, review.problem());
+                attempts.addAll(rendered.modelResults());
+            }
+            review = agent.reviewOutcomeCoverage(context, route, invocation, plan, rendered);
+            attempts.addAll(review.modelResults());
+            assertTrue(review.accepted(), "一次自动整理后的结果覆盖审阅仍拒绝：" + review.problem());
+        }
+
+        StoryPatch finalPatch = compose(plan, rendered);
+        contractPatches.validate(projection, contract, finalPatch);
+        StoryStateReducer.Applied applied = reducer.reduce(projection, finalPatch, explicitDurationMinutes);
+        StoryTurnAgent.Generated generated = new StoryTurnAgent.Generated(finalPatch, attempts);
         assertFalse(eventCompiler.compile(projection, applied.acceptedPatch(), semanticDuration).events().isEmpty(),
                 "真实回合提交前必须形成至少一个可信事件");
         System.out.printf("TRUSTED_REAL_MODEL scenario=%s attempts=%d prompt=%d completion=%d latencyMs=%d model=%s operations=%s%n",
@@ -237,13 +241,16 @@ class TrustedStoryTurnRealModelSmokeTest {
         return applied;
     }
 
-    private static final class ReviewFailure extends IllegalArgumentException {
-        private final boolean requiresFreshNarrative;
+    private void preflight(StoryProjection projection, com.wenxian.game.story.domain.StoryActionContract contract,
+                           StoryPatch plan, Long explicitDurationMinutes) {
+        contractPatches.validate(projection, contract, plan);
+        reducer.reduce(projection, plan, explicitDurationMinutes);
+    }
 
-        private ReviewFailure(String problem, boolean requiresFreshNarrative) {
-            super("独立审阅未通过：" + problem);
-            this.requiresFreshNarrative = requiresFreshNarrative;
-        }
+    private StoryPatch compose(StoryPatch plan, StoryTurnAgent.RenderedNarrative rendered) {
+        return new StoryPatch(rendered.title(), rendered.narrative(), plan.time(), plan.coreState(), plan.entities(),
+                plan.worldFacts(), plan.knowledge(), plan.memories(), plan.decisionCheckpoint(), rendered.choices(),
+                rendered.rollingSummary());
     }
 
     private StoryProjection projection(long time, Map<String, EntityState> entities,

@@ -11,6 +11,7 @@ import com.wenxian.game.story.agent.StoryPromptContext;
 import com.wenxian.game.story.agent.StoryPromptContext.PendingDecision;
 import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.domain.StoryProjection;
+import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryActionPreconditionException;
 import com.wenxian.game.story.domain.StoryActionContractValidator;
 import com.wenxian.game.story.domain.StoryEntityReferenceCompiler;
@@ -160,6 +161,10 @@ public class StoryTurnPreparationService {
             }
         }
         context = context.withActionContract(actionContract);
+        if (agent.supportsOutcomeFirst()) {
+            return prepareOutcomeFirst(before, existingEntities, previous, semanticDuration,
+                    explicitDurationMinutes, actionContract, resolvedAction, context, route, invocation, diagnostic);
+        }
         StoryTurnAgent.Generated generation = agent.generate(context, route, invocation);
         generation = prependModelResults(resolvedAction.modelResults(), generation);
         if (diagnostic != null) diagnostic.proposal("INITIAL_NARRATIVE_DRAFT", generation.patch());
@@ -210,6 +215,140 @@ public class StoryTurnPreparationService {
         List<TrustedStoryEvent> trustedEvents = eventCompiler
                 .compile(before, applied.acceptedPatch(), semanticDuration).events();
         return new Prepared(before, applied, existingEntities, generation, trustedEvents, diagnostic);
+    }
+
+    /**
+     * 结果优先协议：先预校验最小事实计划，再演绎正文，最后独立检查正文覆盖；正文永远不能反向取得事实写权限。
+     */
+    private Prepared prepareOutcomeFirst(
+            StoryProjection before,
+            List<Entity> existingEntities,
+            StoryPromptContext.PreviousTurn previous,
+            SemanticDuration semanticDuration,
+            Long explicitDurationMinutes,
+            com.wenxian.game.story.domain.StoryActionContract actionContract,
+            StoryTurnAgent.ResolvedAction resolvedAction,
+            StoryPromptContext context,
+            StoryModelRoute route,
+            StoryTurnAgent.InvocationContext invocation,
+            StoryTurnDiagnosticService.Session diagnostic) {
+        StoryTurnAgent.PlannedOutcome planned = agent.planOutcome(context, route, invocation);
+        List<StoryModelGateway.Result> attempts = new ArrayList<>(resolvedAction.modelResults());
+        attempts.addAll(planned.modelResults());
+        StoryPatch plan = normalizedPlan(before, semanticDuration, planned.patch());
+        if (diagnostic != null) diagnostic.proposal("OUTCOME_PLAN", plan);
+
+        try {
+            preflightOutcome(before, actionContract, plan, explicitDurationMinutes);
+        } catch (IllegalArgumentException rejected) {
+            if (diagnostic != null) diagnostic.rejected("OUTCOME_PLAN_VALIDATION", rejected, false);
+            StoryTurnAgent.PlannedOutcome repaired = agent.repairOutcomePlan(
+                    context, route, invocation, plan, rejected.getMessage());
+            attempts.addAll(repaired.modelResults());
+            plan = normalizedPlan(before, semanticDuration, repaired.patch());
+            if (diagnostic != null) diagnostic.proposal("REPAIRED_OUTCOME_PLAN", plan);
+            try {
+                preflightOutcome(before, actionContract, plan, explicitDurationMinutes);
+            } catch (IllegalArgumentException failedAgain) {
+                failedAgain.addSuppressed(rejected);
+                throw new StoryTurnProtocolException("OUTCOME_PLAN",
+                        "本轮结果计划在自动整理后仍未通过可信事实边界", failedAgain);
+            }
+        }
+
+        StoryTurnAgent.RenderedNarrative rendered = agent.renderNarrative(context, route, invocation, plan);
+        attempts.addAll(rendered.modelResults());
+        StoryPatch candidate = composeOutcome(plan, rendered);
+        if (diagnostic != null) diagnostic.proposal("OUTCOME_NARRATIVE", candidate);
+        IllegalArgumentException narrativeFreshnessProblem = null;
+        try {
+            rejectRepeatedNarrative(previous, candidate);
+        } catch (IllegalArgumentException repeated) {
+            narrativeFreshnessProblem = repeated;
+        }
+
+        StoryTurnAgent.Review review = narrativeFreshnessProblem == null
+                ? agent.reviewOutcomeCoverage(context, route, invocation, plan, rendered)
+                : null;
+        if (review != null) {
+            if (diagnostic != null) diagnostic.review("OUTCOME_COVERAGE_REVIEW", review);
+            attempts.addAll(review.modelResults());
+        }
+
+        if (narrativeFreshnessProblem != null || review != null && !review.accepted()) {
+            String problem = narrativeFreshnessProblem != null
+                    ? narrativeFreshnessProblem.getMessage() : review.problem();
+            boolean repairPlan = narrativeFreshnessProblem == null
+                    && review.outcome() == StoryTurnAgent.ReviewOutcome.REPAIR_FACTS;
+            if (diagnostic != null) {
+                diagnostic.rejected(repairPlan ? "OUTCOME_COVERAGE_PLAN_GAP" : "OUTCOME_NARRATIVE_VALIDATION",
+                        new IllegalArgumentException(problem), !repairPlan);
+            }
+            if (repairPlan) {
+                StoryTurnAgent.PlannedOutcome repairedPlan = agent.repairOutcomePlan(
+                        context, route, invocation, plan, problem);
+                attempts.addAll(repairedPlan.modelResults());
+                plan = normalizedPlan(before, semanticDuration, repairedPlan.patch());
+                if (diagnostic != null) diagnostic.proposal("COVERAGE_REPAIRED_OUTCOME_PLAN", plan);
+                try {
+                    preflightOutcome(before, actionContract, plan, explicitDurationMinutes);
+                } catch (IllegalArgumentException failedPlan) {
+                    throw new StoryTurnProtocolException("OUTCOME_PLAN_COVERAGE_REPAIR",
+                            "结果覆盖审阅发现计划缺项，但自动整理后仍未通过可信事实边界", failedPlan);
+                }
+                rendered = agent.renderNarrative(context, route, invocation, plan);
+                attempts.addAll(rendered.modelResults());
+            } else {
+                rendered = agent.repairNarrative(context, route, invocation, plan, rendered, problem);
+                attempts.addAll(rendered.modelResults());
+            }
+            candidate = composeOutcome(plan, rendered);
+            if (diagnostic != null) diagnostic.proposal(
+                    repairPlan ? "PLAN_REPAIRED_OUTCOME_NARRATIVE" : "REPAIRED_OUTCOME_NARRATIVE", candidate);
+            try {
+                rejectRepeatedNarrative(previous, candidate);
+                StoryTurnAgent.Review repairedReview = agent.reviewOutcomeCoverage(
+                        context, route, invocation, plan, rendered);
+                if (diagnostic != null) diagnostic.review("REPAIRED_OUTCOME_COVERAGE_REVIEW", repairedReview);
+                attempts.addAll(repairedReview.modelResults());
+                rejectReview(repairedReview);
+            } catch (IllegalArgumentException failedAgain) {
+                throw new StoryTurnProtocolException("OUTCOME_NARRATIVE",
+                        "结果计划或正文在一次自动整理后仍未形成一致回合", failedAgain);
+            }
+        }
+
+        StoryStateReducer.Applied applied;
+        try {
+            contractPatches.validate(before, actionContract, candidate);
+            applied = reducer.reduce(before, candidate, explicitDurationMinutes);
+        } catch (IllegalArgumentException unexpected) {
+            // 事实计划已经通过相同边界预校验；此处失败通常意味着非确定性 ID 或协议实现错误，不能改写正文绕过。
+            throw new StoryTurnProtocolException("OUTCOME_COMMIT_PREPARATION",
+                    "已校验结果在最终归并时出现不一致", unexpected);
+        }
+        if (diagnostic != null) diagnostic.reduced(applied);
+        StoryTurnAgent.Generated generation = new StoryTurnAgent.Generated(candidate, attempts);
+        List<TrustedStoryEvent> trustedEvents = eventCompiler
+                .compile(before, applied.acceptedPatch(), semanticDuration).events();
+        return new Prepared(before, applied, existingEntities, generation, trustedEvents, diagnostic);
+    }
+
+    private StoryPatch normalizedPlan(StoryProjection before, SemanticDuration semanticDuration, StoryPatch plan) {
+        return eventCompiler.compile(before, plan, semanticDuration).normalizedPatch();
+    }
+
+    private void preflightOutcome(StoryProjection before,
+                                  com.wenxian.game.story.domain.StoryActionContract actionContract,
+                                  StoryPatch plan, Long explicitDurationMinutes) {
+        contractPatches.validate(before, actionContract, plan);
+        reducer.reduce(before, plan, explicitDurationMinutes);
+    }
+
+    private StoryPatch composeOutcome(StoryPatch plan, StoryTurnAgent.RenderedNarrative rendered) {
+        return new StoryPatch(rendered.title(), rendered.narrative(), plan.time(), plan.coreState(),
+                plan.entities(), plan.worldFacts(), plan.knowledge(), plan.memories(),
+                plan.decisionCheckpoint(), rendered.choices(), rendered.rollingSummary());
     }
 
     /**
