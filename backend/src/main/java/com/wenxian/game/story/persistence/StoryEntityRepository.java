@@ -4,12 +4,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.story.persistence.StoryPersistenceModels.Entity;
+import com.wenxian.game.story.persistence.StoryPersistenceModels.EntityAlias;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
+import java.text.Normalizer;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 
 /**
  * 统一命卷当前实体仓储。实体写入必须和命卷 revision 更新处于同一上层事务；
@@ -86,6 +91,54 @@ public class StoryEntityRepository {
                 update story_entity set visible=false, status=?, attributes_json=?, last_changed_turn=?, updated_at=?
                 where id=? and save_id=? and visible=true
                 """, status, json.write(attributes), changedTurn, Timestamp.from(Instant.now()), entityId, saveId);
+    }
+
+    /** 读取当前命卷仍可用于实体解析的全部长期别名。 */
+    public List<EntityAlias> listActiveAliases(String saveId) {
+        return jdbc.query("""
+                select * from story_entity_alias where save_id=? and active=true
+                order by entity_id, created_at
+                """, (row, index) -> new EntityAlias(
+                row.getString("id"), row.getString("save_id"), row.getString("entity_id"),
+                row.getString("alias_name"), row.getString("normalized_alias"), row.getString("alias_type"),
+                (Integer) row.getObject("source_turn"), row.getBoolean("active"),
+                row.getTimestamp("created_at").toInstant(), row.getTimestamp("updated_at").toInstant()), saveId);
+    }
+
+    /**
+     * 幂等保存一个已经通过事实归并的长期别名。相同实体的相同别名重复出现时只恢复可用状态，
+     * 不生成重复记录；不同实体允许同名，由引用编译器识别为歧义并停止自动绑定。
+     */
+    public void saveAlias(String saveId, String entityId, String aliasName, String aliasType,
+                          Integer sourceTurn, Instant now) {
+        String normalized = normalizeAlias(aliasName);
+        if (normalized.isBlank()) return;
+        Instant timestamp = now == null ? Instant.now() : now;
+        try {
+            jdbc.update("""
+                    insert into story_entity_alias(
+                        id, save_id, entity_id, alias_name, normalized_alias, alias_type,
+                        source_turn, active, created_at, updated_at
+                    ) values (?, ?, ?, ?, ?, ?, ?, true, ?, ?)
+                    """, "entity-alias-" + UUID.randomUUID(), saveId, entityId, aliasName.strip(), normalized,
+                    aliasType == null || aliasType.isBlank() ? "HISTORICAL_NAME" : aliasType.strip(), sourceTurn,
+                    Timestamp.from(timestamp), Timestamp.from(timestamp));
+        } catch (DuplicateKeyException duplicate) {
+            jdbc.update("""
+                    update story_entity_alias set alias_name=?, alias_type=?, source_turn=coalesce(source_turn, ?),
+                        active=true, updated_at=?
+                    where save_id=? and entity_id=? and normalized_alias=?
+                    """, aliasName.strip(), aliasType == null || aliasType.isBlank()
+                            ? "HISTORICAL_NAME" : aliasType.strip(), sourceTurn, Timestamp.from(timestamp),
+                    saveId, entityId, normalized);
+        }
+    }
+
+    /** 别名只做 Unicode、大小写和空白归一，不使用业务词表或模糊相似度猜测实体身份。 */
+    public static String normalizeAlias(String value) {
+        if (value == null || value.isBlank()) return "";
+        return Normalizer.normalize(value, Normalizer.Form.NFKC)
+                .strip().toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
     }
 
     private Entity map(java.sql.ResultSet row) throws java.sql.SQLException {

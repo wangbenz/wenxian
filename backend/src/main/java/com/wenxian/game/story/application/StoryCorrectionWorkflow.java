@@ -51,7 +51,8 @@ public final class StoryCorrectionWorkflow {
         CorrectionProposalTokenCodec.VerifiedProposal verified = tokens.verify(
                 proposalToken, userId, saveId, expectedRevision);
         StoryCorrectionReducer.Applied applied = reducer.apply(currentProjection, verified.proposal(), true);
-        return new Confirmed(verified.instruction(), applied.projection(), applied.acceptedProposal());
+        return new Confirmed(verified.instruction(), applied.projection(), applied.acceptedProposal(),
+                applied.aliasChanges());
     }
 
     public record Preview(
@@ -65,6 +66,7 @@ public final class StoryCorrectionWorkflow {
     public record Confirmed(
             String instruction,
             StoryProjection projection,
-            StoryCorrectionProposal acceptedProposal
+            StoryCorrectionProposal acceptedProposal,
+            java.util.List<com.wenxian.game.story.reducer.StoryStateReducer.EntityAliasChange> aliasChanges
     ) {}
 }

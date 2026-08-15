@@ -3,6 +3,7 @@ package com.wenxian.game.story.agent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wenxian.game.story.domain.StoryActionContract;
 import com.wenxian.game.story.domain.StoryPatch;
+import com.wenxian.game.story.domain.StoryPatch.AbilityState;
 import com.wenxian.game.story.domain.StoryPatchValidator;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
@@ -62,6 +63,74 @@ class ModelBackedStoryTurnAgentTest {
         assertEquals(101, generated.inputTokens());
         assertEquals(203, generated.outputTokens());
         assertEquals(1, generated.modelResults().size());
+    }
+
+    @Test
+    void projectsFactsWithFlashWithoutAllowingProjectionToRewriteNarrative() throws Exception {
+        StoryModelGateway gateway = request -> {
+            assertEquals("deepseek-v4-flash", request.model());
+            assertEquals(0.0, request.temperature());
+            assertTrue(request.systemPrompt().contains("可信事实投影 Agent"));
+            assertTrue(request.systemPrompt().contains("禁止返回“主角”“玩家”“某人”等字符串"));
+            assertTrue(request.systemPrompt().contains("quantity 禁止直接返回数字"));
+            assertTrue(request.userPrompt().contains("narrativeDraft"));
+            assertTrue(request.userPrompt().contains("ability-reflection"));
+            assertTrue(request.userPrompt().contains("previousRollingSummary"),
+                    "事实投影需要旧滚动摘要来生成连续的新摘要，但不会携带上一回完整正文");
+            return result("""
+                    {"title":"投影擅自改题","narrative":"投影擅自改写了正文。",
+                     "time":{"elapsedMinutes":30,"resolution":"COMPLETE","interruptionReason":null},
+                     "coreState":{"location":null,"condition":null,"realm":null,"lifeGoal":null},
+                     "entities":[{"operation":"UPDATE","entityId":"ability-reflection","entityType":"ABILITY",
+                       "name":null,"status":"运转如常","summary":null,"attributes":null,"quantity":null,
+                       "inPossession":null,"custody":null,"abilityState":"MASTERED","lifecycle":null,
+                       "relationship":null,"nameChange":null,"referenceKey":""}],
+                     "worldFacts":[],"knowledge":[],"memories":[],
+                     "decisionCheckpoint":{"required":false,"prompt":null},
+                     "choices":[{"title":"被改写的选项","description":"不应展示"}],
+                     "rollingSummary":"你在石门前施展了照影诀。"}
+                    """, 55, 90, 180);
+        };
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch draft = mapper.readValue(VALID_PATCH, StoryPatch.class);
+        StoryModelRoute proRoute = new StoryModelRoute("https://example.invalid", "test-secret-key", "DEEPSEEK",
+                "OPENAI_COMPATIBLE", "deepseek-v4-pro", "PUBLIC");
+
+        StoryTurnAgent.ProjectedFacts projected = agent(gateway).projectFacts(context(), proRoute,
+                new StoryTurnAgent.InvocationContext("save-fact-projection", 9), draft);
+
+        assertEquals(draft.title(), projected.patch().title());
+        assertEquals(draft.narrative(), projected.patch().narrative());
+        assertEquals(draft.choices(), projected.patch().choices());
+        assertEquals(AbilityState.MASTERED, projected.patch().entities().getFirst().abilityState());
+        assertEquals(1, projected.modelResults().size());
+    }
+
+    @Test
+    void factProjectionUsesServerDurationInsteadOfRecalculatingCalendar() throws Exception {
+        StoryModelGateway gateway = request -> result("""
+                {"title":"三年闭关","narrative":"你完成了三年闭关。",
+                 "time":{"elapsedMinutes":1576800,"resolution":"COMPLETE","interruptionReason":null},
+                 "coreState":{"location":null,"condition":null,"realm":null,"lifeGoal":null},
+                 "entities":[],"worldFacts":[],"knowledge":[],"memories":[],
+                 "decisionCheckpoint":{"required":false,"prompt":null},"choices":[],
+                 "rollingSummary":"你完成了三年闭关。"}
+                """, 40, 70, 120);
+        StoryPatch draft = new StoryPatch("三年闭关", "你完成了三年闭关。",
+                new StoryPatch.TimePassage(1_576_800, TimeResolution.COMPLETE, null),
+                null, List.of(), List.of(), List.of(), List.of(),
+                new StoryPatch.DecisionCheckpoint(false, null), List.of(), "");
+        StoryPromptContext base = context();
+        StoryPromptContext durationContext = new StoryPromptContext(base.system(), base.objective(),
+                base.cognition(), base.memory(), base.narrative(),
+                new StoryPromptContext.ActionContext("闭关三年", 1_555_200L,
+                        StoryPromptContext.WorldClock.from(1_555_320L)));
+
+        StoryTurnAgent.ProjectedFacts projected = agent(gateway).projectFacts(durationContext, route(),
+                new StoryTurnAgent.InvocationContext("save-duration-projection", 9), draft);
+
+        assertEquals(1_555_200L, projected.patch().time().elapsedMinutes());
+        assertEquals(TimeResolution.COMPLETE, projected.patch().time().resolution());
     }
 
     @Test

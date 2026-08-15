@@ -108,6 +108,7 @@ public class StoryTurnCommitService {
         long revision = saves.updateState(userId, saved.id(), saved.revision(), state,
                 saved.stateSchemaVersion(), nextTurn, saved.worldCode(), saved.status(), releases.current());
         persistChangedEntities(saved.id(), nextTurn, prepared, after, accepted, Instant.now());
+        persistEntityAliases(saved.id(), nextTurn, prepared, Instant.now());
         persistNewMemories(saved.id(), nextTurn, prepared.before(), after);
         String turnId = "story-turn-" + UUID.randomUUID();
         turns.insert(new NewTurn(turnId, saved.id(), requestId, nextTurn,
@@ -149,6 +150,13 @@ public class StoryTurnCommitService {
         after.memories().stream().filter(value -> !existingIds.contains(value.id()))
                 .forEach(value -> memories.insert(saveId, new StoredMemory(value.id(), value.memoryType(),
                         value.title(), value.summary(), turnNumber, after.worldTimeMinutes(), value.importance())));
+    }
+
+    /** 改名别名与实体和回合处于同一事务，避免当前名称已变化但历史称谓无法解析。 */
+    private void persistEntityAliases(String saveId, int turnNumber,
+                                      StoryTurnPreparationService.Prepared prepared, Instant now) {
+        prepared.applied().aliasChanges().forEach(change -> entities.saveAlias(saveId, change.entityId(),
+                change.aliasName(), change.aliasType(), turnNumber, now));
     }
 
     private String text(String value, String fallback) {

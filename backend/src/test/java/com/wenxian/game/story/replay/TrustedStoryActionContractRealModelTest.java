@@ -87,9 +87,9 @@ class TrustedStoryActionContractRealModelTest {
         StoryTurnAgent.ResolvedAction missingTile = agent.resolveAction(
                 context("从我的行囊里取出青色瓦片碎片继续观察。"), route,
                 new StoryTurnAgent.InvocationContext("contract-missing-tile", 1));
+        print("missing-tile", missingTile);
         assertThrows(StoryActionPreconditionException.class,
                 () -> validator.validate(projection, missingTile.contract()));
-        print("missing-tile", missingTile);
 
         StoryTurnAgent.ResolvedAction observeWell = agent.resolveAction(
                 context("我只观察村中水井是否安全，不打水、不下井，也不离开井边。"), route,

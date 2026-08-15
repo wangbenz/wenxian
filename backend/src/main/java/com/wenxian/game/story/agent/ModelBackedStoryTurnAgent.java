@@ -61,6 +61,10 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                不得把玩家提到的新对象替换成名称或含义不同的历史实体。
                每个 CREATE 实体都必须填写非空的 name、status 和 summary；其中 summary 只记录需要跨回合保持的
                当前事实，不要复制整段正文。UPDATE 未变化的字段才可以返回 null。
+               referenceKey 仅允许 CREATE 使用，并且只在晋升 factContract 的 NEW/ESTABLISHED 回合内引用时填写；
+               UPDATE/HIDE/RESTORE 必须返回空字符串，不能复制已有引用的 referenceKey。
+               UPDATE 已有实体时，普通称谓变化、地点细节或模型措辞不得改变 name。只有玩家明确为该实体改名，或本轮
+               已完成剧情明确形成新称呼时，才填写新 name 和 nameChange={explicit:true,reason:"具体依据"}；稳定 ID 不变。
                同一处场景及其普通组成部分不得在一回合拆成多个重复 LANDMARK；例如观察一间屋舍的屋檐时，
                最多保留屋舍或屋檐中的一个长期地标。只有各自会被后续行动独立引用时才允许分别建档。
                普通观察得到的屋檐、门框、墙角、路面等组成部分默认只属于当前地点或已有父 LANDMARK 的叙事细节，
@@ -75,7 +79,12 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                行为；prohibitedActions 不得发生；unresolvedDecisions 必须继续留给玩家；requiredEndState 是正文结尾必须
                保持的位置或状态。不得给主角补写玩家未表达的动机、立场、回答、路线选择或下一步计划。
             4. 物品数量已知时，使用、出售、赠予或获得后必须返回准确的新总量；数量未知就保持 known=false、value=null，
-               不得自动记为1。能力的 MASTERED 与 TEMPORARILY_BLOCKED 分开，受限不等于未掌握。
+               不得自动记为1。能力依次区分 KNOWN（已知其存在）、LEARNING（正在学习）、MASTERED（已经掌握）、
+               TEMPORARILY_BLOCKED（仍掌握但暂时不能施展）和 LOST（已经失去）；UNKNOWN 只兼容旧数据，不能用于新增能力。
+               从玉简、秘籍等物品中学到能力时，来源物品仍是 ITEM，功法或能力必须使用独立 ABILITY 实体；可在能力
+               attributes 中记录 sourceEntityId、sourceEntityType 和 sourceReason，不得复用来源物品的稳定 ID。
+               字段必须与实体类型对应：ITEM 才能填写 quantity、inPossession、custody；ABILITY 才能填写 abilityState；
+               CHARACTER 才能填写 lifecycle、relationship；其他类型的这些专用字段必须为 null。
             5. 人物为 DEAD 时不得无依据复活。若 action 明确允许修订且有充分依据，生命周期变化必须写 changeReason。
                人物关系使用 relationship 单独提交；关系名称仍可按剧情自由描述，但已有关系发生变化时必须写
                changeReason，且不得只改 attributes.relationship 来绕过关系审计。
@@ -107,9 +116,10 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                 "referenceKey":"仅当本实体对应 factContract 中的回合内引用时填写，否则为空",
                 "quantity":{"known":true,"value":1},"inPossession":true,
                 "custody":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null},
-                "abilityState":"MASTERED|TEMPORARILY_BLOCKED|LOST|UNKNOWN",
+                "abilityState":"KNOWN|LEARNING|MASTERED|TEMPORARILY_BLOCKED|LOST|UNKNOWN",
                 "lifecycle":{"state":"ACTIVE|MISSING|DORMANT|DEAD|UNKNOWN","changeReason":null},
-                "relationship":{"label":"当前关系名称","changeReason":"本轮关系改变依据或null"}}],
+                "relationship":{"label":"当前关系名称","changeReason":"本轮关系改变依据或null"},
+                "nameChange":{"explicit":false,"reason":"仅在玩家明确改名或本轮明确形成新称呼时填写"}}],
               "worldFacts":[{"operation":"EXPAND|TRANSFORM|REVISE","factId":null,"statement":"","reason":null}],
               "knowledge":[{"subjectRef":"","topicRef":"","summary":"","evidenceRefs":[]}],
               "memories":[{"memoryType":"EVENT|PROMISE|CLUE|RELATIONSHIP","title":"","summary":"","importance":"KEY|NORMAL","evidenceRefs":[]}],
@@ -140,6 +150,67 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             必须正面展示 action 引发的对话、反应或直接结果，并在玩家指定的停止边界结束。
             action.factContract 与 objective 仍是唯一权威事实；不得为了让正文显得不同而新增未授权行动。
             返回符合系统完整 JSON 契约的单个对象，不要 Markdown、解释或额外文字。
+            """;
+
+    private static final String FACT_PROJECTION_PROMPT = """
+            你是《问仙录》的可信事实投影 Agent。你不续写、润色或改写剧情，只从 narrativeDraft 已经完成的
+            本轮过程与结果中提取需要跨回合保持的变化。facts 是回合开始前的权威事实，action 是玩家授权与行动契约。
+
+            严格规则：
+            1. title、narrative 和 choices 必须原样返回；服务端还会用草稿覆盖这些字段，禁止借投影改变剧情。
+            2. 只保存 narrativeDraft 已经明确发生的结果。愿望、尝试、猜测、NPC 说法和推荐选项不是既成事实。
+            3. 既有实体只能复制 facts.entityIndex 中的稳定 entityId 与 entityType。名称措辞不同不能创建同名实体；
+               UPDATE 普通称谓变化时 name=null。只有剧情明确完成改名才返回新 name，且
+               nameChange={"explicit":true,"reason":"改名依据"}。
+            4. 新增长期实体使用 CREATE、entityId=null，并且 name、status、summary 三项都必须是非空字符串；
+               UPDATE/HIDE/RESTORE 才可以把未变化的字段设为 null。普通路人、场景装饰和一次性细节不建档。
+               action.factContract 的 NEW/ESTABLISHED 引用需要晋升时，使用相同 canonicalName 与 referenceKey。
+               referenceKey 只允许上述 CREATE 使用；UPDATE/HIDE/RESTORE 必须返回空字符串。
+            5. ITEM 必须记录实际 quantity、custody 与 inPossession；数量未知保持 known=false、value=null。
+               custody 只能为 null 或对象 {"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null}，
+               禁止返回“主角”“玩家”“某人”等字符串。CHARACTER、ABILITY、LANDMARK 的 custody 必须为 null。
+               能力必须是独立 ABILITY，状态只允许 KNOWN、LEARNING、MASTERED、TEMPORARILY_BLOCKED、LOST；
+               来源物品仍是 ITEM，不能复用物品 ID。可在能力 attributes 记录 sourceEntityId/sourceEntityType/sourceReason。
+               专用字段不可跨类型：ITEM 不能填写 abilityState、lifecycle、relationship；ABILITY 不能填写物品保管或人物关系；
+               CHARACTER 才能填写 lifecycle、relationship；LANDMARK 的上述专用字段均为 null。
+            6. 人物生死使用 lifecycle，关系使用 relationship；已经死亡者没有明确复活事件时保持死亡。
+               关系或生命周期改变必须保存具体 changeReason。
+            7. time 只记录草稿实际经过时长，并遵守 action.explicitDurationMinutes；该值非空且完整执行时必须原样复制，
+               不得按公历、其他历法或自行换算重新计算。提前结束必须使用 INTERRUPTED 并说明原因。
+               coreState 只返回真正变化的字段，未变化返回 null。
+            8. worldFacts：新增空白设定用 EXPAND；普通世界发展用 TRANSFORM 并引用稳定 factId；玩家明确修订用 REVISE、
+               引用 factId 并记录 reason。世界模板是软起点，不能覆盖该命卷已经确认的经历。
+            9. memories 和 rollingSummary 只概括已发生的经历，不得写入玩家尚未作出的决定、动机或下一步计划。
+               decisionCheckpoint 只在剧情确实停在需要玩家决定的位置时 required=true。
+
+            只返回单个 JSON，不要 Markdown、说明或额外文字：
+            {
+              "title":"原样复制","narrative":"原样复制",
+              "time":{"elapsedMinutes":0,"resolution":"COMPLETE|INTERRUPTED","interruptionReason":null},
+              "coreState":{"location":null,"condition":null,"realm":null,"lifeGoal":null},
+              "entities":[{"operation":"CREATE|UPDATE|HIDE|RESTORE","entityId":null,
+                "entityType":"ITEM|ABILITY|CHARACTER|LANDMARK或既有类型",
+                "name":"CREATE时必填，更新时未变化可为null","status":"CREATE时必填，更新时未变化可为null",
+                "summary":"CREATE时必填，更新时未变化可为null","attributes":null,
+                "quantity":{"known":true,"value":1},"inPossession":null,
+                "custody":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null},
+                "abilityState":"KNOWN|LEARNING|MASTERED|TEMPORARILY_BLOCKED|LOST或null",
+                "lifecycle":{"state":"ACTIVE|MISSING|DORMANT|DEAD|UNKNOWN","changeReason":null},
+                "relationship":{"label":"关系名称","changeReason":null},
+                "nameChange":{"explicit":true,"reason":"明确改名依据"},"referenceKey":""}],
+              "worldFacts":[{"operation":"EXPAND|TRANSFORM|REVISE","factId":null,
+                "statement":"需要长期保持的世界事实","reason":null}],
+              "knowledge":[{"subjectRef":"认知主体稳定ID","topicRef":"认知对象稳定ID",
+                "summary":"该人物知道或相信的内容","evidenceRefs":[]}],
+              "memories":[{"memoryType":"EVENT|PROMISE|CLUE|RELATIONSHIP","title":"记忆标题",
+                "summary":"已发生经历摘要","importance":"KEY|NORMAL","evidenceRefs":[]}],
+              "decisionCheckpoint":{"required":false,"prompt":null},
+              "choices":[{"title":"原样复制","description":"原样复制"}],
+              "rollingSummary":"只概括已经发生并需要延续的内容"
+            }
+            上述嵌套字段没有变化时返回 null 或 []，但一旦返回就必须保持对象结构；quantity 禁止直接返回数字，
+            其他嵌套结构也禁止简写：不得把 custody、quantity、
+            lifecycle、relationship、nameChange、worldFacts、knowledge 或 memories 简写成自然语言字符串。
             """;
 
     private static final String REVIEW_PROMPT = """
@@ -175,6 +246,11 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                要求标记、该对象也没有成为可独立前往或影响后续事件的地点，必须判定失败。
 
             proposed.coreState 等结构是“变化补丁”，字段为 null 表示保持 facts 原值，不得据此判定缺失或冲突。
+            facts.currentInventory 只证明回合开始时的持有状态，不代表本轮永远不能获得新物品；
+            actionMode=ATTEMPT 且 UNRESOLVED 的对象允许由本轮实际结果确立。应检查发现、取得或失去是否由正文实际发生、
+            是否属于 authorizedActions 的直接结果，以及结构补丁是否记录了最终状态，不能仅因对象起初不在 facts 就拒绝。
+            为完成开放式“寻找、调查、交谈”等授权行动而进行的必要观察和场景内过程，不应逐个误判为新的重大决定；
+            但自行收走物品、离开场景、另定目标或安排后续计划仍需玩家明确授权。
             action 的直接自然后果可以通过，例如完整休息后疲惫缓解；只有候选追加了新的主动行为、重大决定或无依据事实时才拒绝。
             合理的环境细节、NPC 对已授权行为的即时回应和不改变事实的文学修辞可以通过；它们不能包含主角新增的
             主动行为或心理决定。不要评价文风、篇幅、难度或战力平衡。
@@ -237,6 +313,11 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                直接改写已确认事实。QUERY/ATTEMPT 遇到未知对象时可以使用 UNRESOLVED 且 conflict.present=false，交给剧情
                裁定结果；不能因为目标未知、行动困难或境界不足而拒绝。ASSERT_FACT 的前提没有 EXISTING 或 ESTABLISHED
                依据时必须 conflict.present=true。AMEND_FACT 必须提示改用修正命卷。
+               再设置 actionScope：DO_NOW 表示当前行动；ADVANCE_FUTURE 表示玩家明确授权“数日后、闭关三年”等未来推进；
+               ASSERT_PAST 表示玩家声称过去已经发生；REVISE_WORLD 表示明确调整当前世界设定；CORRECT_FACT 表示修正已经落定
+               的命卷事实。ADVANCE_FUTURE 不能仅因当前日期尚早而报冲突；action.explicitDurationMinutes 与
+               action.expectedEndClock 非空时是服务端已解析的授权时间。类似“闭关三年突破元婴”中，三年是时间授权，
+               突破元婴只是待剧情裁定的目标，不是既成事实。
             7. 如果 action 明确声称“之前已经赠送/卖出/取得/杀死”等事实，或者依赖“师父、道侣、盟友、仇敌”等
                已经成立的人物关系，但 facts 与该前提冲突，
                conflict.present=true，reason 说明当前事实，correction 给出不替玩家决定的可行改写。
@@ -255,6 +336,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             {
               "intentSummary":"",
               "actionMode":"QUERY|ATTEMPT|ASSERT_FACT|AMEND_FACT",
+              "actionScope":"DO_NOW|ADVANCE_FUTURE|ASSERT_PAST|REVISE_WORLD|CORRECT_FACT",
               "itemActionDetected":false,
               "references":[{
                 "mention":"玩家原话中的对象短语",
@@ -394,6 +476,33 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                 return new Generated(parse(repaired.text()), attempts);
             } catch (JsonProcessingException | IllegalArgumentException repairedError) {
                 throw new IllegalArgumentException("推演结果未能形成可提交的状态提案", repairedError);
+            }
+        }
+    }
+
+    @Override
+    public ProjectedFacts projectFacts(StoryPromptContext context, StoryModelRoute route,
+                                       InvocationContext invocation, StoryPatch narrativeDraft) {
+        if (context == null || narrativeDraft == null) {
+            throw new IllegalArgumentException("事实投影缺少命卷上下文或剧情草稿");
+        }
+        if (route == null) throw new IllegalArgumentException("事实投影缺少模型路由");
+        StoryModelRoute projectionRoute = flashReviewRoute(route);
+        List<StoryModelGateway.Result> attempts = new ArrayList<>();
+        StoryModelGateway.Result result = call(projectionRoute, invocation, "STORY_FACT_PROJECTION_FLASH",
+                FACT_PROJECTION_PROMPT, factProjectionPayload(context, narrativeDraft), 0.0);
+        attempts.add(result);
+        try {
+            return new ProjectedFacts(withNarrativeDraft(context, narrativeDraft, parse(result.text())), attempts);
+        } catch (JsonProcessingException | IllegalArgumentException firstError) {
+            StoryModelGateway.Result repaired = call(projectionRoute, invocation,
+                    "STORY_FACT_PROJECTION_REPAIR_FLASH", FACT_PROJECTION_PROMPT,
+                    repairPrompt(result.text(), firstError.getMessage()), 0.0);
+            attempts.add(repaired);
+            try {
+                return new ProjectedFacts(withNarrativeDraft(context, narrativeDraft, parse(repaired.text())), attempts);
+            } catch (JsonProcessingException | IllegalArgumentException secondError) {
+                throw new IllegalArgumentException("可信事实投影未形成可校验结果", secondError);
             }
         }
     }
@@ -569,7 +678,6 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         Map<String, Object> facts = new LinkedHashMap<>();
         facts.put("worldClock", context.objective().worldClock());
         facts.put("coreState", context.objective().protagonist());
-        facts.put("protagonist", context.objective().protagonist());
         facts.put("currentInventory", context.objective().currentInventory());
         facts.put("entityIndex", context.objective().entityIndex());
         facts.put("relatedEntities", context.objective().relatedEntities());
@@ -577,14 +685,66 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         facts.put("initialContract", context.objective().initialContract());
         facts.put("sourceExcerpts", context.objective().sourceExcerpts());
         Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("systemConstraints", context.system());
         payload.put("facts", facts);
-        payload.put("action", context.action().playerAction());
+        payload.put("action", context.action());
         payload.put("selectedChoice", context.action().selectedChoice());
         try {
             return mapper.writeValueAsString(payload);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("行动事实解析上下文无法序列化", error);
         }
+    }
+
+    /** 事实投影只携带当前事实、行动契约和本轮草稿，不重复发送旧正文或完整主观记忆。 */
+    private String factProjectionPayload(StoryPromptContext context, StoryPatch draft) {
+        Map<String, Object> facts = new LinkedHashMap<>();
+        facts.put("worldClock", context.objective().worldClock());
+        facts.put("protagonist", context.objective().protagonist());
+        facts.put("currentInventory", context.objective().currentInventory());
+        facts.put("entityIndex", context.objective().entityIndex());
+        facts.put("relatedEntities", context.objective().relatedEntities());
+        facts.put("worldFacts", context.objective().worldFacts());
+        facts.put("pendingDecision", context.objective().pendingDecision());
+        facts.put("initialContract", context.objective().initialContract());
+        facts.put("sourceExcerpts", context.objective().sourceExcerpts());
+
+        Map<String, Object> narrative = new LinkedHashMap<>();
+        narrative.put("title", draft.title());
+        narrative.put("narrative", draft.narrative());
+        narrative.put("choices", draft.choices());
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("systemConstraints", context.system());
+        payload.put("facts", facts);
+        payload.put("action", context.action());
+        payload.put("timeContract", Map.of(
+                "explicitDurationMinutes", context.action().explicitDurationMinutes() == null
+                        ? "" : context.action().explicitDurationMinutes(),
+                "expectedEndClock", context.action().expectedEndClock() == null
+                        ? "" : context.action().expectedEndClock()));
+        payload.put("previousRollingSummary", context.narrative().rollingSummary());
+        payload.put("narrativeDraft", narrative);
+        try {
+            return mapper.writeValueAsString(payload);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("事实投影上下文无法序列化", error);
+        }
+    }
+
+    /** 叙事内容属于剧情草稿；事实投影无权借结构提取阶段改写玩家看到的正文与推荐行动。 */
+    private StoryPatch withNarrativeDraft(StoryPromptContext context, StoryPatch draft, StoryPatch projected) {
+        StoryPatch.TimePassage acceptedTime = projected.time();
+        Long explicitDuration = context.action().explicitDurationMinutes();
+        if (explicitDuration != null && acceptedTime != null
+                && acceptedTime.resolution() == StoryPatch.TimeResolution.COMPLETE) {
+            // 明确时长由服务端解析成唯一时间契约。事实模型只判断是否完整执行，不能因历法换算不同造成重试。
+            acceptedTime = new StoryPatch.TimePassage(explicitDuration,
+                    StoryPatch.TimeResolution.COMPLETE, null);
+        }
+        return new StoryPatch(draft.title(), draft.narrative(), acceptedTime, projected.coreState(),
+                projected.entities(), projected.worldFacts(), projected.knowledge(), projected.memories(),
+                projected.decisionCheckpoint(), draft.choices(), projected.rollingSummary());
     }
 
     private String actionContractRepairPayload(StoryPromptContext context,

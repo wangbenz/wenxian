@@ -15,6 +15,7 @@ import com.wenxian.game.story.agent.StoryModelRoute;
 import com.wenxian.game.story.application.StoryTurnCommitService;
 import com.wenxian.game.credit.PlatformTurnAccessService;
 import com.wenxian.game.story.application.StoryTurnPreparationService;
+import com.wenxian.game.story.application.StoryTurnProtocolException;
 import com.wenxian.game.story.domain.StoryActionPreconditionException;
 import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryProjection.InitialContract;
@@ -395,6 +396,14 @@ public class PersistedLightNarrativeEngine implements StoryEngine {
                         "这次行动的前提与命卷不一致", conflict.getMessage(), suggestions,
                         false, false, false, Map.of("correction", conflict.correction()),
                         "story action fact contract rejected", conflict);
+            }
+            if (error instanceof StoryTurnProtocolException protocol) {
+                throw new GameApiException(HttpStatus.BAD_GATEWAY, "STORY_INTERNAL_RECOVERY_FAILED", "SYSTEM",
+                        "命卷未能整理本轮变化",
+                        "系统没有把本轮剧情与事实变化整理成可安全保存的结果；本次未消耗回合，命卷也没有变化。",
+                        List.of("重新尝试本轮行动", "若重复出现，请将问题编号发给管理员"),
+                        true, false, false, Map.of("stage", protocol.stage()),
+                        "trusted story protocol recovery failed at " + protocol.stage(), protocol);
             }
             if (error instanceof IllegalArgumentException) {
                 throw GameApiException.temporary("STORY_PATCH_REJECTED", "这一轮没有形成一致结果",

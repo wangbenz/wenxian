@@ -23,7 +23,7 @@ import java.util.UUID;
  */
 @Service
 public class StoryTurnDiagnosticService {
-    public static final String PROMPT_VERSION = "trusted-story-turn-v2";
+    public static final String PROMPT_VERSION = "trusted-story-turn-v3";
 
     private final StoryTurnDiagnosticRepository repository;
     private final ObjectMapper mapper;
@@ -131,6 +131,7 @@ public class StoryTurnDiagnosticService {
 
         public void actionResolved(StoryActionContract contract) {
             actionContract.put("actionMode", contract.actionMode().name());
+            actionContract.put("actionScope", contract.actionScope().name());
             actionContract.put("itemActionDetected", contract.itemActionDetected());
             actionContract.put("conflictPresent", contract.conflict().present());
             actionContract.set("references", owner.mapper.valueToTree(contract.references().stream()

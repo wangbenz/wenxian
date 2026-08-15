@@ -558,6 +558,24 @@ create table story_entity (
     constraint fk_story_entity_save foreign key (save_id) references story_save(id) on delete cascade
 );
 
+create table story_entity_alias (
+    id varchar(80) primary key,
+    save_id varchar(80) not null,
+    entity_id varchar(80) not null,
+    alias_name varchar(160) not null,
+    normalized_alias varchar(160) not null,
+    alias_type varchar(32) not null,
+    source_turn integer,
+    active boolean not null default true,
+    created_at timestamp not null,
+    updated_at timestamp not null,
+    unique(save_id, entity_id, normalized_alias),
+    constraint fk_story_entity_alias_save foreign key (save_id) references story_save(id) on delete cascade,
+    constraint fk_story_entity_alias_entity foreign key (entity_id) references story_entity(id) on delete cascade
+);
+
+create index idx_story_entity_alias_lookup on story_entity_alias(save_id, normalized_alias, active);
+
 create table story_memory (
     id varchar(80) primary key,
     save_id varchar(80) not null,

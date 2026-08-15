@@ -14,6 +14,7 @@ import java.util.List;
 public record StoryActionContract(
         String intentSummary,
         ActionMode actionMode,
+        ActionScope actionScope,
         boolean itemActionDetected,
         List<EntityReference> references,
         List<ItemTransition> itemTransitions,
@@ -25,6 +26,7 @@ public record StoryActionContract(
     public StoryActionContract {
         intentSummary = text(intentSummary);
         actionMode = actionMode == null ? ActionMode.ATTEMPT : actionMode;
+        actionScope = actionScope == null ? ActionScope.DO_NOW : actionScope;
         references = safe(references);
         itemTransitions = safe(itemTransitions);
         characterPreconditions = safe(characterPreconditions);
@@ -39,12 +41,21 @@ public record StoryActionContract(
         conflict = conflict == null ? new Conflict(false, "", "") : conflict;
     }
 
+    /** 兼容行动时间/事实范围加入前的完整调用方。 */
+    public StoryActionContract(String intentSummary, ActionMode actionMode, boolean itemActionDetected,
+                               List<EntityReference> references, List<ItemTransition> itemTransitions,
+                               List<CharacterPrecondition> characterPreconditions,
+                               PlayerAgencyBoundary agencyBoundary, String stopBoundary, Conflict conflict) {
+        this(intentSummary, actionMode, ActionScope.DO_NOW, itemActionDetected, references, itemTransitions,
+                characterPreconditions, agencyBoundary, stopBoundary, conflict);
+    }
+
     /** 兼容行动语义模式加入前的调用方；普通游戏行动默认视为尝试。 */
     public StoryActionContract(String intentSummary, boolean itemActionDetected,
                                List<EntityReference> references, List<ItemTransition> itemTransitions,
                                List<CharacterPrecondition> characterPreconditions,
                                PlayerAgencyBoundary agencyBoundary, String stopBoundary, Conflict conflict) {
-        this(intentSummary, ActionMode.ATTEMPT, itemActionDetected, references, itemTransitions,
+        this(intentSummary, ActionMode.ATTEMPT, ActionScope.DO_NOW, itemActionDetected, references, itemTransitions,
                 characterPreconditions, agencyBoundary, stopBoundary, conflict);
     }
 
@@ -66,6 +77,15 @@ public record StoryActionContract(
         ATTEMPT,
         ASSERT_FACT,
         AMEND_FACT
+    }
+
+    /** 玩家输入作用于当前行动、未来推进、过去断言、世界修订或事实纠错中的哪一层。 */
+    public enum ActionScope {
+        DO_NOW,
+        ADVANCE_FUTURE,
+        ASSERT_PAST,
+        REVISE_WORLD,
+        CORRECT_FACT
     }
 
     /**

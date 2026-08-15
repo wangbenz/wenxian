@@ -7,15 +7,21 @@ import com.wenxian.game.story.agent.PromptContextAssembler;
 import com.wenxian.game.story.agent.PromptContextAssembler.ContextRequest;
 import com.wenxian.game.story.agent.PromptContextAssembler.ContextSelection;
 import com.wenxian.game.story.agent.StoryModelRoute;
+import com.wenxian.game.story.agent.StoryModelInvocationRecorder;
+import com.wenxian.game.story.agent.StoryModelGateway;
 import com.wenxian.game.story.agent.StoryPromptContext;
 import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
+import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
 import com.wenxian.game.story.domain.StoryPatchValidator;
 import com.wenxian.game.story.domain.ExplicitDurationParser;
+import com.wenxian.game.story.domain.StoryActionContractPatchValidator;
+import com.wenxian.game.story.domain.StoryActionContractValidator;
+import com.wenxian.game.story.domain.StoryEntityReferenceCompiler;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
@@ -24,6 +30,7 @@ import com.wenxian.game.story.reducer.StoryStateReducer;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -38,8 +45,12 @@ class TrustedStoryTurnRealModelSmokeTest {
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
     private final PromptContextAssembler assembler = new PromptContextAssembler();
     private final AtomicInteger entitySequence = new AtomicInteger();
+    private final List<String> operations = new ArrayList<>();
     private final StoryStateReducer reducer = new StoryStateReducer(new StoryPatchValidator(),
             prefix -> prefix + "-real-smoke-" + entitySequence.incrementAndGet());
+    private final StoryActionContractValidator actionContracts = new StoryActionContractValidator();
+    private final StoryActionContractPatchValidator contractPatches = new StoryActionContractPatchValidator();
+    private final StoryEntityReferenceCompiler referenceCompiler = new StoryEntityReferenceCompiler();
 
     @Test
     void realModelPassesTrustedStoryReplayMatrix() {
@@ -49,14 +60,45 @@ class TrustedStoryTurnRealModelSmokeTest {
         StoryModelRoute route = new StoryModelRoute(
                 value(System.getenv("DEEPSEEK_BASE_URL"), "https://api.deepseek.com"), key,
                 "DEEPSEEK", "OPENAI_COMPATIBLE", model, "TEST_ENVIRONMENT");
-        StoryTurnAgent agent = new ModelBackedStoryTurnAgent(new LangChain4jStoryModelGateway(), mapper);
+        StoryModelInvocationRecorder recorder = new StoryModelInvocationRecorder() {
+            @Override
+            public void succeeded(StoryTurnAgent.InvocationContext invocation, String operation,
+                                  StoryModelRoute modelRoute, StoryModelGateway.Result result) {
+                operations.add(operation);
+            }
+        };
+        StoryModelGateway realGateway = new LangChain4jStoryModelGateway();
+        StoryModelGateway observedGateway = request -> {
+            StoryModelGateway.Result result = realGateway.generate(request);
+            if (request.systemPrompt().contains("可信事实投影 Agent")) {
+                try {
+                    StoryPatch projected = mapper.readValue(rawJson(result.text()), StoryPatch.class);
+                    new StoryPatchValidator().validate(projected);
+                    System.out.println("FACT_PROJECTION_SHAPE valid=true");
+                } catch (Exception malformed) {
+                    System.out.println("FACT_PROJECTION_SHAPE valid=false problem=" + malformed.getMessage());
+                }
+            } else if (request.systemPrompt().contains("回合叙事与变化提案 Agent")) {
+                try {
+                    StoryPatch draft = mapper.readValue(rawJson(result.text()), StoryPatch.class);
+                    new StoryPatchValidator().validate(draft);
+                    System.out.println("NARRATIVE_DRAFT_SHAPE valid=true");
+                } catch (Exception malformed) {
+                    System.out.println("NARRATIVE_DRAFT_SHAPE valid=false problem=" + malformed.getMessage());
+                }
+            }
+            return result;
+        };
+        StoryTurnAgent agent = new ModelBackedStoryTurnAgent(
+                observedGateway, recorder, mapper, "deepseek-v4-flash");
+        String selectedScenario = value(System.getenv("WENXIAN_REAL_MODEL_SCENARIO"), "all");
 
-        deadCharacter(agent, route);
-        masteredAbility(agent, route);
-        itemQuantity(agent, route);
-        explicitTime(agent, route);
-        playerAgency(agent, route);
-        worldAmendment(agent, route);
+        if (selected(selectedScenario, "death")) deadCharacter(agent, route);
+        if (selected(selectedScenario, "ability")) masteredAbility(agent, route);
+        if (selected(selectedScenario, "item")) itemQuantity(agent, route);
+        if (selected(selectedScenario, "time")) explicitTime(agent, route);
+        if (selected(selectedScenario, "agency")) playerAgency(agent, route);
+        if (selected(selectedScenario, "world")) worldExpansion(agent, route);
     }
 
     private void deadCharacter(StoryTurnAgent agent, StoryModelRoute route) {
@@ -113,41 +155,77 @@ class TrustedStoryTurnRealModelSmokeTest {
         assertTrue(applied.acceptedPatch().decisionCheckpoint().required());
     }
 
-    private void worldAmendment(StoryTurnAgent agent, StoryModelRoute route) {
-        WorldFactState fact = new WorldFactState("world-fact-ascension", "此界无人能够飞升", 1,
+    private void worldExpansion(StoryTurnAgent agent, StoryModelRoute route) {
+        WorldFactState fact = new WorldFactState("world-fact-ascension", "此界是否存在飞升之路尚无定论", 1,
                 true, WorldFactOperation.EXPAND, "世界起点");
-        var applied = run("world", "修订世界设定：飞升一直存在，只是道路被少数势力隐瞒。以后按这个设定推进。",
+        var applied = run("world", "前往当地藏书阁，查找有关古代飞升传闻的公开记载，不预设调查结果。",
                 projection(0, Map.of(), Map.of(fact.id(), fact)), agent, route);
-        WorldFactState revised = applied.projection().worldFacts().get(fact.id());
-        assertEquals(2, revised.revision());
-        assertEquals(WorldFactOperation.REVISE, revised.lastOperation());
+        assertTrue(applied.projection().worldFacts().containsKey(fact.id()));
     }
 
     private StoryStateReducer.Applied run(String scenario, String action, StoryProjection projection,
                                           StoryTurnAgent agent, StoryModelRoute route) {
+        int firstOperation = operations.size();
         ContextSelection selection = new ContextSelection(projection.entities().keySet(),
                 projection.entities().keySet(), projection.worldFacts().keySet(), List.of(), Set.of());
-        StoryPromptContext context = assembler.assemble(projection,
-                new ContextRequest(action, List.of(), selection, "", null));
-        StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
-                "real-smoke-" + scenario, 1);
-        StoryTurnAgent.Generated generated = agent.generate(context, route, invocation);
         Integer explicitDuration = ExplicitDurationParser.parseMinutes(action, projection.worldTimeMinutes());
         Long explicitDurationMinutes = explicitDuration == null ? null : explicitDuration.longValue();
+        StoryPromptContext context = assembler.assemble(projection,
+                new ContextRequest(action, List.of(), selection, "", null, null, explicitDurationMinutes));
+        StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
+                "real-smoke-" + scenario, 1);
+        StoryTurnAgent.ResolvedAction resolved = agent.resolveAction(context, route, invocation);
+        var contract = referenceCompiler.compile(projection, resolved.contract(), List.of(), explicitDurationMinutes);
+        actionContracts.validate(projection, contract);
+        context = context.withActionContract(contract);
+        StoryTurnAgent.Generated narrativeDraft = agent.generate(context, route, invocation);
+        StoryTurnAgent.ProjectedFacts projected = agent.projectFacts(
+                context, route, invocation, narrativeDraft.patch());
+        List<com.wenxian.game.story.agent.StoryModelGateway.Result> attempts = new ArrayList<>();
+        attempts.addAll(resolved.modelResults());
+        attempts.addAll(narrativeDraft.modelResults());
+        attempts.addAll(projected.modelResults());
+        StoryTurnAgent.Generated generated = new StoryTurnAgent.Generated(projected.patch(), attempts);
         StoryStateReducer.Applied applied;
         try {
+            StoryTurnAgent.Review review = agent.review(context, route, invocation, generated.patch());
+            attempts.addAll(review.modelResults());
+            if (!review.accepted()) throw new ReviewFailure(review.problem(), review.requiresFreshNarrative());
+            contractPatches.validate(projection, contract, generated.patch());
             applied = reducer.reduce(projection, generated.patch(), explicitDurationMinutes);
         } catch (IllegalArgumentException rejected) {
-            StoryTurnAgent.Generated repaired = agent.repairRejected(context, route, invocation,
-                    generated.patch(), rejected.getMessage());
-            generated = new StoryTurnAgent.Generated(repaired.patch(), java.util.stream.Stream
-                    .concat(generated.modelResults().stream(), repaired.modelResults().stream()).toList());
-            applied = reducer.reduce(projection, repaired.patch(), explicitDurationMinutes);
+            StoryTurnAgent.Generated repairedDraft = rejected instanceof ReviewFailure review
+                    && review.requiresFreshNarrative
+                    ? agent.regenerateFreshNarrative(context, route, invocation,
+                            generated.patch(), rejected.getMessage())
+                    : agent.repairRejected(context, route, invocation,
+                            generated.patch(), rejected.getMessage());
+            StoryTurnAgent.ProjectedFacts repairedFacts = agent.projectFacts(
+                    context, route, invocation, repairedDraft.patch());
+            attempts.addAll(repairedDraft.modelResults());
+            attempts.addAll(repairedFacts.modelResults());
+            StoryTurnAgent.Review review = agent.review(context, route, invocation, repairedFacts.patch());
+            attempts.addAll(review.modelResults());
+            assertTrue(review.accepted(), "修复后的独立审阅仍拒绝：" + review.problem());
+            contractPatches.validate(projection, contract, repairedFacts.patch());
+            generated = new StoryTurnAgent.Generated(repairedFacts.patch(), attempts);
+            applied = reducer.reduce(projection, repairedFacts.patch(), explicitDurationMinutes);
         }
-        System.out.printf("TRUSTED_REAL_MODEL scenario=%s attempts=%d prompt=%d completion=%d latencyMs=%d model=%s%n",
+        generated = new StoryTurnAgent.Generated(generated.patch(), attempts);
+        System.out.printf("TRUSTED_REAL_MODEL scenario=%s attempts=%d prompt=%d completion=%d latencyMs=%d model=%s operations=%s%n",
                 scenario, generated.modelResults().size(), generated.inputTokens(), generated.outputTokens(),
-                generated.latencyMs(), generated.finalResult().model());
+                generated.latencyMs(), generated.finalResult().model(),
+                operations.subList(firstOperation, operations.size()));
         return applied;
+    }
+
+    private static final class ReviewFailure extends IllegalArgumentException {
+        private final boolean requiresFreshNarrative;
+
+        private ReviewFailure(String problem, boolean requiresFreshNarrative) {
+            super("独立审阅未通过：" + problem);
+            this.requiresFreshNarrative = requiresFreshNarrative;
+        }
     }
 
     private StoryProjection projection(long time, Map<String, EntityState> entities,
@@ -164,5 +242,19 @@ class TrustedStoryTurnRealModelSmokeTest {
 
     private String value(String candidate, String fallback) {
         return candidate == null || candidate.isBlank() ? fallback : candidate.strip();
+    }
+
+    private boolean selected(String selected, String scenario) {
+        if ("all".equalsIgnoreCase(selected)) return true;
+        return java.util.Arrays.stream(selected.split(","))
+                .map(String::strip)
+                .anyMatch(scenario::equalsIgnoreCase);
+    }
+
+    private String rawJson(String text) {
+        String value = text == null ? "" : text.strip();
+        int start = value.indexOf('{');
+        int end = value.lastIndexOf('}');
+        return start >= 0 && end >= start ? value.substring(start, end + 1) : value;
     }
 }

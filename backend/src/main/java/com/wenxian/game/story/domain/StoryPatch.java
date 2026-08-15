@@ -64,6 +64,7 @@ public record StoryPatch(
             AbilityState abilityState,
             LifecycleValue lifecycle,
             RelationshipValue relationship,
+            NameChange nameChange,
             String referenceKey
     ) {
         public EntityPatch {
@@ -74,9 +75,18 @@ public record StoryPatch(
         public EntityPatch(EntityOperation operation, String entityId, String entityType, String name,
                            String status, String summary, JsonNode attributes, QuantityValue quantity,
                            Boolean inPossession, CustodyValue custody, AbilityState abilityState,
+                           LifecycleValue lifecycle, RelationshipValue relationship, String referenceKey) {
+            this(operation, entityId, entityType, name, status, summary, attributes, quantity,
+                    inPossession, custody, abilityState, lifecycle, relationship, null, referenceKey);
+        }
+
+        /** 兼容回合内引用键加入前的完整实体补丁。 */
+        public EntityPatch(EntityOperation operation, String entityId, String entityType, String name,
+                           String status, String summary, JsonNode attributes, QuantityValue quantity,
+                           Boolean inPossession, CustodyValue custody, AbilityState abilityState,
                            LifecycleValue lifecycle, RelationshipValue relationship) {
             this(operation, entityId, entityType, name, status, summary, attributes, quantity,
-                    inPossession, custody, abilityState, lifecycle, relationship, "");
+                    inPossession, custody, abilityState, lifecycle, relationship, null, "");
         }
 
         /** 兼容尚未显式提供持有者的旧提案和测试；新模型提案应优先填写 custody。 */
@@ -84,7 +94,7 @@ public record StoryPatch(
                            String status, String summary, JsonNode attributes, QuantityValue quantity,
                            Boolean inPossession, AbilityState abilityState, LifecycleValue lifecycle) {
             this(operation, entityId, entityType, name, status, summary, attributes, quantity,
-                    inPossession, null, abilityState, lifecycle, null, "");
+                    inPossession, null, abilityState, lifecycle, null, null, "");
         }
 
         /** 兼容已经显式提供物品保管关系、但尚未提供人物关系字段的调用方。 */
@@ -93,7 +103,7 @@ public record StoryPatch(
                            Boolean inPossession, CustodyValue custody, AbilityState abilityState,
                            LifecycleValue lifecycle) {
             this(operation, entityId, entityType, name, status, summary, attributes, quantity,
-                    inPossession, custody, abilityState, lifecycle, null, "");
+                    inPossession, custody, abilityState, lifecycle, null, null, "");
         }
     }
 
@@ -123,6 +133,8 @@ public record StoryPatch(
 
     /** 能力是否仍然掌握与能否临时施展分开表达，不再从自然语言状态猜测。 */
     public enum AbilityState {
+        KNOWN,
+        LEARNING,
         MASTERED,
         TEMPORARILY_BLOCKED,
         LOST,
@@ -145,6 +157,9 @@ public record StoryPatch(
      * changeReason 必须说明本轮发生了什么，供独立审阅与回放使用。
      */
     public record RelationshipValue(String label, String changeReason) {}
+
+    /** 只有玩家明确改名或已完成剧情明确形成新称呼时，才允许改变稳定实体的当前名称。 */
+    public record NameChange(boolean explicit, String reason) {}
 
     /** 世界扩展、世界内转变与玩家显式修订使用同一审计契约。 */
     public record WorldFactPatch(

@@ -65,6 +65,7 @@ public final class StoryStateReducer {
         List<MemoryState> memories = new ArrayList<>(before.memories());
         List<EntityPatch> acceptedEntities = new ArrayList<>();
         List<WorldFactPatch> acceptedWorldFacts = new ArrayList<>();
+        List<EntityAliasChange> acceptedAliases = new ArrayList<>();
 
         Map<String, String> aliases = new LinkedHashMap<>();
         List<String> createdIds = new ArrayList<>(proposal.entities().size());
@@ -82,7 +83,7 @@ public final class StoryStateReducer {
         }
         for (int index = 0; index < proposal.entities().size(); index++) {
             acceptedEntities.add(applyEntity(entities, proposal.entities().get(index),
-                    createdIds.get(index), aliases));
+                    createdIds.get(index), aliases, acceptedAliases));
         }
         for (WorldFactPatch patch : proposal.worldFacts()) acceptedWorldFacts.add(applyWorldFact(worldFacts, patch));
         proposal.knowledge().forEach(value -> knowledge.put(knowledgeKey(value.subjectRef(), value.topicRef()),
@@ -101,11 +102,12 @@ public final class StoryStateReducer {
         StoryPatch accepted = new StoryPatch(proposal.title(), proposal.narrative(), proposal.time(),
                 proposal.coreState(), acceptedEntities, acceptedWorldFacts, proposal.knowledge(),
                 proposal.memories(), proposal.decisionCheckpoint(), proposal.choices(), proposal.rollingSummary());
-        return new Applied(next, accepted);
+        return new Applied(next, accepted, acceptedAliases);
     }
 
     private EntityPatch applyEntity(Map<String, EntityState> entities, EntityPatch patch,
-                                    String allocatedId, Map<String, String> aliases) {
+                                    String allocatedId, Map<String, String> aliases,
+                                    List<EntityAliasChange> acceptedAliases) {
         if (patch.operation() == EntityOperation.CREATE) {
             String id = allocatedId;
             if (!present(id)) throw new IllegalArgumentException("新增实体缺少服务端预分配ID");
@@ -116,7 +118,7 @@ public final class StoryStateReducer {
                     patch.relationship());
             validateEntitySemantics(created, null, patch);
             if (entities.putIfAbsent(id, created) != null) throw new IllegalArgumentException("服务端生成了重复实体ID");
-            return withEntityIdAndCustody(patch, id, custody);
+            return withEntityIdAndCustody(patch, id, custody, patch.name(), patch.nameChange());
         }
 
         EntityState previous = entities.get(patch.entityId());
@@ -132,8 +134,9 @@ public final class StoryStateReducer {
         CustodyValue custody = patch.custody() == null
                 ? normalizedCustody(previous.custody(), previous.inPossession())
                 : normalizedCustody(resolveAlias(patch.custody(), aliases), patch.inPossession());
+        String acceptedName = acceptedName(previous, patch, acceptedAliases);
         EntityState updated = new EntityState(previous.id(), previous.entityType(),
-                text(patch.name(), previous.name()), text(patch.status(), previous.status()),
+                acceptedName, text(patch.status(), previous.status()),
                 text(patch.summary(), previous.summary()), merge(previous.attributes(), patch.attributes()), visible,
                 patch.quantity() == null ? previous.quantity() : patch.quantity(),
                 possession(custody, patch.inPossession() == null ? previous.inPossession() : patch.inPossession()), custody,
@@ -142,7 +145,27 @@ public final class StoryStateReducer {
                 patch.relationship() == null ? previous.relationship() : patch.relationship());
         validateEntitySemantics(updated, previous, patch);
         entities.put(updated.id(), updated);
-        return withEntityIdAndCustody(patch, patch.entityId(), patch.custody() == null ? null : custody);
+        String acceptedPatchName = acceptedName.equals(previous.name()) ? null : acceptedName;
+        StoryPatch.NameChange acceptedNameChange = acceptedPatchName == null ? null : patch.nameChange();
+        return withEntityIdAndCustody(patch, patch.entityId(), patch.custody() == null ? null : custody,
+                acceptedPatchName, acceptedNameChange);
+    }
+
+    /**
+     * 普通描述中的名称漂移不会改变稳定实体。只有候选明确声明这是一次改名且给出依据，
+     * 才更新当前名称并把旧名称作为长期别名交给事务层保存。
+     */
+    private String acceptedName(EntityState previous, EntityPatch patch,
+                                List<EntityAliasChange> acceptedAliases) {
+        String requested = text(patch.name(), previous.name());
+        if (requested.equals(previous.name())) return previous.name();
+        if (patch.nameChange() == null || !patch.nameChange().explicit()
+                || !present(patch.nameChange().reason())) {
+            return previous.name();
+        }
+        acceptedAliases.add(new EntityAliasChange(previous.id(), previous.name(),
+                "RENAMED_FROM", patch.nameChange().reason().strip()));
+        return requested;
     }
 
     private void validateEntitySemantics(EntityState next, EntityState previous, EntityPatch patch) {
@@ -164,6 +187,13 @@ public final class StoryStateReducer {
         if ("ABILITY".equals(type) && patch.operation() == EntityOperation.CREATE && next.abilityState() == null) {
             throw new IllegalArgumentException("新增能力必须明确当前掌握状态");
         }
+        if ("ABILITY".equals(type) && patch.operation() == EntityOperation.CREATE
+                && next.abilityState() == StoryPatch.AbilityState.UNKNOWN) {
+            throw new IllegalArgumentException("新增能力不能使用仅供旧数据兼容的UNKNOWN状态");
+        }
+        if ("ABILITY".equals(type) && previous != null) {
+            validateAbilityProgress(previous.abilityState(), next.abilityState());
+        }
         if ("CHARACTER".equals(type)) {
             if (patch.operation() == EntityOperation.CREATE && next.lifecycle() == null) {
                 throw new IllegalArgumentException("新增重要人物必须明确客观生命周期");
@@ -174,6 +204,18 @@ public final class StoryStateReducer {
                 throw new IllegalArgumentException("已死亡人物改变生命周期必须记录明确依据");
             }
             validateRelationship(previous, next, patch);
+        }
+    }
+
+    /** 已经掌握的能力不会因模型描述波动退回“知晓”或“学习中”；临时受限也不等于遗忘。 */
+    private void validateAbilityProgress(StoryPatch.AbilityState previous, StoryPatch.AbilityState next) {
+        if (previous == null || next == null || previous == next) return;
+        if ((previous == StoryPatch.AbilityState.MASTERED
+                || previous == StoryPatch.AbilityState.TEMPORARILY_BLOCKED)
+                && (next == StoryPatch.AbilityState.KNOWN
+                || next == StoryPatch.AbilityState.LEARNING
+                || next == StoryPatch.AbilityState.UNKNOWN)) {
+            throw new IllegalArgumentException("已掌握的能力不能无依据退回知晓、学习中或未知状态");
         }
     }
 
@@ -221,10 +263,11 @@ public final class StoryStateReducer {
                 text(patch.lifeGoal(), before.lifeGoal()));
     }
 
-    private EntityPatch withEntityIdAndCustody(EntityPatch patch, String id, CustodyValue custody) {
-        return new EntityPatch(patch.operation(), id, patch.entityType(), patch.name(), patch.status(), patch.summary(),
+    private EntityPatch withEntityIdAndCustody(EntityPatch patch, String id, CustodyValue custody,
+                                               String name, StoryPatch.NameChange nameChange) {
+        return new EntityPatch(patch.operation(), id, patch.entityType(), name, patch.status(), patch.summary(),
                 patch.attributes(), patch.quantity(), patch.inPossession(), custody,
-                patch.abilityState(), patch.lifecycle(), patch.relationship(), patch.referenceKey());
+                patch.abilityState(), patch.lifecycle(), patch.relationship(), nameChange, patch.referenceKey());
     }
 
     private CustodyValue resolveAlias(CustodyValue custody, Map<String, String> aliases) {
@@ -304,5 +347,18 @@ public final class StoryStateReducer {
         return copy(patch);
     }
 
-    public record Applied(StoryProjection projection, StoryPatch acceptedPatch) {}
+    /** 事务层需要和实体更新一起保存的长期别名变化。 */
+    public record EntityAliasChange(String entityId, String aliasName, String aliasType, String reason) {}
+
+    public record Applied(StoryProjection projection, StoryPatch acceptedPatch,
+                          List<EntityAliasChange> aliasChanges) {
+        public Applied {
+            aliasChanges = aliasChanges == null ? List.of() : List.copyOf(aliasChanges);
+        }
+
+        /** 兼容尚未产生长期别名的调用方。 */
+        public Applied(StoryProjection projection, StoryPatch acceptedPatch) {
+            this(projection, acceptedPatch, List.of());
+        }
+    }
 }

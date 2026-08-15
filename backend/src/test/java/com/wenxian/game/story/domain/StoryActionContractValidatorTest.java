@@ -250,6 +250,21 @@ class StoryActionContractValidatorTest {
                 projection(new CustodyValue(HolderType.PLAYER, null)), contract, Set.of()));
     }
 
+    @Test
+    void rejectsUnresolvedPlayerOwnedItemEvenIfModelMisclassifiesActionAsAttempt() {
+        EntityReference tile = new EntityReference("我行囊里的青色瓦片碎片", ReferenceResolution.UNRESOLVED,
+                null, "ITEM", "青色瓦片碎片", "SOURCE",
+                new CustodyValue(HolderType.PLAYER, null), List.of());
+        StoryActionContract contract = new StoryActionContract("从行囊取出瓦片观察", ActionMode.ATTEMPT,
+                true, List.of(tile), List.of(), List.of(), null, "观察后停下",
+                new Conflict(false, "", ""));
+
+        StoryActionPreconditionException error = assertThrows(StoryActionPreconditionException.class,
+                () -> validator.validate(projection(new CustodyValue(HolderType.PLAYER, null)), contract));
+
+        assertTrue(error.getMessage().contains("没有证据支持你已经持有"));
+    }
+
     private StoryActionContract contract(CustodyValue from, CustodyValue target) {
         return new StoryActionContract("处置断剑尖", true,
                 List.of(existing("断剑尖", "item-sword-tip", "ITEM", "SOURCE"),

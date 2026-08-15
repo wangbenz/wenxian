@@ -26,6 +26,17 @@ public interface StoryTurnAgent {
     }
 
     /**
+     * 从已经完成的剧情草稿中提取需要长期保存的事实变化。
+     *
+     * <p>默认实现保持确定性测试替身兼容；生产 Agent 使用独立轻量模型完成投影。剧情草稿不是权威事实，
+     * 只有本方法返回的提案继续通过审阅、Reducer 和事务提交后才会落库。</p>
+     */
+    default ProjectedFacts projectFacts(StoryPromptContext context, StoryModelRoute route,
+                                        InvocationContext invocation, StoryPatch narrativeDraft) {
+        return new ProjectedFacts(narrativeDraft, List.of());
+    }
+
+    /**
      * 在正文生成前把玩家自然语言解释为可校验的事实契约。默认结果不增加约束，供确定性测试替身兼容；
      * 真实模型 Agent 应独立调用轻量语义模型，并保留调用用量。
      */
@@ -126,6 +137,14 @@ public interface StoryTurnAgent {
     record ResolvedAction(StoryActionContract contract, List<StoryModelGateway.Result> modelResults) {
         public ResolvedAction {
             if (contract == null) throw new IllegalArgumentException("行动事实契约不能为空");
+            modelResults = modelResults == null ? List.of() : List.copyOf(modelResults);
+        }
+    }
+
+    /** 一次独立事实投影及其模型调用；测试替身可返回空调用并直接沿用草稿。 */
+    record ProjectedFacts(StoryPatch patch, List<StoryModelGateway.Result> modelResults) {
+        public ProjectedFacts {
+            if (patch == null) throw new IllegalArgumentException("事实投影不能为空");
             modelResults = modelResults == null ? List.of() : List.copyOf(modelResults);
         }
     }

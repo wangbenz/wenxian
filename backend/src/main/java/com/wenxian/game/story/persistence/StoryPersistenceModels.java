@@ -129,4 +129,20 @@ public final class StoryPersistenceModels {
             Instant createdAt,
             Instant updatedAt
     ) {}
+
+    /**
+     * 命卷实体的长期别名。稳定实体 ID 永远不因改名变化；别名只负责把历史称谓解析回同一实体。
+     */
+    public record EntityAlias(
+            String id,
+            String saveId,
+            String entityId,
+            String aliasName,
+            String normalizedAlias,
+            String aliasType,
+            Integer sourceTurn,
+            boolean active,
+            Instant createdAt,
+            Instant updatedAt
+    ) {}
 }

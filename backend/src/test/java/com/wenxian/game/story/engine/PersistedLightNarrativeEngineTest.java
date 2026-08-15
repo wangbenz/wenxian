@@ -25,6 +25,7 @@ import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
 import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleValue;
+import com.wenxian.game.story.domain.StoryPatch.NameChange;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.RelationshipValue;
 import com.wenxian.game.story.domain.StoryPatch.TimePassage;
@@ -322,7 +323,7 @@ class PersistedLightNarrativeEngineTest {
             assertTrue(unknown.inPossession());
             assertEquals(1, jdbc.queryForObject("select count(*) from story_turn where save_id=?",
                     Integer.class, created.saveId()));
-            assertEquals("trusted-story-turn-v2", jdbc.queryForObject(
+            assertEquals("trusted-story-turn-v3", jdbc.queryForObject(
                     "select prompt_version from story_turn where save_id=?", String.class, created.saveId()));
             String storedPatch = jdbc.queryForObject(
                     "select state_patch_json from story_turn where save_id=?", String.class, created.saveId());
@@ -716,8 +717,10 @@ class PersistedLightNarrativeEngineTest {
             String proposalTrace = jdbc.queryForObject("""
                     select proposal_trace_json from story_turn_diagnostic where save_id=? and request_id=?
                     """, String.class, created.saveId(), "request-semantic-repair");
-            assertTrue(proposalTrace.contains("INITIAL_PROPOSAL"));
-            assertTrue(proposalTrace.contains("REPAIRED_PROPOSAL"));
+            assertTrue(proposalTrace.contains("INITIAL_NARRATIVE_DRAFT"));
+            assertTrue(proposalTrace.contains("INITIAL_FACT_PROJECTION"));
+            assertTrue(proposalTrace.contains("REPAIRED_NARRATIVE_DRAFT"));
+            assertTrue(proposalTrace.contains("REPAIRED_FACT_PROJECTION"));
             String reviewTrace = jdbc.queryForObject("""
                     select review_trace_json from story_turn_diagnostic where save_id=? and request_id=?
                     """, String.class, created.saveId(), "request-semantic-repair");
@@ -920,7 +923,60 @@ class PersistedLightNarrativeEngineTest {
                     created.saveId(), new TurnRequest("闭关时留意外界变化", "request-invalid-repair", 1)));
 
             assertEquals(1, repairs.get());
-            assertEquals("STORY_PATCH_REJECTED", error.code());
+            assertEquals("STORY_INTERNAL_RECOVERY_FAILED", error.code());
+            assertEquals("SYSTEM", error.category());
+            assertEquals("TURN_PROPOSAL", error.details().get("stage"));
+            assertTrue(error.retryable());
+            assertFalse(error.turnConsumed());
+            assertFalse(error.stateChanged());
+            var unchanged = saves.findOwned(USER.userId(), created.saveId()).orElseThrow();
+            assertEquals(1, unchanged.revision());
+            assertEquals(0, unchanged.turnNumber());
+            assertEquals(0, jdbc.queryForObject("select count(*) from story_turn where save_id=?",
+                    Integer.class, created.saveId()));
+            assertEquals(0, jdbc.queryForObject(
+                    "select coalesce(sum(used_count), 0) from user_daily_quota where user_id=?",
+                    Integer.class, USER.userId()));
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
+    void trustedTurnReportsFactProjectionProtocolFailureWithoutChangingSaveOrQuota() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            StoryPatch validDraft = turnPatch("雨后屋檐", "你停在檐下，只观察雨水从瓦边滴落。", 10,
+                    List.of(), List.of(), new DecisionCheckpoint(false, null));
+            StoryTurnAgent projectionFailure = new StoryTurnAgent() {
+                @Override
+                public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+                    return new Generated(validDraft, List.of(
+                            new com.wenxian.game.story.agent.StoryModelGateway.Result(
+                                    "{}", "projection-draft", "test-model", 40, 90, 20)));
+                }
+
+                @Override
+                public ProjectedFacts projectFacts(StoryPromptContext context, StoryModelRoute route,
+                                                   InvocationContext invocation, StoryPatch narrativeDraft) {
+                    throw new IllegalArgumentException("事实投影连续两次返回了无效结构");
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    projectionFailure, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            GameApiException error = assertThrows(GameApiException.class, () -> engine.takeTurn(USER,
+                    created.saveId(), new TurnRequest("只观察屋檐", "request-projection-protocol-failure", 1)));
+
+            assertEquals("STORY_INTERNAL_RECOVERY_FAILED", error.code());
+            assertEquals("SYSTEM", error.category());
+            assertEquals("FACT_PROJECTION", error.details().get("stage"));
             assertTrue(error.retryable());
             assertFalse(error.turnConsumed());
             assertFalse(error.stateChanged());
@@ -991,6 +1047,37 @@ class PersistedLightNarrativeEngineTest {
                     Integer.class, created.saveId()));
         } finally {
             database.shutdown();
+        }
+    }
+
+    @Test
+    void explicitRenameCommitsCurrentNameAndHistoricalAliasTogether() {
+        EntityPatch createWolf = new EntityPatch(EntityOperation.CREATE, null, "CHARACTER", "小冰霜狼",
+                "与你同行", "在雪地相遇后选择与你同行。", null, null, null,
+                null, null, new LifecycleValue(LifecycleState.ACTIVE, "本轮相遇并确认仍然存活"),
+                null, null, "");
+        EntityPatch renameWolf = new EntityPatch(EntityOperation.UPDATE, "character-trusted-test",
+                "CHARACTER", "霜刃", "与你同行", "你亲自为它取名霜刃。", null,
+                null, null, null, null, null, null,
+                new NameChange(true, "玩家明确为灵宠取名"), "");
+        TrustedRuntime runtime = trustedRuntime(
+                turnPatch("雪中相逢", "你在雪地中遇见一只小冰霜狼，它选择与你同行。", 30,
+                        List.of(createWolf), List.of(), new DecisionCheckpoint(false, null)),
+                turnPatch("赐名霜刃", "你为小冰霜狼取名霜刃，它仍是此前与你同行的那一只。", 10,
+                        List.of(renameWolf), List.of(), new DecisionCheckpoint(false, null)));
+        try {
+            advance(runtime, "观察这只小冰霜狼。", "request-create-wolf");
+            advance(runtime, "以后就叫你霜刃。", "request-rename-wolf");
+
+            StoryProjection projection = loadProjection(runtime);
+            assertEquals("霜刃", projection.entities().get("character-trusted-test").name());
+            var aliases = runtime.entities().listActiveAliases(runtime.saveId());
+            assertEquals(1, aliases.size());
+            assertEquals("character-trusted-test", aliases.getFirst().entityId());
+            assertEquals("小冰霜狼", aliases.getFirst().aliasName());
+            assertEquals("小冰霜狼", aliases.getFirst().normalizedAlias());
+        } finally {
+            runtime.database().shutdown();
         }
     }
 

@@ -44,12 +44,15 @@ public class ModelBackedStoryCorrectionAgent implements StoryCorrectionAgent {
             kind,explanation,confirmationPrompt,
             coreState:{location,condition,realm,lifeGoal},
             entities:[{operation,entityId,entityType,name,status,summary,attributes,
-              quantity:{known,value},inPossession,abilityState,lifecycle:{state,changeReason}}],
+              quantity:{known,value},inPossession,abilityState,lifecycle:{state,changeReason},
+              nameChange:{explicit,reason}}],
             worldFacts:[{operation,factId,statement,reason}],
             knowledge:[{subjectRef,topicRef,summary,evidenceRefs}]。
             operation 实体只允许 CREATE、UPDATE、HIDE、RESTORE；abilityState 只允许
-            MASTERED、TEMPORARILY_BLOCKED、LOST、UNKNOWN；人物生命周期 state 只允许
+            KNOWN、LEARNING、MASTERED、TEMPORARILY_BLOCKED、LOST、UNKNOWN；人物生命周期 state 只允许
             ACTIVE、MISSING、DORMANT、DEAD、UNKNOWN；世界 operation 只允许 EXPAND、REVISE。
+            修改已有实体名称时必须是玩家明确要求的改名，并填写 nameChange.explicit=true 与具体依据；
+            普通称谓变化不得改变稳定实体名称。
             """;
 
     private final StoryModelGateway gateway;

@@ -8,6 +8,7 @@ import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
 import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleValue;
+import com.wenxian.game.story.domain.StoryPatch.NameChange;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.RelationshipValue;
 import com.wenxian.game.story.domain.StoryPatch.TimePassage;
@@ -47,6 +48,31 @@ class StoryStateReducerTest {
         assertEquals(AbilityState.MASTERED,
                 applied.projection().entities().get(ability.id()).abilityState());
         assertEquals(60, applied.projection().worldTimeMinutes());
+    }
+
+    @Test
+    void keepsAbilityLearningProgressAndRejectsSilentRegressionAfterMastery() {
+        EntityPatch discover = entityPatch(EntityOperation.CREATE, null, "ABILITY", "寒霜掌",
+                "已经知晓", null, null, AbilityState.KNOWN, null);
+        StoryStateReducer.Applied known = reducer.reduce(projection(Map.of(), Map.of()),
+                patch(List.of(discover), List.of()));
+        EntityState ability = known.projection().entities().get("ability-generated");
+        EntityPatch learning = entityPatch(EntityOperation.UPDATE, ability.id(), "ABILITY", null,
+                "正在参悟", null, null, AbilityState.LEARNING, null);
+        StoryProjection learningProjection = reducer.reduce(known.projection(),
+                patch(List.of(learning), List.of())).projection();
+        EntityPatch mastered = entityPatch(EntityOperation.UPDATE, ability.id(), "ABILITY", null,
+                "已经掌握", null, null, AbilityState.MASTERED, null);
+        StoryProjection masteredProjection = reducer.reduce(learningProjection,
+                patch(List.of(mastered), List.of())).projection();
+
+        assertEquals(AbilityState.MASTERED, masteredProjection.entities().get(ability.id()).abilityState());
+
+        EntityPatch regressed = entityPatch(EntityOperation.UPDATE, ability.id(), "ABILITY", null,
+                "重新学习", null, null, AbilityState.LEARNING, null);
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> reducer.reduce(masteredProjection, patch(List.of(regressed), List.of())));
+        assertEquals("已掌握的能力不能无依据退回知晓、学习中或未知状态", error.getMessage());
     }
 
     @Test
@@ -189,6 +215,31 @@ class StoryStateReducerTest {
         StoryProjection after = reducer.reduce(before, patch(List.of(), List.of())).projection();
 
         assertEquals(initial, after.initialContract());
+    }
+
+    @Test
+    void ignoresIncidentalNameDriftButRecordsExplicitRenameAsAlias() {
+        EntityState wolf = entity("character-wolf", "CHARACTER", "小冰霜狼",
+                null, null, null, LifecycleState.ACTIVE);
+        StoryProjection before = projection(Map.of(wolf.id(), wolf), Map.of());
+        EntityPatch incidental = new EntityPatch(EntityOperation.UPDATE, wolf.id(), "CHARACTER", "霜刃",
+                "同行", null, null, null, null, null, null, null, null);
+
+        StoryStateReducer.Applied ignored = reducer.reduce(before, patch(List.of(incidental), List.of()));
+
+        assertEquals("小冰霜狼", ignored.projection().entities().get(wolf.id()).name());
+        assertTrue(ignored.aliasChanges().isEmpty());
+        assertEquals(null, ignored.acceptedPatch().entities().getFirst().name());
+
+        EntityPatch explicit = new EntityPatch(EntityOperation.UPDATE, wolf.id(), "CHARACTER", "霜刃",
+                "同行", null, null, null, null, null, null, null, null,
+                new NameChange(true, "玩家本轮明确为灵宠命名"), "");
+        StoryStateReducer.Applied renamed = reducer.reduce(before, patch(List.of(explicit), List.of()));
+
+        assertEquals("霜刃", renamed.projection().entities().get(wolf.id()).name());
+        assertEquals(1, renamed.aliasChanges().size());
+        assertEquals("小冰霜狼", renamed.aliasChanges().getFirst().aliasName());
+        assertEquals("RENAMED_FROM", renamed.aliasChanges().getFirst().aliasType());
     }
 
     private StoryProjection projection(Map<String, EntityState> entities,

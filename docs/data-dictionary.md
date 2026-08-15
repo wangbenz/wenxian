@@ -1,7 +1,7 @@
 # 《问仙录》中文数据字典
 
 > 状态：当前命卷统一读写 `story_*`；旧产品表仅用于内部审计，不再向 H5 提供旧版档案入口
-> 最近更新：2026-08-12
+> 最近更新：2026-08-15
 
 本文档记录表职责、关键字段、权威数据和迁移关系。每次修改表结构或关键字段时必须同步更新本文档。所有正式 MySQL 迁移脚本都必须使用中文 `COMMENT` 说明表、关键字段和重要索引用途。
 
@@ -44,6 +44,7 @@
 | 当前状态 | `story_save.state_json` + `story_entity` | Reducer 是否能成为唯一写入口 |
 | 初始事实契约 | `story_save.state_json._trustedProjection.initialContract` | 创建时写入，普通回合只读 |
 | 场景来源引用 | 初始契约 + 最近 `story_turn` + 当前 `choices_json` | 不要求所有来源名词立即建永久实体 |
+| 稳定实体历史别名 | `story_entity_alias` | 只保存已经确认的改名或长期称谓，不使用模糊匹配合并实体 |
 | 人物认知 | `story_memory` 或实体扩展属性 | 必须标明认知主体，不能与客观事实混用 |
 | 物品数量 | `story_entity.attributes_json` | 只在正文明确数量后启用，未知数量不能伪造为 1 |
 | 玩家决定检查点 | `story_turn.state_patch_json` | 用于回放与质量检查，不作为战力规则 |
@@ -278,6 +279,27 @@ Reducer 最终接受和提交的事实概要。
 保留区格式损坏时停止本轮，不得从 `status/summary` 自然语言猜测恢复。
 
 **删除策略**：玩家整理记录时设置 `visible=false` 并更新状态；不物理删除，不修改历史回合。
+
+### 7.1 `story_entity_alias`：实体长期别名表
+
+**职责**：在人物、灵宠、物品或能力发生明确改名后，保持旧称呼仍能解析到同一个稳定实体。别名与实体更新在
+同一命卷事务中保存；普通描写中的称谓漂移不能自动进入本表。
+
+| 字段 | 中文含义 |
+|---|---|
+| `id` | 别名记录 ID |
+| `save_id` | 所属统一命卷 ID |
+| `entity_id` | 对应 `story_entity.id`，改名不会改变该稳定 ID |
+| `alias_name` | 已确认的原始别名 |
+| `normalized_alias` | 同命卷内精确查找使用的归一值，不用于模糊相似度判断 |
+| `alias_type` | `ORIGINAL_NAME/RENAMED_FROM/TITLE/SOURCE_NAME` 等来源类型 |
+| `source_turn` | 首次确认该别名的正式回合；兼容旧数据时可为空 |
+| `active` | 当前是否仍允许用于实体解析 |
+| `created_at/updated_at` | 创建和最后更新时间 |
+
+唯一约束 `(save_id, entity_id, normalized_alias)` 防止同一实体重复保存同一别名；索引
+`(save_id, normalized_alias, active)` 服务当前命卷精确解析。同一个别名若对应多个实体，引用编译器必须视为歧义，
+不能任选一个绑定。删除命卷或实体时由外键级联清理别名。
 
 ## 8. `story_memory`：关键记忆表
 

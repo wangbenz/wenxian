@@ -13,7 +13,7 @@ import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryActionPreconditionException;
 import com.wenxian.game.story.domain.StoryActionContractValidator;
-import com.wenxian.game.story.domain.StoryActionContractCanonicalizer;
+import com.wenxian.game.story.domain.StoryEntityReferenceCompiler;
 import com.wenxian.game.story.domain.StoryActionContractPatchValidator;
 import com.wenxian.game.story.domain.ExplicitDurationParser;
 import com.wenxian.game.story.domain.StoryNarrativeFreshnessValidator;
@@ -58,7 +58,7 @@ public class StoryTurnPreparationService {
     private final StoryStateReducer reducer;
     private final StoryTurnDiagnosticService diagnostics;
     private final StoryActionContractValidator actionContracts = new StoryActionContractValidator();
-    private final StoryActionContractCanonicalizer contractCanonicalizer = new StoryActionContractCanonicalizer();
+    private final StoryEntityReferenceCompiler referenceCompiler = new StoryEntityReferenceCompiler();
     private final StoryActionContractPatchValidator contractPatches = new StoryActionContractPatchValidator();
     private final StoryNarrativeFreshnessValidator narrativeFreshness = new StoryNarrativeFreshnessValidator();
 
@@ -109,6 +109,7 @@ public class StoryTurnPreparationService {
     private Prepared prepareObserved(StoredSave saved, String playerAction, String choiceId, StoryModelRoute route,
                                      StoryTurnDiagnosticService.Session diagnostic) {
         List<Entity> existingEntities = entities.listAll(saved.id());
+        var entityAliases = entities.listActiveAliases(saved.id());
         StoryProjection before = projections.load(saved, existingEntities,
                 memories.recentActive(saved.id(), RECENT_MEMORY_LIMIT));
         var checkpoint = projections.loadDecisionCheckpoint(saved.state());
@@ -128,7 +129,8 @@ public class StoryTurnPreparationService {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         com.wenxian.game.story.domain.StoryActionContract actionContract;
         try {
-            actionContract = contractCanonicalizer.canonicalize(before, resolvedAction.contract());
+            actionContract = referenceCompiler.compile(before, resolvedAction.contract(), entityAliases,
+                    explicitDurationMinutes);
             if (diagnostic != null) diagnostic.actionResolved(actionContract);
             actionContracts.validate(before, actionContract, availableSourceRefs);
         } catch (StoryActionPreconditionException conflict) {
@@ -139,18 +141,22 @@ public class StoryTurnPreparationService {
                     context, route, invocation, resolvedAction.contract(), structuralProblem.getMessage());
             resolvedAction = combine(resolvedAction, repaired);
             try {
-                actionContract = contractCanonicalizer.canonicalize(before, repaired.contract());
+                actionContract = referenceCompiler.compile(before, repaired.contract(), entityAliases,
+                        explicitDurationMinutes);
                 if (diagnostic != null) diagnostic.actionResolved(actionContract);
                 actionContracts.validate(before, actionContract, availableSourceRefs);
             } catch (IllegalArgumentException failedAgain) {
                 failedAgain.addSuppressed(structuralProblem);
-                throw failedAgain;
+                throw new StoryTurnProtocolException("ACTION_CONTRACT",
+                        "行动理解结果在自动整理后仍不符合可信回合协议", failedAgain);
             }
         }
         context = context.withActionContract(actionContract);
         StoryTurnAgent.Generated generation = agent.generate(context, route, invocation);
         generation = prependModelResults(resolvedAction.modelResults(), generation);
-        if (diagnostic != null) diagnostic.proposal("INITIAL_PROPOSAL", generation.patch());
+        if (diagnostic != null) diagnostic.proposal("INITIAL_NARRATIVE_DRAFT", generation.patch());
+        generation = projectFacts(context, route, invocation, generation);
+        if (diagnostic != null) diagnostic.proposal("INITIAL_FACT_PROJECTION", generation.patch());
         StoryStateReducer.Applied applied;
         try {
             rejectRepeatedNarrative(previous, generation.patch());
@@ -161,7 +167,7 @@ public class StoryTurnPreparationService {
             contractPatches.validate(before, actionContract, generation.patch());
             applied = reducer.reduce(before, generation.patch(), explicitDurationMinutes);
         } catch (IllegalArgumentException rejected) {
-            StoryTurnAgent.Generated repaired = rejected instanceof StoryNarrativeFreshnessException
+            StoryTurnAgent.Generated repairedDraft = rejected instanceof StoryNarrativeFreshnessException
                     || rejected instanceof ReviewRejectedException review && review.requiresFreshNarrative
                     ? agent.regenerateFreshNarrative(context, route, invocation,
                             generation.patch(), rejected.getMessage())
@@ -171,8 +177,10 @@ public class StoryTurnPreparationService {
                 diagnostic.rejected("INITIAL_VALIDATION", rejected,
                         rejected instanceof StoryNarrativeFreshnessException
                                 || rejected instanceof ReviewRejectedException review && review.requiresFreshNarrative);
-                diagnostic.proposal("REPAIRED_PROPOSAL", repaired.patch());
+                diagnostic.proposal("REPAIRED_NARRATIVE_DRAFT", repairedDraft.patch());
             }
+            StoryTurnAgent.Generated repaired = projectFacts(context, route, invocation, repairedDraft);
+            if (diagnostic != null) diagnostic.proposal("REPAIRED_FACT_PROJECTION", repaired.patch());
             generation = combine(generation, repaired);
             try {
                 rejectRepeatedNarrative(previous, repaired.patch());
@@ -184,7 +192,8 @@ public class StoryTurnPreparationService {
                 applied = reducer.reduce(before, repaired.patch(), explicitDurationMinutes);
             } catch (IllegalArgumentException failedAgain) {
                 failedAgain.addSuppressed(rejected);
-                throw failedAgain;
+                throw new StoryTurnProtocolException("TURN_PROPOSAL",
+                        "剧情与事实变化在自动整理后仍未形成一致结果", failedAgain);
             }
         }
         if (diagnostic != null) diagnostic.reduced(applied);
@@ -242,6 +251,26 @@ public class StoryTurnPreparationService {
         List<StoryModelGateway.Result> attempts = new ArrayList<>(generated.modelResults());
         attempts.addAll(review.modelResults());
         return new StoryTurnAgent.Generated(generated.patch(), attempts);
+    }
+
+    private StoryTurnAgent.Generated projectFacts(StoryPromptContext context, StoryModelRoute route,
+                                                   StoryTurnAgent.InvocationContext invocation,
+                                                   StoryTurnAgent.Generated narrativeDraft) {
+        StoryTurnAgent.ProjectedFacts projected;
+        try {
+            projected = agent.projectFacts(context, route, invocation, narrativeDraft.patch());
+        } catch (StoryTurnProtocolException protocol) {
+            throw protocol;
+        } catch (IllegalArgumentException structuralProblem) {
+            throw new StoryTurnProtocolException("FACT_PROJECTION",
+                    "可信事实投影在自动整理后仍不符合回合协议", structuralProblem);
+        }
+        if (projected.modelResults().isEmpty() && projected.patch() == narrativeDraft.patch()) {
+            return narrativeDraft;
+        }
+        List<StoryModelGateway.Result> attempts = new ArrayList<>(narrativeDraft.modelResults());
+        attempts.addAll(projected.modelResults());
+        return new StoryTurnAgent.Generated(projected.patch(), attempts);
     }
 
     private StoryTurnAgent.Generated prependModelResults(List<StoryModelGateway.Result> earlier,

@@ -48,8 +48,13 @@ public final class StoryCorrectionReducer {
                 proposal.confirmationPrompt(), reduced.acceptedPatch().coreState(),
                 reduced.acceptedPatch().entities(), reduced.acceptedPatch().worldFacts(),
                 reduced.acceptedPatch().knowledge());
-        return new Applied(reduced.projection(), accepted);
+        return new Applied(reduced.projection(), accepted, reduced.aliasChanges());
     }
 
-    public record Applied(StoryProjection projection, StoryCorrectionProposal acceptedProposal) {}
+    public record Applied(StoryProjection projection, StoryCorrectionProposal acceptedProposal,
+                          List<StoryStateReducer.EntityAliasChange> aliasChanges) {
+        public Applied {
+            aliasChanges = aliasChanges == null ? List.of() : List.copyOf(aliasChanges);
+        }
+    }
 }

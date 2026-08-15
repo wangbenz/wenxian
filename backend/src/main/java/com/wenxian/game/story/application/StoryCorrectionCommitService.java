@@ -103,6 +103,8 @@ public class StoryCorrectionCommitService {
                 saved.worldCode(), saved.status(), releases.current());
         persistChangedEntities(saveId, saved.turnNumber(), existingEntities, after,
                 confirmed.acceptedProposal(), Instant.now());
+        confirmed.aliasChanges().forEach(change -> entities.saveAlias(saveId, change.entityId(),
+                change.aliasName(), change.aliasType(), saved.turnNumber(), Instant.now()));
         corrections.insert(userId, saveId, confirmed.instruction(),
                 confirmed.acceptedProposal().kind().name(), mapper.valueToTree(before), mapper.valueToTree(after));
         return new Committed(nextRevision, saved.turnNumber(), confirmed.instruction(), after,
