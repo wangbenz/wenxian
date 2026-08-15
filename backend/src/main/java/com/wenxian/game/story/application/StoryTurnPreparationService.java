@@ -16,6 +16,10 @@ import com.wenxian.game.story.domain.StoryActionContractValidator;
 import com.wenxian.game.story.domain.StoryEntityReferenceCompiler;
 import com.wenxian.game.story.domain.StoryActionContractPatchValidator;
 import com.wenxian.game.story.domain.ExplicitDurationParser;
+import com.wenxian.game.story.domain.SemanticDuration;
+import com.wenxian.game.story.domain.SemanticDurationParser;
+import com.wenxian.game.story.domain.TrustedStoryEvent;
+import com.wenxian.game.story.domain.TrustedStoryEventCompiler;
 import com.wenxian.game.story.domain.StoryNarrativeFreshnessValidator;
 import com.wenxian.game.story.domain.StoryNarrativeFreshnessException;
 import com.wenxian.game.story.diagnostic.StoryTurnDiagnosticService;
@@ -61,6 +65,7 @@ public class StoryTurnPreparationService {
     private final StoryEntityReferenceCompiler referenceCompiler = new StoryEntityReferenceCompiler();
     private final StoryActionContractPatchValidator contractPatches = new StoryActionContractPatchValidator();
     private final StoryNarrativeFreshnessValidator narrativeFreshness = new StoryNarrativeFreshnessValidator();
+    private final TrustedStoryEventCompiler eventCompiler = new TrustedStoryEventCompiler();
 
     public StoryTurnPreparationService(
             StoryEntityRepository entities,
@@ -115,11 +120,14 @@ public class StoryTurnPreparationService {
         var checkpoint = projections.loadDecisionCheckpoint(saved.state());
         StoryPromptContext.PreviousTurn previous = previousTurn(saved.id());
         StoryPromptContext.SelectedChoice selectedChoice = selectedChoice(saved.state(), choiceId);
-        Long explicitDurationMinutes = explicitDuration(playerAction, before.worldTimeMinutes());
+        SemanticDuration semanticDuration = SemanticDurationParser.parse(playerAction).orElse(null);
+        Long explicitDurationMinutes = semanticDuration == null
+                ? explicitDuration(playerAction, before.worldTimeMinutes())
+                : Long.valueOf(semanticDuration.toCompatibilityMinutes(before.worldTimeMinutes()));
         StoryPromptContext context = contexts.assemble(before, new ContextRequest(playerAction,
                 worldSeedRules(saved.state()), selection(before, existingEntities), conversations.summary(saved.id()),
                 previous, checkpoint == null ? null : new PendingDecision(checkpoint.prompt()),
-                explicitDurationMinutes, selectedChoice));
+                explicitDurationMinutes, selectedChoice, semanticDuration));
         if (diagnostic != null) diagnostic.context(context);
         StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
                 saved.id(), saved.turnNumber() + 1);
@@ -156,6 +164,7 @@ public class StoryTurnPreparationService {
         generation = prependModelResults(resolvedAction.modelResults(), generation);
         if (diagnostic != null) diagnostic.proposal("INITIAL_NARRATIVE_DRAFT", generation.patch());
         generation = projectFacts(context, route, invocation, generation);
+        generation = compileTrustedEvents(before, semanticDuration, generation);
         if (diagnostic != null) diagnostic.proposal("INITIAL_FACT_PROJECTION", generation.patch());
         StoryStateReducer.Applied applied;
         try {
@@ -180,6 +189,7 @@ public class StoryTurnPreparationService {
                 diagnostic.proposal("REPAIRED_NARRATIVE_DRAFT", repairedDraft.patch());
             }
             StoryTurnAgent.Generated repaired = projectFacts(context, route, invocation, repairedDraft);
+            repaired = compileTrustedEvents(before, semanticDuration, repaired);
             if (diagnostic != null) diagnostic.proposal("REPAIRED_FACT_PROJECTION", repaired.patch());
             generation = combine(generation, repaired);
             try {
@@ -197,7 +207,9 @@ public class StoryTurnPreparationService {
             }
         }
         if (diagnostic != null) diagnostic.reduced(applied);
-        return new Prepared(before, applied, existingEntities, generation, diagnostic);
+        List<TrustedStoryEvent> trustedEvents = eventCompiler
+                .compile(before, applied.acceptedPatch(), semanticDuration).events();
+        return new Prepared(before, applied, existingEntities, generation, trustedEvents, diagnostic);
     }
 
     /**
@@ -281,6 +293,14 @@ public class StoryTurnPreparationService {
         return new StoryTurnAgent.Generated(generated.patch(), attempts);
     }
 
+    /** 类型化事件编译只清理与实体类型不相容的可选字段，不改变正文、选项或重大事实。 */
+    private StoryTurnAgent.Generated compileTrustedEvents(StoryProjection before, SemanticDuration planned,
+                                                           StoryTurnAgent.Generated generated) {
+        var compiled = eventCompiler.compile(before, generated.patch(), planned);
+        if (compiled.normalizedPatch().equals(generated.patch())) return generated;
+        return new StoryTurnAgent.Generated(compiled.normalizedPatch(), generated.modelResults());
+    }
+
     private void rejectReview(StoryTurnAgent.Review review) {
         if (review != null && !review.accepted()) {
             throw new ReviewRejectedException("独立回合审阅未通过：" + review.problem(),
@@ -344,10 +364,12 @@ public class StoryTurnPreparationService {
             StoryStateReducer.Applied applied,
             List<Entity> existingEntities,
             StoryTurnAgent.Generated generation,
+            List<TrustedStoryEvent> trustedEvents,
             StoryTurnDiagnosticService.Session diagnostic
     ) {
         public Prepared {
             existingEntities = existingEntities == null ? List.of() : List.copyOf(existingEntities);
+            trustedEvents = trustedEvents == null ? List.of() : List.copyOf(trustedEvents);
         }
     }
 }

@@ -22,6 +22,7 @@ import com.wenxian.game.story.domain.StoryProjection.InitialContract;
 import com.wenxian.game.story.domain.StoryProjection.KnowledgeState;
 import com.wenxian.game.story.domain.StoryProjection.MemoryState;
 import com.wenxian.game.story.domain.StoryProjection.WorldFactState;
+import com.wenxian.game.story.domain.SemanticDuration;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -111,7 +112,7 @@ public final class PromptContextAssembler {
                 new NarrativeContext(blank(request.rollingSummary()), request.previousTurn()),
                 new ActionContext(request.playerAction().strip(), request.explicitDurationMinutes(),
                         expectedEndClock(projection.worldTimeMinutes(), request.explicitDurationMinutes()), null,
-                        request.selectedChoice())
+                        request.selectedChoice(), request.semanticDuration())
         );
     }
 
@@ -270,17 +271,18 @@ public final class PromptContextAssembler {
             PreviousTurn previousTurn,
             StoryPromptContext.PendingDecision pendingDecision,
             Long explicitDurationMinutes,
-            StoryPromptContext.SelectedChoice selectedChoice
+            StoryPromptContext.SelectedChoice selectedChoice,
+            SemanticDuration semanticDuration
     ) {
         public ContextRequest(String playerAction, List<String> engineRules, ContextSelection selection,
                               String rollingSummary, PreviousTurn previousTurn) {
-            this(playerAction, engineRules, selection, rollingSummary, previousTurn, null, null, null);
+            this(playerAction, engineRules, selection, rollingSummary, previousTurn, null, null, null, null);
         }
 
         public ContextRequest(String playerAction, List<String> engineRules, ContextSelection selection,
                               String rollingSummary, PreviousTurn previousTurn,
                               StoryPromptContext.PendingDecision pendingDecision) {
-            this(playerAction, engineRules, selection, rollingSummary, previousTurn, pendingDecision, null, null);
+            this(playerAction, engineRules, selection, rollingSummary, previousTurn, pendingDecision, null, null, null);
         }
 
         /** 兼容系统选项来源加入前的调用方。 */
@@ -289,7 +291,17 @@ public final class PromptContextAssembler {
                               StoryPromptContext.PendingDecision pendingDecision,
                               Long explicitDurationMinutes) {
             this(playerAction, engineRules, selection, rollingSummary, previousTurn, pendingDecision,
-                    explicitDurationMinutes, null);
+                    explicitDurationMinutes, null, null);
+        }
+
+        /** 兼容语义时间加入前、已经携带系统选项的完整调用方。 */
+        public ContextRequest(String playerAction, List<String> engineRules, ContextSelection selection,
+                              String rollingSummary, PreviousTurn previousTurn,
+                              StoryPromptContext.PendingDecision pendingDecision,
+                              Long explicitDurationMinutes,
+                              StoryPromptContext.SelectedChoice selectedChoice) {
+            this(playerAction, engineRules, selection, rollingSummary, previousTurn, pendingDecision,
+                    explicitDurationMinutes, selectedChoice, null);
         }
 
         public ContextRequest {

@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * 独立 Flash 审阅的真实模型冒烟测试。
  *
  * <p>只有显式提供 DEEPSEEK_API_KEY 时才调用真实模型；分别验证明显越权候选会被拒绝、
- * 忠实完成玩家行动的候选会被接受，并打印审阅自身的 Token 与延迟，不能用生成调用替代。</p>
+ * 忠实完成玩家行动和必要自然收尾会被接受，并打印审阅自身的 Token 与延迟，不能用生成调用替代。</p>
  */
 class TrustedStoryFlashReviewRealModelTest {
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
@@ -33,42 +33,64 @@ class TrustedStoryFlashReviewRealModelTest {
                 value(System.getenv("DEEPSEEK_BASE_URL"), "https://api.deepseek.com"), key,
                 "DEEPSEEK", "OPENAI_COMPATIBLE", "deepseek-v4-pro", "TEST_ENVIRONMENT");
         StoryTurnAgent agent = new ModelBackedStoryTurnAgent(new LangChain4jStoryModelGateway(), mapper);
+        String selectedScenario = value(System.getenv("WENXIAN_REAL_REVIEW_SCENARIO"), "all");
 
-        StoryTurnAgent.Review invalid = agent.review(restContext(), route,
-                new StoryTurnAgent.InvocationContext("flash-review-invalid", 1),
-                mapper.readValue(invalidRestCandidate(), StoryPatch.class));
-        assertFalse(invalid.accepted());
-        assertTrue(invalid.problem().contains("物品") || invalid.problem().contains("玩家授权"));
-        print("invalid", invalid);
+        if (selected(selectedScenario, "invalid")) {
+            StoryTurnAgent.Review invalid = agent.review(restContext(), route,
+                    new StoryTurnAgent.InvocationContext("flash-review-invalid", 1),
+                    mapper.readValue(invalidRestCandidate(), StoryPatch.class));
+            assertFalse(invalid.accepted());
+            assertTrue(invalid.problem().contains("物品") || invalid.problem().contains("玩家授权"));
+            print("invalid", invalid);
+        }
 
-        StoryTurnAgent.Review validRest = agent.review(restContext(), route,
-                new StoryTurnAgent.InvocationContext("flash-review-valid-rest", 1),
-                mapper.readValue(validRestCandidate(), StoryPatch.class));
-        assertTrue(validRest.accepted(), validRest.problem());
-        print("valid-rest", validRest);
+        if (selected(selectedScenario, "valid-rest")) {
+            StoryTurnAgent.Review validRest = agent.review(restContext(), route,
+                    new StoryTurnAgent.InvocationContext("flash-review-valid-rest", 1),
+                    mapper.readValue(validRestCandidate(), StoryPatch.class));
+            assertTrue(validRest.accepted(), validRest.problem());
+            print("valid-rest", validRest);
+        }
 
-        StoryTurnAgent.Review valid = agent.review(roofContext(), route,
-                new StoryTurnAgent.InvocationContext("flash-review-valid", 1),
-                mapper.readValue(validRoofCandidate(), StoryPatch.class));
-        assertTrue(valid.accepted(), valid.problem());
-        print("valid", valid);
+        if (selected(selectedScenario, "valid")) {
+            StoryTurnAgent.Review valid = agent.review(roofContext(), route,
+                    new StoryTurnAgent.InvocationContext("flash-review-valid", 1),
+                    mapper.readValue(validRoofCandidate(), StoryPatch.class));
+            assertTrue(valid.accepted(), valid.problem());
+            print("valid", valid);
+        }
 
-        StoryTurnAgent.Review inventedDecision = agent.review(decisionContext(), route,
-                new StoryTurnAgent.InvocationContext("flash-review-invented-decision", 1),
-                mapper.readValue(inventedDecisionCandidate(), StoryPatch.class));
-        assertFalse(inventedDecision.accepted());
-        assertTrue(inventedDecision.problem().contains("玩家决定")
-                        || inventedDecision.problem().contains("玩家授权"),
-                inventedDecision.problem());
-        print("invented-decision", inventedDecision);
+        if (selected(selectedScenario, "invented-decision")) {
+            StoryTurnAgent.Review inventedDecision = agent.review(decisionContext(), route,
+                    new StoryTurnAgent.InvocationContext("flash-review-invented-decision", 1),
+                    mapper.readValue(inventedDecisionCandidate(), StoryPatch.class));
+            assertFalse(inventedDecision.accepted());
+            assertTrue(inventedDecision.problem().contains("玩家决定")
+                            || inventedDecision.problem().contains("玩家授权"),
+                    inventedDecision.problem());
+            print("invented-decision", inventedDecision);
+        }
 
-        StoryTurnAgent.Review closedScope = agent.review(closedScopeContext(), route,
-                new StoryTurnAgent.InvocationContext("flash-review-closed-scope", 1),
-                mapper.readValue(closedScopeCandidate(), StoryPatch.class));
-        assertFalse(closedScope.accepted());
-        assertTrue(closedScope.problem().contains("授权") || closedScope.problem().contains("限定"),
-                closedScope.problem());
-        print("closed-scope", closedScope);
+        if (selected(selectedScenario, "closed-scope")) {
+            StoryTurnAgent.Review closedScope = agent.review(closedScopeContext(), route,
+                    new StoryTurnAgent.InvocationContext("flash-review-closed-scope", 1),
+                    mapper.readValue(closedScopeCandidate(), StoryPatch.class));
+            assertFalse(closedScope.accepted());
+            assertTrue(closedScope.problem().contains("授权") || closedScope.problem().contains("限定"),
+                    closedScope.problem());
+            print("closed-scope", closedScope);
+        }
+
+        if (selected(selectedScenario, "natural-tail")) {
+            StoryTurnAgent.Review naturalTail = agent.review(naturalTailContext(), route,
+                    new StoryTurnAgent.InvocationContext("flash-review-natural-tail", 1),
+                    mapper.readValue(naturalTailCandidate(), StoryPatch.class));
+            assertTrue(naturalTail.accepted(), naturalTail.problem());
+            assertTrue(naturalTail.outcome() == StoryTurnAgent.ReviewOutcome.ACCEPT
+                            || naturalTail.outcome() == StoryTurnAgent.ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL,
+                    "必要自然收尾不应被判为新的重大决定");
+            print("natural-tail", naturalTail);
+        }
     }
 
     private StoryPromptContext restContext() {
@@ -139,6 +161,22 @@ class TrustedStoryFlashReviewRealModelTest {
                         "我只向周山点头道别，仍停在原地，不施展任何能力，也不做其他事情。"));
     }
 
+    private StoryPromptContext naturalTailContext() {
+        var jade = new StoryPromptContext.EntityIndexEntry("item-jade-slip", "ITEM", "残缺玉简",
+                "正在手中用于尝试破解禁制", true, new StoryPatch.QuantityValue(true, 1), true,
+                null, StoryPatch.LifecycleState.ACTIVE);
+        return new StoryPromptContext(
+                new StoryPromptContext.SystemContext(List.of(), List.of()),
+                new StoryPromptContext.ObjectiveContext(720,
+                        StoryPromptContext.WorldClock.from(720),
+                        new CoreState("石室禁制前", "掌心有轻伤", "启灵", null), List.of(), List.of(jade),
+                        List.of(), new StoryPromptContext.InventoryView(true, List.of(jade), List.of()), null),
+                new StoryPromptContext.CognitionContext(List.of()),
+                new StoryPromptContext.MemoryContext(List.of()),
+                new StoryPromptContext.NarrativeContext("", null),
+                new StoryPromptContext.ActionContext("尝试用手中的残缺玉简破解眼前禁制；若失败就停下，等我决定。"));
+    }
+
     private String invalidRestCandidate() {
         return """
                 {"title":"一日静养","narrative":"你取出行囊里的干粮吃下，又点亮随身油灯。休息片刻后，你开始练习剑气凝形，并参悟残剑诀。第二日清晨，你仍留在客房。",
@@ -195,6 +233,17 @@ class TrustedStoryFlashReviewRealModelTest {
                 """;
     }
 
+    private String naturalTailCandidate() {
+        return """
+                {"title":"禁纹反震","narrative":"你将残缺玉简贴近禁制，纹路只亮起片刻便骤然熄灭。反震令掌心旧伤微微裂开，你低头确认没有继续恶化，随即把刚才使用的玉简收回怀中，退后半步站稳。你仍停在石室禁制前，没有继续破解，也没有决定新的去向。",
+                 "time":{"elapsedMinutes":15,"resolution":"COMPLETE","interruptionReason":null},
+                 "coreState":{"location":null,"condition":"掌心轻伤未继续恶化","realm":null,"lifeGoal":null},
+                 "entities":[],"worldFacts":[],"knowledge":[],"memories":[],
+                 "decisionCheckpoint":{"required":true,"prompt":"破解失败后，你准备如何处理眼前禁制？"},"choices":[],
+                 "rollingSummary":"你用残缺玉简破解禁制失败，确认伤势后收回玉简，仍停在禁制前。"}
+                """;
+    }
+
     private void print(String scenario, StoryTurnAgent.Review review) {
         var result = review.modelResults().getFirst();
         System.out.printf("FLASH_REVIEW scenario=%s accepted=%s prompt=%d completion=%d latencyMs=%d model=%s problem=%s%n",
@@ -204,5 +253,12 @@ class TrustedStoryFlashReviewRealModelTest {
 
     private String value(String candidate, String fallback) {
         return candidate == null || candidate.isBlank() ? fallback : candidate.strip();
+    }
+
+    private boolean selected(String selected, String scenario) {
+        if ("all".equalsIgnoreCase(selected)) return true;
+        return java.util.Arrays.stream(selected.split(","))
+                .map(String::strip)
+                .anyMatch(scenario::equalsIgnoreCase);
     }
 }

@@ -142,7 +142,8 @@ public final class StoryActionContractValidator {
             case UNRESOLVED -> {
                 CustodyValue claimedCustody = normalized(reference.expectedCustody());
                 if ("ITEM".equalsIgnoreCase(reference.entityType())
-                        && claimedCustody != null && claimedCustody.holderType() == HolderType.PLAYER) {
+                        && claimedCustody != null && claimedCustody.holderType() == HolderType.PLAYER
+                        && (contract.itemActionDetected() || contract.actionMode() == ActionMode.ASSERT_FACT)) {
                     throw new StoryActionPreconditionException(
                             "当前命卷中没有证据支持你已经持有“" + reference.mention().strip() + "”。",
                             "可以改为寻找、调查或尝试获得该物品，或先确认它当前由谁保管。");

@@ -265,10 +265,20 @@ class ModelBackedStoryTurnAgentTest {
         StoryModelGateway gateway = request -> {
             assertEquals(0.0, request.temperature());
             assertEquals("deepseek-v4-flash", request.model());
+            if (request.systemPrompt().contains("玩家授权复核 Agent")) {
+                assertTrue(request.systemPrompt().contains("自然收尾"));
+                assertTrue(request.userPrompt().contains("decisionEnvelope"));
+                return result("""
+                        {"chronologicalAgencyEvents":["施展照影诀","追问古战场"],
+                         "protagonistActions":["施展照影诀","追问古战场"],
+                         "protagonistDecisions":[],"protagonistMotives":[],"endingState":"石门前",
+                         "firstRequiredStopOccurrence":"观察完成","actionsAfterRequiredStop":["追问古战场"],
+                         "outcome":"REPAIR_DECISION","passed":false,"problem":"正文擅自替玩家追问了古战场"}
+                        """, 20, 14, 55);
+            }
             assertTrue(request.systemPrompt().contains("独立 Flash 回合审阅"));
-            assertTrue(request.systemPrompt().contains("必须逐项完成六类检查"));
+            assertTrue(request.systemPrompt().contains("必须逐项完成四类重大事实检查"));
             assertTrue(request.systemPrompt().contains("把新瓦片之类对象误绑成历史石子、玉简"));
-            assertTrue(request.systemPrompt().contains("理由、意图、目标、计划、立场或承诺"));
             assertTrue(request.systemPrompt().contains("普通观察最多形成一个"));
             assertTrue(request.systemPrompt().contains("仅因观察而把屋檐、门框、墙角、路面"));
             assertTrue(request.userPrompt().contains("currentInventory"));
@@ -277,8 +287,6 @@ class ModelBackedStoryTurnAgentTest {
             return result("""
                     {"reference":{"passed":true,"problem":""},
                      "inventory":{"passed":true,"problem":""},
-                     "authorization":{"passed":false,"problem":"正文擅自替玩家追问了古战场"},
-                     "decision":{"passed":true,"problem":""},
                      "time":{"passed":true,"problem":""},
                      "state":{"passed":true,"problem":""}}
                     """, 45, 18, 120);
@@ -291,7 +299,7 @@ class ModelBackedStoryTurnAgentTest {
 
         assertFalse(review.accepted());
         assertEquals("玩家授权：正文擅自替玩家追问了古战场", review.problem());
-        assertEquals(1, review.modelResults().size());
+        assertEquals(2, review.modelResults().size());
     }
 
     @Test
@@ -490,15 +498,51 @@ class ModelBackedStoryTurnAgentTest {
     }
 
     @Test
+    void acceptsNaturalNarrativeTailAfterAuthorizedActionCompletes() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> calls.incrementAndGet() == 1
+                ? result("""
+                        {"reference":{"passed":true,"problem":""},"inventory":{"passed":true,"problem":""},
+                         "time":{"passed":true,"problem":""},"state":{"passed":true,"problem":""}}
+                        """, 30, 10, 50)
+                : result("""
+                        {"chronologicalAgencyEvents":["破解失败","查看掌心伤势","收回刚才使用的玉简","退后半步站稳"],
+                         "protagonistActions":["尝试破解禁制","查看掌心伤势","收回玉简","退后半步站稳"],
+                         "protagonistDecisions":[],"protagonistMotives":[],"endingState":"仍在禁制前",
+                         "firstRequiredStopOccurrence":"破解失败",
+                         "actionsAfterRequiredStop":["查看掌心伤势","收回玉简","退后半步站稳"],
+                         "outcome":"ACCEPT_WITH_NARRATIVE_TAIL","passed":true,"problem":""}
+                        """, 22, 18, 55);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch proposed = mapper.readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Review review = agent(gateway).review(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-natural-tail", 10), proposed);
+
+        assertTrue(review.accepted());
+        assertFalse(review.requiresFreshNarrative());
+        assertEquals(StoryTurnAgent.ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL, review.outcome());
+        assertEquals(2, review.modelResults().size());
+    }
+
+    @Test
     void rejectsNarrativeThatInventsAnUnstatedPlayerDecision() throws Exception {
-        StoryModelGateway gateway = request -> result("""
-                {"reference":{"passed":true,"problem":""},
-                 "inventory":{"passed":true,"problem":""},
-                 "authorization":{"passed":true,"problem":""},
-                 "decision":{"passed":false,"problem":"玩家只要求说明缘由并取回物品，正文却补成已经决定前往古战场"},
-                 "time":{"passed":true,"problem":""},
-                 "state":{"passed":true,"problem":""}}
-                """, 42, 16, 95);
+        StoryModelGateway gateway = request -> request.systemPrompt().contains("玩家授权复核 Agent")
+                ? result("""
+                        {"chronologicalAgencyEvents":["说明缘由","取回物品","决定前往古战场"],
+                         "protagonistActions":["说明缘由","取回物品"],
+                         "protagonistDecisions":["决定前往古战场"],"protagonistMotives":[],
+                         "endingState":"原地","firstRequiredStopOccurrence":"取回物品后",
+                         "actionsAfterRequiredStop":["决定前往古战场"],
+                         "outcome":"REPAIR_DECISION","passed":false,
+                         "problem":"玩家只要求说明缘由并取回物品，正文却补成已经决定前往古战场"}
+                        """, 24, 18, 70)
+                : result("""
+                        {"reference":{"passed":true,"problem":""},
+                         "inventory":{"passed":true,"problem":""},
+                         "time":{"passed":true,"problem":""},
+                         "state":{"passed":true,"problem":""}}
+                        """, 42, 16, 95);
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         StoryPatch proposed = mapper.readValue(VALID_PATCH, StoryPatch.class);
 
@@ -506,7 +550,7 @@ class ModelBackedStoryTurnAgentTest {
                 new StoryTurnAgent.InvocationContext("save-review-decision", 10), proposed);
 
         assertFalse(review.accepted());
-        assertEquals("玩家决定：玩家只要求说明缘由并取回物品，正文却补成已经决定前往古战场", review.problem());
+        assertEquals("玩家授权：玩家只要求说明缘由并取回物品，正文却补成已经决定前往古战场", review.problem());
     }
 
     @Test
@@ -523,7 +567,7 @@ class ModelBackedStoryTurnAgentTest {
                 () -> agent(gateway).review(context(), route(),
                         new StoryTurnAgent.InvocationContext("save-review-incomplete", 11), proposed));
 
-        assertTrue(error.getMessage().contains("缺少“玩家决定”检查结果"));
+        assertTrue(error.getMessage().contains("缺少“时间”检查结果"));
     }
 
     @Test

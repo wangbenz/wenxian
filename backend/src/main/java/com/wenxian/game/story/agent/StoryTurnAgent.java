@@ -122,16 +122,44 @@ public interface StoryTurnAgent {
     }
 
     record Review(boolean accepted, String problem, boolean requiresFreshNarrative,
-                  List<StoryModelGateway.Result> modelResults) {
+                  List<StoryModelGateway.Result> modelResults, ReviewOutcome outcome) {
         public Review(boolean accepted, String problem, List<StoryModelGateway.Result> modelResults) {
-            this(accepted, problem, false, modelResults);
+            this(accepted, problem, false, modelResults,
+                    accepted ? ReviewOutcome.ACCEPT : ReviewOutcome.REPAIR_FACTS);
+        }
+
+        /** 兼容审阅分类加入前的调用方。 */
+        public Review(boolean accepted, String problem, boolean requiresFreshNarrative,
+                      List<StoryModelGateway.Result> modelResults) {
+            this(accepted, problem, requiresFreshNarrative, modelResults,
+                    accepted ? ReviewOutcome.ACCEPT
+                            : requiresFreshNarrative ? ReviewOutcome.REPAIR_DECISION : ReviewOutcome.REPAIR_FACTS);
+        }
+
+        public Review(ReviewOutcome outcome, String problem, List<StoryModelGateway.Result> modelResults) {
+            this(outcome == ReviewOutcome.ACCEPT || outcome == ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL,
+                    problem, outcome == ReviewOutcome.REPAIR_DECISION, modelResults, outcome);
         }
 
         public Review {
             problem = problem == null ? "" : problem.strip();
             modelResults = modelResults == null ? List.of() : List.copyOf(modelResults);
+            outcome = outcome == null ? accepted ? ReviewOutcome.ACCEPT : ReviewOutcome.SYSTEM_FAILURE : outcome;
             if (!accepted && problem.isBlank()) throw new IllegalArgumentException("回合审阅拒绝时必须说明原因");
+            boolean outcomeAccepted = outcome == ReviewOutcome.ACCEPT
+                    || outcome == ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL;
+            if (accepted != outcomeAccepted) throw new IllegalArgumentException("回合审阅结果与分类不一致");
         }
+    }
+
+    /** 审阅结论直接决定恢复路径，不再通过中文错误文本猜测应当重写正文还是修复事实。 */
+    enum ReviewOutcome {
+        ACCEPT,
+        ACCEPT_WITH_NARRATIVE_TAIL,
+        REPAIR_FACTS,
+        REPAIR_DECISION,
+        PLAYER_FACT_CONFLICT,
+        SYSTEM_FAILURE
     }
 
     record ResolvedAction(StoryActionContract contract, List<StoryModelGateway.Result> modelResults) {

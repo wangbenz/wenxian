@@ -22,7 +22,10 @@ import com.wenxian.game.story.domain.ExplicitDurationParser;
 import com.wenxian.game.story.domain.StoryActionContractPatchValidator;
 import com.wenxian.game.story.domain.StoryActionContractValidator;
 import com.wenxian.game.story.domain.StoryEntityReferenceCompiler;
+import com.wenxian.game.story.domain.SemanticDuration;
+import com.wenxian.game.story.domain.SemanticDurationParser;
 import com.wenxian.game.story.domain.StoryProjection;
+import com.wenxian.game.story.domain.TrustedStoryEventCompiler;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
 import com.wenxian.game.story.domain.StoryProjection.EntityState;
 import com.wenxian.game.story.domain.StoryProjection.WorldFactState;
@@ -51,6 +54,7 @@ class TrustedStoryTurnRealModelSmokeTest {
     private final StoryActionContractValidator actionContracts = new StoryActionContractValidator();
     private final StoryActionContractPatchValidator contractPatches = new StoryActionContractPatchValidator();
     private final StoryEntityReferenceCompiler referenceCompiler = new StoryEntityReferenceCompiler();
+    private final TrustedStoryEventCompiler eventCompiler = new TrustedStoryEventCompiler();
 
     @Test
     void realModelPassesTrustedStoryReplayMatrix() {
@@ -168,10 +172,18 @@ class TrustedStoryTurnRealModelSmokeTest {
         int firstOperation = operations.size();
         ContextSelection selection = new ContextSelection(projection.entities().keySet(),
                 projection.entities().keySet(), projection.worldFacts().keySet(), List.of(), Set.of());
-        Integer explicitDuration = ExplicitDurationParser.parseMinutes(action, projection.worldTimeMinutes());
-        Long explicitDurationMinutes = explicitDuration == null ? null : explicitDuration.longValue();
+        SemanticDuration semanticDuration = SemanticDurationParser.parse(action).orElse(null);
+        Integer legacyDuration = semanticDuration == null
+                ? ExplicitDurationParser.parseMinutes(action, projection.worldTimeMinutes()) : null;
+        Long explicitDurationMinutes;
+        if (semanticDuration != null) {
+            explicitDurationMinutes = semanticDuration.toCompatibilityMinutes(projection.worldTimeMinutes());
+        } else {
+            explicitDurationMinutes = legacyDuration == null ? null : legacyDuration.longValue();
+        }
         StoryPromptContext context = assembler.assemble(projection,
-                new ContextRequest(action, List.of(), selection, "", null, null, explicitDurationMinutes));
+                new ContextRequest(action, List.of(), selection, "", null, null,
+                        explicitDurationMinutes, null, semanticDuration));
         StoryTurnAgent.InvocationContext invocation = new StoryTurnAgent.InvocationContext(
                 "real-smoke-" + scenario, 1);
         StoryTurnAgent.ResolvedAction resolved = agent.resolveAction(context, route, invocation);
@@ -181,11 +193,13 @@ class TrustedStoryTurnRealModelSmokeTest {
         StoryTurnAgent.Generated narrativeDraft = agent.generate(context, route, invocation);
         StoryTurnAgent.ProjectedFacts projected = agent.projectFacts(
                 context, route, invocation, narrativeDraft.patch());
+        StoryPatch projectedPatch = eventCompiler.compile(projection, projected.patch(), semanticDuration)
+                .normalizedPatch();
         List<com.wenxian.game.story.agent.StoryModelGateway.Result> attempts = new ArrayList<>();
         attempts.addAll(resolved.modelResults());
         attempts.addAll(narrativeDraft.modelResults());
         attempts.addAll(projected.modelResults());
-        StoryTurnAgent.Generated generated = new StoryTurnAgent.Generated(projected.patch(), attempts);
+        StoryTurnAgent.Generated generated = new StoryTurnAgent.Generated(projectedPatch, attempts);
         StoryStateReducer.Applied applied;
         try {
             StoryTurnAgent.Review review = agent.review(context, route, invocation, generated.patch());
@@ -202,16 +216,20 @@ class TrustedStoryTurnRealModelSmokeTest {
                             generated.patch(), rejected.getMessage());
             StoryTurnAgent.ProjectedFacts repairedFacts = agent.projectFacts(
                     context, route, invocation, repairedDraft.patch());
+            StoryPatch repairedPatch = eventCompiler.compile(projection, repairedFacts.patch(), semanticDuration)
+                    .normalizedPatch();
             attempts.addAll(repairedDraft.modelResults());
             attempts.addAll(repairedFacts.modelResults());
-            StoryTurnAgent.Review review = agent.review(context, route, invocation, repairedFacts.patch());
+            StoryTurnAgent.Review review = agent.review(context, route, invocation, repairedPatch);
             attempts.addAll(review.modelResults());
             assertTrue(review.accepted(), "修复后的独立审阅仍拒绝：" + review.problem());
-            contractPatches.validate(projection, contract, repairedFacts.patch());
-            generated = new StoryTurnAgent.Generated(repairedFacts.patch(), attempts);
-            applied = reducer.reduce(projection, repairedFacts.patch(), explicitDurationMinutes);
+            contractPatches.validate(projection, contract, repairedPatch);
+            generated = new StoryTurnAgent.Generated(repairedPatch, attempts);
+            applied = reducer.reduce(projection, repairedPatch, explicitDurationMinutes);
         }
         generated = new StoryTurnAgent.Generated(generated.patch(), attempts);
+        assertFalse(eventCompiler.compile(projection, applied.acceptedPatch(), semanticDuration).events().isEmpty(),
+                "真实回合提交前必须形成至少一个可信事件");
         System.out.printf("TRUSTED_REAL_MODEL scenario=%s attempts=%d prompt=%d completion=%d latencyMs=%d model=%s operations=%s%n",
                 scenario, generated.modelResults().size(), generated.inputTokens(), generated.outputTokens(),
                 generated.latencyMs(), generated.finalResult().model(),

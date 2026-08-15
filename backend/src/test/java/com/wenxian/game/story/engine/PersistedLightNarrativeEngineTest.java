@@ -328,6 +328,8 @@ class PersistedLightNarrativeEngineTest {
             String storedPatch = jdbc.queryForObject(
                     "select state_patch_json from story_turn where save_id=?", String.class, created.saveId());
             assertTrue(storedPatch.contains(unknown.id()), "回合必须保存 Reducer 分配后的稳定实体ID");
+            assertTrue(storedPatch.contains("trustedEvents"), "回合必须保存 Reducer 接受后编译的可信事件");
+            assertTrue(storedPatch.contains("ITEM_TRANSFERRED"), "物品变化必须形成带类型的可信事件");
             assertEquals(2, memories.recentActive(created.saveId(), 20).size());
             assertEquals("COMMITTED", jdbc.queryForObject("""
                     select status from story_turn_diagnostic where save_id=? and request_id=?

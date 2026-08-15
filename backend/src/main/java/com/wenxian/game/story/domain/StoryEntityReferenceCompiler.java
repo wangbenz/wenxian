@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 将行动理解模型返回的候选实体引用编译为当前命卷的稳定引用。
@@ -34,12 +35,27 @@ public final class StoryEntityReferenceCompiler {
         List<EntityReference> compiled = contract.references().stream()
                 .map(reference -> compileReference(projection, index, reference))
                 .toList();
+        Set<String> existingCharacters = compiled.stream()
+                .filter(reference -> reference != null
+                        && reference.resolution() == ReferenceResolution.EXISTING
+                        && "CHARACTER".equalsIgnoreCase(reference.entityType())
+                        && !blank(reference.entityId()))
+                .map(EntityReference::entityId)
+                .collect(Collectors.toUnmodifiableSet());
+        // 人物前置条件只能引用本轮已经解析出的正式人物。来源人物和新人物尚无稳定 ID，
+        // 其存在性由 sourceRef/referenceKey 负责，不能因为模型返回空 characterId 拒绝整轮。
+        var characterPreconditions = contract.characterPreconditions().stream()
+                .filter(condition -> condition != null && !blank(condition.characterId()))
+                .filter(condition -> existingCharacters.contains(condition.characterId()))
+                .toList();
         StoryActionContract.ActionScope scope = explicitDurationMinutes == null
                 ? contract.actionScope() : StoryActionContract.ActionScope.ADVANCE_FUTURE;
-        StoryActionContract normalized = compiled.equals(contract.references()) && scope == contract.actionScope()
+        StoryActionContract normalized = compiled.equals(contract.references())
+                && characterPreconditions.equals(contract.characterPreconditions())
+                && scope == contract.actionScope()
                 ? contract : new StoryActionContract(contract.intentSummary(), contract.actionMode(), scope,
                 contract.itemActionDetected(), compiled, contract.itemTransitions(),
-                contract.characterPreconditions(), contract.agencyBoundary(), contract.stopBoundary(),
+                characterPreconditions, contract.agencyBoundary(), contract.stopBoundary(),
                 contract.conflict());
         return itemCanonicalizer.canonicalize(projection, normalized);
     }

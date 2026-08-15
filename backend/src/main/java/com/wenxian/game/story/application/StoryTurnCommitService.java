@@ -112,7 +112,7 @@ public class StoryTurnCommitService {
         persistNewMemories(saved.id(), nextTurn, prepared.before(), after);
         String turnId = "story-turn-" + UUID.randomUUID();
         turns.insert(new NewTurn(turnId, saved.id(), requestId, nextTurn,
-                playerAction, accepted.narrative(), mapper.valueToTree(choices), mapper.valueToTree(accepted),
+                playerAction, accepted.narrative(), mapper.valueToTree(choices), storedPatch(prepared, accepted),
                 prepared.before().worldTimeMinutes(), after.worldTimeMinutes(), saved.engineCode(),
                 saved.engineVersion(), PROMPT_VERSION, route.provider(),
                 prepared.generation().finalResult().model(), route.credentialSource(),
@@ -123,6 +123,16 @@ public class StoryTurnCommitService {
         }
         turnAccess.consume(turnPermit, userId, turnId);
         return new Committed(revision, nextTurn, state, accepted);
+    }
+
+    /**
+     * 回合补丁继续保留原有兼容结构，同时附带 Reducer 接受后编译出的可信事件。
+     * 事件只作为已提交事实的结构化记录，不允许反向覆盖 Reducer 的权威投影。
+     */
+    private ObjectNode storedPatch(StoryTurnPreparationService.Prepared prepared, StoryPatch accepted) {
+        ObjectNode stored = mapper.valueToTree(accepted);
+        stored.set("trustedEvents", mapper.valueToTree(prepared.trustedEvents()));
+        return stored;
     }
 
     private void persistChangedEntities(String saveId, int turnNumber,

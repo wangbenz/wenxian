@@ -239,6 +239,19 @@ class StoryActionContractValidatorTest {
     }
 
     @Test
+    void ignoresUnresolvedPlayerCustodyWhenNoItemMutationWasDetected() {
+        EntityReference injuryMisclassifiedAsItem = new EntityReference("伤势", ReferenceResolution.UNRESOLVED,
+                null, "ITEM", "伤势", "MENTION",
+                new CustodyValue(HolderType.PLAYER, null), List.of());
+        StoryActionContract contract = new StoryActionContract("检查伤势", ActionMode.QUERY,
+                false, List.of(injuryMisclassifiedAsItem), List.of(), List.of(), null,
+                "检查后停下", new Conflict(false, "", ""));
+
+        assertDoesNotThrow(() -> validator.validate(
+                projection(new CustodyValue(HolderType.PLAYER, null)), contract, Set.of()));
+    }
+
+    @Test
     void rejectsUnknownTargetWhenPlayerClaimsItAlreadyBelongsToThem() {
         EntityReference sword = new EntityReference("我行囊里的仙剑", ReferenceResolution.UNRESOLVED,
                 null, "ITEM", "仙剑", "SOURCE", new CustodyValue(HolderType.PLAYER, null), List.of());

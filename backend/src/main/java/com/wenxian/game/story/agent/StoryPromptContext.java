@@ -8,6 +8,7 @@ import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
 import com.wenxian.game.story.domain.StoryActionContract;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
+import com.wenxian.game.story.domain.SemanticDuration;
 
 import java.util.List;
 
@@ -173,19 +174,26 @@ public record StoryPromptContext(
      * 预计结束时刻；模型必须叙述完整时间跨度，不能只写终点画面后让正文与日历脱节。
      */
     public record ActionContext(String playerAction, Long explicitDurationMinutes, WorldClock expectedEndClock,
-                                StoryActionContract factContract, SelectedChoice selectedChoice) {
+                                StoryActionContract factContract, SelectedChoice selectedChoice,
+                                SemanticDuration semanticDuration) {
         public ActionContext(String playerAction) {
-            this(playerAction, null, null, null, null);
+            this(playerAction, null, null, null, null, null);
         }
 
         public ActionContext(String playerAction, Long explicitDurationMinutes, WorldClock expectedEndClock) {
-            this(playerAction, explicitDurationMinutes, expectedEndClock, null, null);
+            this(playerAction, explicitDurationMinutes, expectedEndClock, null, null, null);
         }
 
         /** 兼容系统选项来源加入前的调用方。 */
         public ActionContext(String playerAction, Long explicitDurationMinutes, WorldClock expectedEndClock,
                              StoryActionContract factContract) {
-            this(playerAction, explicitDurationMinutes, expectedEndClock, factContract, null);
+            this(playerAction, explicitDurationMinutes, expectedEndClock, factContract, null, null);
+        }
+
+        /** 兼容语义时间加入前的完整调用方。 */
+        public ActionContext(String playerAction, Long explicitDurationMinutes, WorldClock expectedEndClock,
+                             StoryActionContract factContract, SelectedChoice selectedChoice) {
+            this(playerAction, explicitDurationMinutes, expectedEndClock, factContract, selectedChoice, null);
         }
     }
 
@@ -259,7 +267,7 @@ public record StoryPromptContext(
         ActionContext current = action;
         return new StoryPromptContext(system, objective, cognition, memory, narrative,
                 new ActionContext(current.playerAction(), current.explicitDurationMinutes(),
-                        current.expectedEndClock(), contract, current.selectedChoice()));
+                        current.expectedEndClock(), contract, current.selectedChoice(), current.semanticDuration()));
     }
 
     public record KnowledgeView(

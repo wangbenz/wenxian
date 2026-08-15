@@ -3,6 +3,8 @@ package com.wenxian.game.story.domain;
 import com.wenxian.game.story.domain.StoryActionContract.Conflict;
 import com.wenxian.game.story.domain.StoryActionContract.EntityReference;
 import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
+import com.wenxian.game.story.domain.StoryActionContract.CharacterPrecondition;
+import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
 import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryProjection.CoreState;
@@ -16,6 +18,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StoryEntityReferenceCompilerTest {
     private final StoryEntityReferenceCompiler compiler = new StoryEntityReferenceCompiler();
@@ -86,6 +89,21 @@ class StoryEntityReferenceCompilerTest {
 
         assertEquals(StoryActionContract.ActionScope.ADVANCE_FUTURE, compiled.actionScope());
         assertEquals(StoryActionContract.ActionMode.ATTEMPT, compiled.actionMode());
+    }
+
+    @Test
+    void removesBlankPreconditionForEstablishedCharacterWithoutStableId() {
+        EntityReference senior = new EntityReference("沈青禾", ReferenceResolution.ESTABLISHED,
+                null, "CHARACTER", "沈青禾", "TARGET", null,
+                List.of("initial:origin"), "r2");
+        StoryActionContract raw = new StoryActionContract("尝试向沈青禾传讯", false,
+                List.of(senior), List.of(),
+                List.of(new CharacterPrecondition("", LifecycleState.ACTIVE, "师姐")),
+                "传讯后停下", new Conflict(false, "", ""));
+
+        StoryActionContract compiled = compiler.compile(projection(), raw, List.of());
+
+        assertTrue(compiled.characterPreconditions().isEmpty());
     }
 
     private EntityAlias alias(String id, String entityId, String name) {

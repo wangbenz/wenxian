@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryActionContract;
+import com.wenxian.game.story.domain.StoryDecisionEnvelope;
 import com.wenxian.game.story.domain.StoryPatchValidator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -175,8 +176,9 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                CHARACTER 才能填写 lifecycle、relationship；LANDMARK 的上述专用字段均为 null。
             6. 人物生死使用 lifecycle，关系使用 relationship；已经死亡者没有明确复活事件时保持死亡。
                关系或生命周期改变必须保存具体 changeReason。
-            7. time 只记录草稿实际经过时长，并遵守 action.explicitDurationMinutes；该值非空且完整执行时必须原样复制，
-               不得按公历、其他历法或自行换算重新计算。提前结束必须使用 INTERRUPTED 并说明原因。
+            7. time 只记录草稿实际经过时长。action.semanticDuration 是玩家授权的语义尺度，优先保持场景、时段、日、月、年
+               的量级；action.explicitDurationMinutes 只是服务端兼容旧投影的换算值，不是供你重新推理的精密时钟。
+               完整执行时兼容分钟必须原样复制，提前结束使用 INTERRUPTED 并说明原因，不得因分钟级误差改写剧情。
                coreState 只返回真正变化的字段，未变化返回 null。
             8. worldFacts：新增空白设定用 EXPAND；普通世界发展用 TRANSFORM 并引用稳定 factId；玩家明确修订用 REVISE、
                引用 factId 并记录 reason。世界模板是软起点，不能覆盖该命卷已经确认的经历。
@@ -217,27 +219,16 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             你是《问仙录》的独立 Flash 回合审阅 Agent。你只审核候选，不续写剧情，也不替候选补充解释。
             facts 是提交前的权威事实，action 是玩家本轮唯一授权，proposed 是尚未提交的候选结果。
 
-            必须逐项完成六类检查，不能因为发现第一处问题就跳过其余类别：
+            必须逐项完成四类重大事实检查，不能因为发现第一处问题就跳过其余类别：
             1. reference：action 中明确提到的物品、人物、能力或需要跨回合追踪的场景地标是否都被
                factContract.references 覆盖；玩家原话、标准名称、
                EXISTING/ESTABLISHED/NEW/UNRESOLVED 解析、证据引用和稳定 ID 是否对应，是否把新瓦片之类对象误绑成历史石子、玉简等其他实体。
                水井、屋舍、石桥、山门等无法随身携带的场景对象必须是 LANDMARK 或不持久化，不得当作 ITEM、
                不得进入 currentInventory；只有玩家取得或可被人物、地点保管的可转移对象才是 ITEM。
             2. inventory：候选是否使用、持有、赠送、出售或获得了 facts 未支持的物品；数量和处置是否一致。
-            3. authorization：候选是否忽略 action、替玩家做选择，或擅自追加修炼、移动、询问、承诺、交易、战斗等行动。
-               必须先从候选 narrative 独立列出主角实际做出的全部行为，再逐项与
-               action.factContract.agencyBoundary.authorizedActions 比较；不能只检查候选自己声称的结构字段。
-               当 action 使用“只、仅、不要、不做其他事情、仍停在原地”等限定时，主角获授权的主动行为是闭集；候选
-               只要再让主角取放/查看物品、施展能力、追问、调查、回忆线索、制定计划或选择目标，就必须判定失败，
-               即使物品确实属于玩家、行为没有产生结构化状态变化、或候选最后又写“仍在原地”也不能放过。
-            4. decision：候选是否把 action 没有说明的理由、意图、目标、计划、立场或承诺补成主角已经确认的事实。
-               必须从候选 narrative、memories 与 rollingSummary 独立提取主角的回答、动机、立场、路线选择和后续计划，
-               与 agencyBoundary.unresolvedDecisions、prohibitedActions、requiredEndState 逐项核对；候选省略结构化补丁
-               不代表这些决定没有发生。
-               例如 action 只说“说明缘由后取回物品”，候选不得自行补成“我已决定前往某地”。
-               NPC 对当前请求的回应、环境直接反应和已授权行动的必然结果不算替玩家决定。
-            5. time：开场时刻、经过时长、结束时刻与 action 的时间契约是否一致，是否跳过明确要求叙述的过程。
-            6. state：地点、境界、能力掌握、人物生死、待确认决定及 proposed 的结构化变化是否前后一致。
+            3. time：语义时间尺度、行动是否完整或中断与 action 的时间契约是否一致。分钟是内部兼容投影，
+               不得因少量分钟差异拒绝；日、月、年量级或完整/中断结果冲突才拒绝。
+            4. state：地点、境界、能力掌握、人物生死、待确认决定及 proposed 的结构化变化是否前后一致。
                ITEM.custody 是物品保管的唯一客观来源。人物 status/summary 若声称持有、归还或失去某物，但与 custody
                不一致，必须失败；也不得要求人物 status/summary 重复保存 custody 已经表达的事实。
                同一处场景及其普通组成部分若被拆成多个重复 LANDMARK，也必须判定失败；普通观察最多形成一个
@@ -249,18 +240,13 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             facts.currentInventory 只证明回合开始时的持有状态，不代表本轮永远不能获得新物品；
             actionMode=ATTEMPT 且 UNRESOLVED 的对象允许由本轮实际结果确立。应检查发现、取得或失去是否由正文实际发生、
             是否属于 authorizedActions 的直接结果，以及结构补丁是否记录了最终状态，不能仅因对象起初不在 facts 就拒绝。
-            为完成开放式“寻找、调查、交谈”等授权行动而进行的必要观察和场景内过程，不应逐个误判为新的重大决定；
-            但自行收走物品、离开场景、另定目标或安排后续计划仍需玩家明确授权。
-            action 的直接自然后果可以通过，例如完整休息后疲惫缓解；只有候选追加了新的主动行为、重大决定或无依据事实时才拒绝。
-            合理的环境细节、NPC 对已授权行为的即时回应和不改变事实的文学修辞可以通过；它们不能包含主角新增的
-            主动行为或心理决定。不要评价文风、篇幅、难度或战力平衡。
+            玩家决定由后续专用审阅负责，本阶段不要因主角查看手掌、伤口、行动结果或短暂思考拒绝事实提案。
+            不要评价文风、篇幅、难度或战力平衡。
             每项都必须返回 passed 与 problem。通过时 problem 为空；不通过时准确列出该类别中的冲突。
             只返回以下 JSON，不要 Markdown 或其他文字：
             {
               "reference":{"passed":true,"problem":""},
               "inventory":{"passed":true,"problem":""},
-              "authorization":{"passed":true,"problem":""},
-              "decision":{"passed":true,"problem":""},
               "time":{"passed":true,"problem":""},
               "state":{"passed":true,"problem":""}
             }
@@ -391,10 +377,25 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
 
             然后逐项与 agencyBoundary 比较。authorizedActions 之外的新增主动行为、prohibitedActions 中的行为、
             被提前回答的 unresolvedDecisions、或不满足 requiredEndState 的结尾，都必须 passed=false。
-            若 firstRequiredStopOccurrence 非空且 actionsAfterRequiredStop 非空，也必须 passed=false；候选不能在第一次选择点
+            若 firstRequiredStopOccurrence 非空且 actionsAfterRequiredStop 非空，只有其中全部属于下述“自然收尾”时才可
+            ACCEPT_WITH_NARRATIVE_TAIL；只要包含一项新的重大行动或决定，就必须 REPAIR_DECISION。候选不能在第一次选择点
             写“等待决定”，下一段却替玩家选择其中一条路继续行动，再停在更晚的选择点。
             NPC 的自主回应、环境变化和已授权行为的直接身体结果不算替玩家决定。不能因为候选最后声称“等待决定”
             就忽略正文此前已经发生的返程、回答、承诺或路线选择。
+
+            自然收尾必须是已授权行动或其直接结果在当前场景内的必要整理，而不是借“收尾”开启另一件事。
+            以下属于自然收尾，不能判为越权：查看自己的手掌、伤口或刚发生的结果；收回本轮已授权行动刚刚使用且
+            归属未改变的物品；
+            退到当前场景内的安全距离；站稳、调息、呼吸；短暂惊讶、犹豫、思考但没有形成路线、承诺或后续计划。
+            若玩家用“只……”“不……”“也不做其他事情”等限定关闭了行动范围，候选另行取出或摆弄本轮未使用的物品、
+            回忆新的线索、开始考虑后续计划，都不是自然收尾，必须 REPAIR_DECISION。
+            出发去新地点、开始下一场战斗或调查、接受交易或拜师、消耗重要物品、开始新的长期修炼、确定新目标，
+            才是必须交还玩家的重大决定。
+
+            outcome 必须返回以下之一：
+            - ACCEPT：没有越权；
+            - ACCEPT_WITH_NARRATIVE_TAIL：只包含上述自然收尾；
+            - REPAIR_DECISION：确实替玩家执行了新的重大行动或决定。
 
             只返回 JSON，不要 Markdown：
             {
@@ -405,6 +406,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
               "endingState":"",
               "firstRequiredStopOccurrence":"",
               "actionsAfterRequiredStop":[],
+              "outcome":"ACCEPT|ACCEPT_WITH_NARRATIVE_TAIL|REPAIR_DECISION",
               "passed":true,
               "problem":""
             }
@@ -603,10 +605,9 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             result = call(reviewRoute, invocation, "STORY_TURN_REVIEW_FLASH", REVIEW_PROMPT,
                     mapper.writeValueAsString(payload), 0.0);
             ReviewResponse response = tolerantMapper.readValue(rawJson(result.text()), ReviewResponse.class);
-            List<String> problems = response.problems();
+            List<String> problems = response.factProblems();
             if (!problems.isEmpty()) {
-                return new Review(false, String.join("；", problems),
-                        response.requiresFreshNarrative(), List.of(result));
+                return new Review(ReviewOutcome.REPAIR_FACTS, String.join("；", problems), List.of(result));
             }
             StoryModelGateway.Result agencyResult = call(reviewRoute, invocation,
                     "STORY_TURN_AGENCY_REVIEW_FLASH", AGENCY_REVIEW_PROMPT,
@@ -615,13 +616,16 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                     AgencyReviewResponse.class);
             agency.validate();
             String extractedBoundaryProblem = agency.extractedBoundaryProblem();
-            boolean agencyPassed = agency.passed() && extractedBoundaryProblem.isBlank();
+            ReviewOutcome outcome = agency.reviewOutcome();
+            boolean agencyPassed = (outcome == ReviewOutcome.ACCEPT
+                    || outcome == ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL)
+                    && extractedBoundaryProblem.isBlank();
             String problem = !extractedBoundaryProblem.isBlank()
                     ? extractedBoundaryProblem : agency.problem();
             String agencyProblem = agencyPassed
                     ? "" : "玩家授权：" + (problem.isBlank() ? "授权复核未通过" : problem);
-            return new Review(agencyPassed, agencyProblem, !agencyPassed,
-                    List.of(result, agencyResult));
+            return new Review(agencyPassed ? outcome : ReviewOutcome.REPAIR_DECISION,
+                    agencyProblem, List.of(result, agencyResult));
         } catch (JsonProcessingException error) {
             throw new IllegalArgumentException("回合审阅未返回有效结果", error);
         }
@@ -656,6 +660,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("facts", facts);
         payload.put("action", context.action());
+        payload.put("decisionEnvelope", StoryDecisionEnvelope.from(context.action().factContract()));
         payload.put("proposed", candidate);
         return payload;
     }
@@ -670,6 +675,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         candidate.put("rollingSummary", proposed.rollingSummary());
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("action", context.action());
+        payload.put("decisionEnvelope", StoryDecisionEnvelope.from(context.action().factContract()));
         payload.put("proposed", candidate);
         return payload;
     }
@@ -719,6 +725,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         payload.put("facts", facts);
         payload.put("action", context.action());
         payload.put("timeContract", Map.of(
+                "semanticDuration", context.action().semanticDuration() == null
+                        ? "" : context.action().semanticDuration(),
                 "explicitDurationMinutes", context.action().explicitDurationMinutes() == null
                         ? "" : context.action().explicitDurationMinutes(),
                 "expectedEndClock", context.action().expectedEndClock() == null
@@ -863,20 +871,10 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
 
     private record ReviewResponse(ReviewCheck reference, ReviewCheck inventory, ReviewCheck authorization,
                                   ReviewCheck decision, ReviewCheck time, ReviewCheck state) {
-        private boolean requiresFreshNarrative() {
-            return failed(authorization) || failed(decision);
-        }
-
-        private boolean failed(ReviewCheck check) {
-            return check != null && Boolean.FALSE.equals(check.passed());
-        }
-
-        private List<String> problems() {
+        private List<String> factProblems() {
             List<String> values = new ArrayList<>();
             collect(values, "实体引用", reference);
             collect(values, "物品", inventory);
-            collect(values, "玩家授权", authorization);
-            collect(values, "玩家决定", decision);
             collect(values, "时间", time);
             collect(values, "状态", state);
             return List.copyOf(values);
@@ -901,9 +899,11 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                                         String endingState,
                                         String firstRequiredStopOccurrence,
                                         List<String> actionsAfterRequiredStop,
+                                        String outcome,
                                         Boolean passed,
                                         String problem) {
         private AgencyReviewResponse {
+            outcome = outcome == null ? "" : outcome.strip();
             problem = problem == null ? "" : problem.strip();
         }
 
@@ -916,6 +916,26 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             if (!passed && problem.isBlank()) {
                 throw new IllegalArgumentException("玩家授权复核拒绝时必须说明原因");
             }
+            reviewOutcome();
+        }
+
+        private ReviewOutcome reviewOutcome() {
+            if (outcome.isBlank()) return passed ? ReviewOutcome.ACCEPT : ReviewOutcome.REPAIR_DECISION;
+            try {
+                ReviewOutcome parsed = ReviewOutcome.valueOf(outcome);
+                if (parsed != ReviewOutcome.ACCEPT
+                        && parsed != ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL
+                        && parsed != ReviewOutcome.REPAIR_DECISION) {
+                    throw new IllegalArgumentException("玩家授权复核返回了不适用的分类：" + outcome);
+                }
+                if (passed != (parsed != ReviewOutcome.REPAIR_DECISION)) {
+                    throw new IllegalArgumentException("玩家授权复核分类与 passed 不一致");
+                }
+                return parsed;
+            } catch (IllegalArgumentException error) {
+                if (error.getMessage() != null && error.getMessage().startsWith("玩家授权复核")) throw error;
+                throw new IllegalArgumentException("玩家授权复核返回了未知分类：" + outcome, error);
+            }
         }
 
         /**
@@ -926,7 +946,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             if (firstRequiredStopOccurrence.isBlank() && !actionsAfterRequiredStop.isEmpty()) {
                 return "授权复核列出了停止边界后的行动，但缺少首次应停止位置";
             }
-            if (!firstRequiredStopOccurrence.isBlank() && !actionsAfterRequiredStop.isEmpty() && passed) {
+            if (!firstRequiredStopOccurrence.isBlank() && !actionsAfterRequiredStop.isEmpty() && passed
+                    && reviewOutcome() != ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL) {
                 return "候选在首次应停止位置之后仍替玩家继续行动";
             }
             return "";
