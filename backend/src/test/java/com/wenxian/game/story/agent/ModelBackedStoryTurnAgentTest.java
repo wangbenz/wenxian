@@ -294,20 +294,12 @@ class ModelBackedStoryTurnAgentTest {
     }
 
     @Test
-    void repairsAgencyTrimContractOnceWithoutReplanningTheStory() throws Exception {
-        AtomicInteger calls = new AtomicInteger();
+    void normalizesBlankAgencyCheckpointWithoutAnotherModelCall() throws Exception {
         StoryModelGateway gateway = request -> {
-            if (calls.incrementAndGet() == 1) {
-                assertTrue(request.systemPrompt().contains("授权边界裁剪 Agent"));
-                return result(VALID_PATCH.replace(
-                        "\"required\":false,\"prompt\":null",
-                        "\"required\":true,\"prompt\":null"), 25, 20, 60);
-            }
             assertTrue(request.systemPrompt().contains("授权边界裁剪 Agent"));
-            assertTrue(request.userPrompt().contains("重大决定检查点必须说明待玩家决定的内容"));
             return result(VALID_PATCH.replace(
                     "\"required\":false,\"prompt\":null",
-                    "\"required\":true,\"prompt\":\"是否继续下一步？\""), 18, 12, 40);
+                    "\"required\":true,\"prompt\":null"), 25, 20, 60);
         };
         StoryPatch rejected = new ObjectMapper().findAndRegisterModules().readValue(VALID_PATCH, StoryPatch.class);
 
@@ -316,8 +308,8 @@ class ModelBackedStoryTurnAgentTest {
                 rejected, "玩家授权：候选继续执行了下一步");
 
         assertTrue(trimmed.patch().decisionCheckpoint().required());
-        assertEquals("是否继续下一步？", trimmed.patch().decisionCheckpoint().prompt());
-        assertEquals(2, trimmed.modelResults().size());
+        assertEquals("是否继续执行尚未确认的下一步行动？", trimmed.patch().decisionCheckpoint().prompt());
+        assertEquals(1, trimmed.modelResults().size());
     }
 
     @Test

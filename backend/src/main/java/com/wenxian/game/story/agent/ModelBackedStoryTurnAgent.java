@@ -711,14 +711,14 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                 outcomePlanRepairPayload(context, rejected, problem), 0.0);
         attempts.add(result);
         try {
-            return new PlannedOutcome(parse(result.text()), attempts);
+            return new PlannedOutcome(parseAgencyTrim(result.text()), attempts);
         } catch (JsonProcessingException | IllegalArgumentException firstError) {
             StoryModelGateway.Result repaired = call(trimRoute, invocation,
                     "STORY_OUTCOME_PLAN_AGENCY_TRIM_FORMAT_REPAIR_FLASH", OUTCOME_PLAN_AGENCY_TRIM_PROMPT,
                     repairPrompt(result.text(), firstError.getMessage()), 0.0);
             attempts.add(repaired);
             try {
-                return new PlannedOutcome(parse(repaired.text()), attempts);
+                return new PlannedOutcome(parseAgencyTrim(repaired.text()), attempts);
             } catch (JsonProcessingException | IllegalArgumentException secondError) {
                 throw new IllegalArgumentException("结果计划授权裁剪在一次格式整理后仍未形成可校验结果", secondError);
             }
@@ -1349,6 +1349,25 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
 
     private StoryPatch parse(String raw) throws JsonProcessingException {
         StoryPatch patch = normalizer.normalize(tolerantMapper.readValue(rawJson(raw), StoryPatch.class));
+        validator.validate(patch);
+        return patch;
+    }
+
+    /**
+     * 授权裁剪已经明确需要把下一步交还玩家时，空的提示文本只是模型结构缺项，不代表新的剧情事实。
+     * 使用中立提示补齐该必填字段，避免为同一空字段反复调用模型；其他结构与语义问题仍由严格校验拒绝。
+     */
+    private StoryPatch parseAgencyTrim(String raw) throws JsonProcessingException {
+        StoryPatch parsed = tolerantMapper.readValue(rawJson(raw), StoryPatch.class);
+        StoryPatch.DecisionCheckpoint checkpoint = parsed.decisionCheckpoint();
+        if (checkpoint != null && checkpoint.required()
+                && (checkpoint.prompt() == null || checkpoint.prompt().isBlank())) {
+            checkpoint = new StoryPatch.DecisionCheckpoint(true, "是否继续执行尚未确认的下一步行动？");
+            parsed = new StoryPatch(parsed.title(), parsed.narrative(), parsed.time(), parsed.coreState(),
+                    parsed.entities(), parsed.worldFacts(), parsed.knowledge(), parsed.memories(), checkpoint,
+                    parsed.choices(), parsed.rollingSummary(), parsed.outcome());
+        }
+        StoryPatch patch = normalizer.normalize(parsed);
         validator.validate(patch);
         return patch;
     }
