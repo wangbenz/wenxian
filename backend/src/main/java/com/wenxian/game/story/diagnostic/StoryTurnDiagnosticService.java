@@ -139,6 +139,10 @@ public class StoryTurnDiagnosticService {
                             .put("resolution", ref.resolution() == null ? "" : ref.resolution().name())
                             .put("entityId", text(ref.entityId())).put("entityType", text(ref.entityType()))
                             .put("canonicalName", text(ref.canonicalName())).put("role", text(ref.role()))
+                            .put("referenceKey", text(ref.referenceKey()))
+                            .put("persistence", ref.persistence() == null ? "" : ref.persistence().name())
+                            .put("resultTarget", ref.resultTarget())
+                            .putPOJO("expectedCustody", ref.expectedCustody())
                             .set("evidenceRefs", owner.mapper.valueToTree(ref.evidenceRefs())))
                     .toList()));
             actionContract.set("itemTransitions", owner.mapper.valueToTree(contract.itemTransitions()));
@@ -155,6 +159,7 @@ public class StoryTurnDiagnosticService {
             ObjectNode value = owner.mapper.createObjectNode();
             value.put("source", source);
             value.set("time", owner.mapper.valueToTree(patch.time()));
+            value.set("outcome", owner.mapper.valueToTree(patch.outcome()));
             value.set("coreState", owner.mapper.valueToTree(patch.coreState()));
             value.set("entities", owner.mapper.valueToTree(patch.entities().stream().map(entity -> {
                 ObjectNode item = owner.mapper.createObjectNode();
@@ -232,6 +237,7 @@ public class StoryTurnDiagnosticService {
             ObjectNode value = owner.mapper.createObjectNode();
             value.put("worldTimeAfter", worldTimeAfter);
             value.set("time", owner.mapper.valueToTree(patch.time()));
+            value.set("outcome", owner.mapper.valueToTree(patch.outcome()));
             value.set("coreState", owner.mapper.valueToTree(patch.coreState()));
             value.set("entityChanges", owner.mapper.valueToTree(patch.entities().stream().map(entity ->
                     owner.mapper.createObjectNode()

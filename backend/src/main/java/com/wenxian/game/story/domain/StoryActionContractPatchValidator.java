@@ -101,6 +101,16 @@ public final class StoryActionContractPatchValidator {
                 .filter(value -> "ITEM".equalsIgnoreCase(value.entityType()))
                 .filter(value -> reference.canonicalName().equals(value.name()))
                 .toList();
+        StoryPatch.OutcomeResolution resolution = patch.outcome() == null
+                ? StoryPatch.OutcomeResolution.SUCCEEDED : patch.outcome().resolution();
+        if (resolution == StoryPatch.OutcomeResolution.FAILED) {
+            if (!matches.isEmpty()) {
+                throw new IllegalArgumentException("本轮取得物品失败，但结果计划仍创建了物品："
+                        + reference.canonicalName());
+            }
+            return;
+        }
+        if (resolution == StoryPatch.OutcomeResolution.PARTIAL && matches.isEmpty()) return;
         if (matches.size() != 1) {
             throw new IllegalArgumentException("本轮新增物品没有形成唯一状态记录：" + reference.canonicalName());
         }

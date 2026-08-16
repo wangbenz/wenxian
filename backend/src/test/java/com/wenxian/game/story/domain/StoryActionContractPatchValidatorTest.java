@@ -71,6 +71,39 @@ class StoryActionContractPatchValidatorTest {
     }
 
     @Test
+    void failedAttemptDoesNotRequireTheNewItemToExist() {
+        StoryActionContract contract = new StoryActionContract("尝试拾起瓦片", true,
+                List.of(new EntityReference("青色瓦片", ReferenceResolution.NEW, null, "ITEM",
+                        "青色瓦片碎片", "TARGET", new CustodyValue(HolderType.PLAYER, null))),
+                List.of(), List.of(), "尝试结束后停下", new Conflict(false, "", ""));
+        StoryPatch failed = new StoryPatch("未能拾取", "瓦片坠入缝隙。",
+                new TimePassage(5, TimeResolution.COMPLETE, null), null, List.of(), List.of(),
+                List.of(), List.of(), new StoryPatch.DecisionCheckpoint(false, null), List.of(),
+                "未取得瓦片。", new StoryPatch.TurnOutcome(StoryPatch.OutcomeResolution.FAILED,
+                "瓦片坠入缝隙，未能取得"));
+
+        assertDoesNotThrow(() -> validator.validate(contract, failed));
+    }
+
+    @Test
+    void failedAttemptCannotStillCreateTheNewItem() {
+        StoryActionContract contract = new StoryActionContract("尝试拾起瓦片", true,
+                List.of(new EntityReference("青色瓦片", ReferenceResolution.NEW, null, "ITEM",
+                        "青色瓦片碎片", "TARGET", new CustodyValue(HolderType.PLAYER, null))),
+                List.of(), List.of(), "尝试结束后停下", new Conflict(false, "", ""));
+        EntityPatch created = new EntityPatch(EntityOperation.CREATE, null, "ITEM",
+                "青色瓦片碎片", "刚拾起", null, null, new QuantityValue(true, 1), true,
+                new CustodyValue(HolderType.PLAYER, null), null, null);
+        StoryPatch failed = new StoryPatch("未能拾取", "瓦片坠入缝隙。",
+                new TimePassage(5, TimeResolution.COMPLETE, null), null, List.of(created), List.of(),
+                List.of(), List.of(), new StoryPatch.DecisionCheckpoint(false, null), List.of(),
+                "未取得瓦片。", new StoryPatch.TurnOutcome(StoryPatch.OutcomeResolution.FAILED,
+                "瓦片坠入缝隙，未能取得"));
+
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(contract, failed));
+    }
+
+    @Test
     void establishedItemMutationMustPromoteTheSourceItemIntoStableState() {
         StoryActionContract contract = new StoryActionContract("服用根源中的醒尘丹", true,
                 List.of(new EntityReference("醒尘丹", ReferenceResolution.ESTABLISHED, null, "ITEM",

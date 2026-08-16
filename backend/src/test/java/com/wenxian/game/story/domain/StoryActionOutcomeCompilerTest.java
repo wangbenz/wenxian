@@ -92,6 +92,44 @@ class StoryActionOutcomeCompilerTest {
         assertEquals(StoryPatch.HolderType.PLAYER, promoted.custody().holderType());
     }
 
+    @Test
+    void materializesSuccessfulNewItemWithContractCustodyWhenPlanOmitsIt() {
+        EntityReference parcel = new EntityReference("领取药包", ReferenceResolution.NEW,
+                null, "ITEM", "送药药包", "TARGET",
+                new StoryPatch.CustodyValue(StoryPatch.HolderType.PLAYER, null),
+                List.of(), "delivery-parcel", ReferencePersistence.PROMOTE_ON_CHANGE, true);
+        StoryActionContract contract = new StoryActionContract("领取送药药包", ActionMode.ATTEMPT,
+                true, List.of(parcel), List.of(), List.of(), null,
+                "领到药包后停下", new Conflict(false, "", ""));
+
+        StoryPatch compiled = compiler.compile(contract,
+                patch(OutcomeResolution.SUCCEEDED, List.of()));
+
+        assertEquals(1, compiled.entities().size());
+        EntityPatch created = compiled.entities().getFirst();
+        assertEquals(EntityOperation.CREATE, created.operation());
+        assertEquals("送药药包", created.name());
+        assertEquals("delivery-parcel", created.referenceKey());
+        assertEquals(StoryPatch.HolderType.PLAYER, created.custody().holderType());
+        assertTrue(created.inPossession());
+    }
+
+    @Test
+    void doesNotMaterializeNewItemWhenAttemptFailed() {
+        EntityReference parcel = new EntityReference("领取药包", ReferenceResolution.NEW,
+                null, "ITEM", "送药药包", "TARGET",
+                new StoryPatch.CustodyValue(StoryPatch.HolderType.PLAYER, null),
+                List.of(), "delivery-parcel", ReferencePersistence.PROMOTE_ON_CHANGE, true);
+        StoryActionContract contract = new StoryActionContract("尝试领取送药药包", ActionMode.ATTEMPT,
+                true, List.of(parcel), List.of(), List.of(), null,
+                "尝试结束后停下", new Conflict(false, "", ""));
+
+        StoryPatch compiled = compiler.compile(contract,
+                patch(OutcomeResolution.FAILED, List.of()));
+
+        assertTrue(compiled.entities().isEmpty());
+    }
+
     private EntityReference learningTarget() {
         return new EntityReference("学习御剑术", ReferenceResolution.NEW, null,
                 "ABILITY", "御剑术", "RESULT", null, List.of(), "ability-result",

@@ -322,6 +322,21 @@ class StoryActionContractValidatorTest {
         assertTrue(error.getMessage().contains("结果目标不能同时声明"));
     }
 
+    @Test
+    void rejectsDurableNewItemWithoutTargetCustodyWhenItemStateWillChange() {
+        EntityReference parcel = new EntityReference("领取药包", ReferenceResolution.NEW,
+                null, "ITEM", "送药药包", "TARGET", null, List.of(), "delivery-parcel",
+                ReferencePersistence.PROMOTE_ON_CHANGE, true);
+        StoryActionContract contract = new StoryActionContract("领取送药药包", ActionMode.ATTEMPT,
+                true, List.of(parcel), List.of(), List.of(), null,
+                "领到药包后停下", new Conflict(false, "", ""));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(projection(new CustodyValue(HolderType.PLAYER, null)), contract));
+
+        assertTrue(error.getMessage().contains("缺少目标保管者"));
+    }
+
     private StoryActionContract contract(CustodyValue from, CustodyValue target) {
         return new StoryActionContract("处置断剑尖", true,
                 List.of(existing("断剑尖", "item-sword-tip", "ITEM", "SOURCE"),

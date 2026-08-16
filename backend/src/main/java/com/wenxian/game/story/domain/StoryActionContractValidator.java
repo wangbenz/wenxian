@@ -43,6 +43,15 @@ public final class StoryActionContractValidator {
                     "请使用“修正命卷”预览改动，确认后再写入。");
         }
         boolean createsTrackedItem = contract.references().stream().anyMatch(this::createsTrackedItem);
+        boolean missesTrackedItemTarget = contract.references().stream().anyMatch(reference -> reference != null
+                && contract.itemActionDetected()
+                && reference.resolution() == ReferenceResolution.NEW
+                && reference.persistence() != StoryActionContract.ReferencePersistence.TRANSIENT
+                && "ITEM".equalsIgnoreCase(reference.entityType())
+                && reference.expectedCustody() == null);
+        if (missesTrackedItemTarget) {
+            throw new IllegalArgumentException("本轮要取得或转移的新物品缺少目标保管者");
+        }
         boolean changesExistingItem = contract.references().stream().anyMatch(value -> value != null
                 && value.resolution() == ReferenceResolution.EXISTING
                 && "ITEM".equalsIgnoreCase(value.entityType()));

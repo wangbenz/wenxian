@@ -6,7 +6,9 @@ import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
 import com.wenxian.game.story.domain.StoryPatch.AbilityState;
 import com.wenxian.game.story.domain.StoryPatch.EntityOperation;
 import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
+import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.OutcomeResolution;
+import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -29,6 +31,7 @@ public final class StoryActionOutcomeCompiler {
                 .filter(entity -> !belongsToTransientReference(references, entity))
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         compileEstablishedItemPromotions(contract, entities);
+        compileNewItemResults(contract, patch, entities);
         if (patch.outcome() != null) {
             contract.references().stream()
                     .filter(this::isNewAbilityResult)
@@ -38,6 +41,66 @@ public final class StoryActionOutcomeCompiler {
         return new StoryPatch(patch.title(), patch.narrative(), patch.time(), patch.coreState(), entities,
                 patch.worldFacts(), patch.knowledge(), patch.memories(), patch.decisionCheckpoint(),
                 patch.choices(), patch.rollingSummary(), patch.outcome());
+    }
+
+    /**
+     * 把“尝试取得一个新物品”的裁定结果编译为稳定物品事实。
+     *
+     * <p>行动契约只声明目标物品与成功后的保管者，真正成功、部分成功或失败仍由结果模型决定。成功时若
+     * 结果计划漏掉机械性的 CREATE，本方法补出最小记录；失败时移除同一回合引用下的误创建；部分成功
+     * 只有模型明确返回物品时才保留。这里不读取玩家中文，也不根据物品名称猜测业务。</p>
+     */
+    private void compileNewItemResults(StoryActionContract contract, StoryPatch patch,
+                                       List<EntityPatch> entities) {
+        if (!contract.itemActionDetected() || patch.outcome() == null) return;
+        contract.references().stream()
+                .filter(reference -> reference != null
+                        && reference.resolution() == ReferenceResolution.NEW
+                        && reference.persistence() != ReferencePersistence.TRANSIENT
+                        && "ITEM".equalsIgnoreCase(reference.entityType())
+                        && reference.expectedCustody() != null)
+                .forEach(reference -> compileNewItemResult(reference, patch, entities));
+    }
+
+    private void compileNewItemResult(EntityReference reference, StoryPatch patch,
+                                      List<EntityPatch> entities) {
+        String referenceKey = StoryReferenceAlias.normalizeKey(reference.referenceKey());
+        List<Integer> matches = new ArrayList<>();
+        for (int index = 0; index < entities.size(); index++) {
+            EntityPatch entity = entities.get(index);
+            if (entity == null || !"ITEM".equalsIgnoreCase(entity.entityType())) continue;
+            String entityKey = StoryReferenceAlias.normalizeKey(entity.referenceKey());
+            if (referenceKey != null && referenceKey.equals(entityKey)
+                    || reference.canonicalName().equals(entity.name())) {
+                matches.add(index);
+            }
+        }
+        OutcomeResolution resolution = patch.outcome().resolution();
+        if (resolution == OutcomeResolution.FAILED) {
+            for (int index = matches.size() - 1; index >= 0; index--) {
+                EntityPatch entity = entities.get(matches.get(index));
+                if (entity.operation() == EntityOperation.CREATE) entities.remove(matches.get(index).intValue());
+            }
+            return;
+        }
+        if (matches.isEmpty()) {
+            if (resolution != OutcomeResolution.SUCCEEDED) return;
+            boolean playerHeld = reference.expectedCustody().holderType() == HolderType.PLAYER;
+            entities.add(new EntityPatch(EntityOperation.CREATE, null, "ITEM", reference.canonicalName(),
+                    playerHeld ? "已收入行囊" : "已完成交付", outcomeSummary(patch, reference), null,
+                    new QuantityValue(false, null), playerHeld, reference.expectedCustody(), null,
+                    null, null, null, referenceKey));
+            return;
+        }
+        if (matches.size() != 1) return;
+        int index = matches.getFirst();
+        EntityPatch current = entities.get(index);
+        if (current.operation() != EntityOperation.CREATE) return;
+        boolean playerHeld = reference.expectedCustody().holderType() == HolderType.PLAYER;
+        entities.set(index, new EntityPatch(EntityOperation.CREATE, null, "ITEM",
+                textOr(current.name(), reference.canonicalName()), current.status(), current.summary(),
+                current.attributes(), current.quantity(), playerHeld, reference.expectedCustody(), null,
+                current.lifecycle(), current.relationship(), current.nameChange(), referenceKey));
     }
 
     /**
