@@ -29,7 +29,8 @@ class ModelBackedStoryTurnAgentTest {
              "worldFacts":[],"knowledge":[],"memories":[],
              "decisionCheckpoint":{"required":false,"prompt":null},
              "choices":[{"title":"继续观察","description":"寻找禁制薄弱处。"}],
-             "rollingSummary":"你在石门前施展了照影诀。"}
+             "rollingSummary":"你在石门前施展了照影诀。",
+             "outcome":{"resolution":"SUCCEEDED","summary":"照影诀成功显出石门禁制"}}
             """;
 
     @Test
@@ -74,6 +75,8 @@ class ModelBackedStoryTurnAgentTest {
                 assertEquals(0.1, request.temperature());
                 assertTrue(request.systemPrompt().contains("回合结果规划 Agent"));
                 assertTrue(request.systemPrompt().contains("不写供玩家阅读的完整剧情"));
+                assertTrue(request.systemPrompt().contains("resultTarget=true"));
+                assertTrue(request.systemPrompt().contains("SUCCEEDED"));
                 yield result(VALID_PATCH, 80, 120, 300);
             }
             case 2 -> {
@@ -111,6 +114,7 @@ class ModelBackedStoryTurnAgentTest {
                 context(), route(), invocation, planned.patch(), rendered);
 
         assertEquals("石门之后", planned.patch().title());
+        assertEquals(StoryPatch.OutcomeResolution.SUCCEEDED, planned.patch().outcome().resolution());
         assertEquals("禁制显影", rendered.title());
         assertTrue(review.accepted());
         assertEquals(3, calls.get());
@@ -452,6 +456,43 @@ class ModelBackedStoryTurnAgentTest {
                 resolved.contract().agencyBoundary().authorizedActions());
         assertEquals("观察完成后仍停在石门前", resolved.contract().agencyBoundary().requiredEndState());
         assertEquals(1, resolved.modelResults().size());
+    }
+
+    @Test
+    void repairsActionContractWhenModelConfusesResolutionWithPersistence() {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> {
+            if (calls.getAndIncrement() == 0) {
+                return result("""
+                        {"intentSummary":"询问普通摊主","actionMode":"ATTEMPT","itemActionDetected":false,
+                         "references":[{"mention":"摊主","resolution":"TRANSIENT","entityId":null,
+                           "entityType":"CHARACTER","canonicalName":"摊主","role":"SCENE",
+                           "expectedCustody":null,"evidenceRefs":[],"referenceKey":"scene-owner"}],
+                         "itemTransitions":[],"characterPreconditions":[],"stopBoundary":"问完后停下",
+                         "conflict":{"present":false,"reason":"","correction":""}}
+                        """, 20, 10, 40);
+            }
+            assertTrue(request.userPrompt().contains("malformedContract"));
+            assertTrue(request.userPrompt().contains("resolution 只允许"));
+            return result("""
+                    {"intentSummary":"询问普通摊主","actionMode":"ATTEMPT","itemActionDetected":false,
+                     "references":[{"mention":"摊主","resolution":"NEW","entityId":null,
+                       "entityType":"CHARACTER","canonicalName":"摊主","role":"SCENE",
+                       "expectedCustody":null,"evidenceRefs":[],"referenceKey":"scene-owner",
+                       "persistence":"TRANSIENT","resultTarget":false}],
+                     "itemTransitions":[],"characterPreconditions":[],"stopBoundary":"问完后停下",
+                     "conflict":{"present":false,"reason":"","correction":""}}
+                    """, 30, 15, 50);
+        };
+
+        StoryTurnAgent.ResolvedAction resolved = agent(gateway).resolveAction(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-contract-format", 10));
+
+        assertEquals(2, resolved.modelResults().size());
+        assertEquals(StoryActionContract.ReferenceResolution.NEW,
+                resolved.contract().references().getFirst().resolution());
+        assertEquals(StoryActionContract.ReferencePersistence.TRANSIENT,
+                resolved.contract().references().getFirst().persistence());
     }
 
     @Test

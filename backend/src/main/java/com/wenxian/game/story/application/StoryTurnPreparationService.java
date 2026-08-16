@@ -23,6 +23,8 @@ import com.wenxian.game.story.domain.TrustedStoryEvent;
 import com.wenxian.game.story.domain.TrustedStoryEventCompiler;
 import com.wenxian.game.story.domain.StoryNarrativeFreshnessValidator;
 import com.wenxian.game.story.domain.StoryNarrativeFreshnessException;
+import com.wenxian.game.story.domain.StoryOutcomeConsistencyValidator;
+import com.wenxian.game.story.domain.StoryActionOutcomeCompiler;
 import com.wenxian.game.story.diagnostic.StoryTurnDiagnosticService;
 import com.wenxian.game.story.persistence.StoryConversationRepository;
 import com.wenxian.game.story.persistence.StoryEntityRepository;
@@ -65,6 +67,8 @@ public class StoryTurnPreparationService {
     private final StoryActionContractValidator actionContracts = new StoryActionContractValidator();
     private final StoryEntityReferenceCompiler referenceCompiler = new StoryEntityReferenceCompiler();
     private final StoryActionContractPatchValidator contractPatches = new StoryActionContractPatchValidator();
+    private final StoryActionOutcomeCompiler actionOutcomeCompiler = new StoryActionOutcomeCompiler();
+    private final StoryOutcomeConsistencyValidator outcomeConsistency = new StoryOutcomeConsistencyValidator();
     private final StoryNarrativeFreshnessValidator narrativeFreshness = new StoryNarrativeFreshnessValidator();
     private final TrustedStoryEventCompiler eventCompiler = new TrustedStoryEventCompiler();
 
@@ -235,7 +239,7 @@ public class StoryTurnPreparationService {
         StoryTurnAgent.PlannedOutcome planned = agent.planOutcome(context, route, invocation);
         List<StoryModelGateway.Result> attempts = new ArrayList<>(resolvedAction.modelResults());
         attempts.addAll(planned.modelResults());
-        StoryPatch plan = normalizedPlan(before, semanticDuration, planned.patch());
+        StoryPatch plan = normalizedPlan(before, semanticDuration, actionContract, planned.patch());
         if (diagnostic != null) diagnostic.proposal("OUTCOME_PLAN", plan);
 
         try {
@@ -245,7 +249,7 @@ public class StoryTurnPreparationService {
             StoryTurnAgent.PlannedOutcome repaired = agent.repairOutcomePlan(
                     context, route, invocation, plan, rejected.getMessage());
             attempts.addAll(repaired.modelResults());
-            plan = normalizedPlan(before, semanticDuration, repaired.patch());
+            plan = normalizedPlan(before, semanticDuration, actionContract, repaired.patch());
             if (diagnostic != null) diagnostic.proposal("REPAIRED_OUTCOME_PLAN", plan);
             try {
                 preflightOutcome(before, actionContract, plan, explicitDurationMinutes);
@@ -288,7 +292,7 @@ public class StoryTurnPreparationService {
                 StoryTurnAgent.PlannedOutcome repairedPlan = agent.repairOutcomePlan(
                         context, route, invocation, plan, problem);
                 attempts.addAll(repairedPlan.modelResults());
-                plan = normalizedPlan(before, semanticDuration, repairedPlan.patch());
+                plan = normalizedPlan(before, semanticDuration, actionContract, repairedPlan.patch());
                 if (diagnostic != null) diagnostic.proposal("COVERAGE_REPAIRED_OUTCOME_PLAN", plan);
                 try {
                     preflightOutcome(before, actionContract, plan, explicitDurationMinutes);
@@ -334,21 +338,28 @@ public class StoryTurnPreparationService {
         return new Prepared(before, applied, existingEntities, generation, trustedEvents, diagnostic);
     }
 
-    private StoryPatch normalizedPlan(StoryProjection before, SemanticDuration semanticDuration, StoryPatch plan) {
-        return eventCompiler.compile(before, plan, semanticDuration).normalizedPatch();
+    private StoryPatch normalizedPlan(StoryProjection before, SemanticDuration semanticDuration,
+                                      com.wenxian.game.story.domain.StoryActionContract actionContract,
+                                      StoryPatch plan) {
+        StoryPatch normalized = eventCompiler.compile(before, plan, semanticDuration).normalizedPatch();
+        return actionOutcomeCompiler.compile(actionContract, normalized);
     }
 
     private void preflightOutcome(StoryProjection before,
                                   com.wenxian.game.story.domain.StoryActionContract actionContract,
                                   StoryPatch plan, Long explicitDurationMinutes) {
+        if (plan.outcome() == null) {
+            throw new IllegalArgumentException("结果计划缺少成功、部分成功或失败结论");
+        }
         contractPatches.validate(before, actionContract, plan);
+        outcomeConsistency.validate(actionContract, plan);
         reducer.reduce(before, plan, explicitDurationMinutes);
     }
 
     private StoryPatch composeOutcome(StoryPatch plan, StoryTurnAgent.RenderedNarrative rendered) {
         return new StoryPatch(rendered.title(), rendered.narrative(), plan.time(), plan.coreState(),
                 plan.entities(), plan.worldFacts(), plan.knowledge(), plan.memories(),
-                plan.decisionCheckpoint(), rendered.choices(), rendered.rollingSummary());
+                plan.decisionCheckpoint(), rendered.choices(), rendered.rollingSummary(), plan.outcome());
     }
 
     /**

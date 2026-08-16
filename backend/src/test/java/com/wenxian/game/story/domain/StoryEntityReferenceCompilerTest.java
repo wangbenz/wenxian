@@ -3,6 +3,7 @@ package com.wenxian.game.story.domain;
 import com.wenxian.game.story.domain.StoryActionContract.Conflict;
 import com.wenxian.game.story.domain.StoryActionContract.EntityReference;
 import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
+import com.wenxian.game.story.domain.StoryActionContract.ReferencePersistence;
 import com.wenxian.game.story.domain.StoryActionContract.CharacterPrecondition;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
@@ -104,6 +105,34 @@ class StoryEntityReferenceCompilerTest {
         StoryActionContract compiled = compiler.compile(projection(), raw, List.of());
 
         assertTrue(compiled.characterPreconditions().isEmpty());
+    }
+
+    @Test
+    void keepsGenericSceneCharacterTransientWhenModelMistakenlyCallsItExisting() {
+        EntityReference stallOwner = new EntityReference("摊主", ReferenceResolution.EXISTING,
+                null, "CHARACTER", "摊主", "SCENE", null, List.of(), "scene-owner",
+                ReferencePersistence.TRANSIENT, false);
+
+        StoryActionContract compiled = compiler.compile(projection(), contract(stallOwner), List.of());
+
+        EntityReference result = compiled.references().getFirst();
+        assertEquals(ReferenceResolution.NEW, result.resolution());
+        assertEquals(ReferencePersistence.TRANSIENT, result.persistence());
+        assertNull(result.entityId());
+    }
+
+    @Test
+    void doesNotDowngradeMissingDurableAbilityToTransient() {
+        EntityReference claimedAbility = new EntityReference("我掌握的御剑术", ReferenceResolution.EXISTING,
+                null, "ABILITY", "御剑术", "SOURCE", null, List.of(), "ability-source",
+                ReferencePersistence.DURABLE, false);
+
+        StoryActionContract compiled = compiler.compile(projection(), contract(claimedAbility), List.of());
+
+        EntityReference result = compiled.references().getFirst();
+        assertEquals(ReferenceResolution.EXISTING, result.resolution());
+        assertEquals(ReferencePersistence.DURABLE, result.persistence());
+        assertNull(result.entityId());
     }
 
     private EntityAlias alias(String id, String entityId, String name) {

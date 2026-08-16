@@ -21,7 +21,9 @@ import com.wenxian.game.story.domain.StoryPatchValidator;
 import com.wenxian.game.story.domain.ExplicitDurationParser;
 import com.wenxian.game.story.domain.StoryActionContractPatchValidator;
 import com.wenxian.game.story.domain.StoryActionContractValidator;
+import com.wenxian.game.story.domain.StoryActionOutcomeCompiler;
 import com.wenxian.game.story.domain.StoryEntityReferenceCompiler;
+import com.wenxian.game.story.domain.StoryOutcomeConsistencyValidator;
 import com.wenxian.game.story.domain.SemanticDuration;
 import com.wenxian.game.story.domain.SemanticDurationParser;
 import com.wenxian.game.story.domain.StoryProjection;
@@ -53,6 +55,8 @@ class TrustedStoryTurnRealModelSmokeTest {
             prefix -> prefix + "-real-smoke-" + entitySequence.incrementAndGet());
     private final StoryActionContractValidator actionContracts = new StoryActionContractValidator();
     private final StoryActionContractPatchValidator contractPatches = new StoryActionContractPatchValidator();
+    private final StoryActionOutcomeCompiler outcomeCompiler = new StoryActionOutcomeCompiler();
+    private final StoryOutcomeConsistencyValidator outcomeConsistency = new StoryOutcomeConsistencyValidator();
     private final StoryEntityReferenceCompiler referenceCompiler = new StoryEntityReferenceCompiler();
     private final TrustedStoryEventCompiler eventCompiler = new TrustedStoryEventCompiler();
 
@@ -102,6 +106,8 @@ class TrustedStoryTurnRealModelSmokeTest {
         if (selected(selectedScenario, "time")) explicitTime(agent, route);
         if (selected(selectedScenario, "agency")) playerAgency(agent, route);
         if (selected(selectedScenario, "world")) worldExpansion(agent, route);
+        if (selected(selectedScenario, "learning")) learningAttempt(agent, route);
+        if (selected(selectedScenario, "transient")) transientSceneInteraction(agent, route);
     }
 
     private void deadCharacter(StoryTurnAgent agent, StoryModelRoute route) {
@@ -169,6 +175,34 @@ class TrustedStoryTurnRealModelSmokeTest {
         assertTrue(applied.projection().worldFacts().containsKey(fact.id()));
     }
 
+    private void learningAttempt(StoryTurnAgent agent, StoryModelRoute route) {
+        var applied = run("learning", "临摹石壁上的无名剑痕，尝试领悟一门御剑术法；"
+                        + "只完成这一次学习尝试，结果如何都停下。",
+                projection(0, Map.of(), Map.of()), agent, route);
+        assertTrue(applied.acceptedPatch().outcome() != null);
+        var abilities = applied.projection().entities().values().stream()
+                .filter(value -> "ABILITY".equals(value.entityType()))
+                .toList();
+        if (applied.acceptedPatch().outcome().resolution() == StoryPatch.OutcomeResolution.FAILED) {
+            assertTrue(abilities.isEmpty(), "学习失败不能创建已掌握能力");
+        } else {
+            assertEquals(1, abilities.size(), "学习形成结果后必须保存唯一能力记录");
+            AbilityState expected = applied.acceptedPatch().outcome().resolution()
+                    == StoryPatch.OutcomeResolution.SUCCEEDED
+                    ? AbilityState.MASTERED : AbilityState.LEARNING;
+            assertEquals(expected, abilities.getFirst().abilityState());
+        }
+    }
+
+    private void transientSceneInteraction(StoryTurnAgent agent, StoryModelRoute route) {
+        var applied = run("transient", "向街边卖茶的普通摊主问一问前方道路是否畅通，"
+                        + "得到回答后仍留在摊前，不做其他决定。",
+                projection(0, Map.of(), Map.of()), agent, route);
+        assertTrue(applied.projection().entities().values().stream()
+                        .noneMatch(value -> "CHARACTER".equals(value.entityType())),
+                "只服务本轮的普通摊主不应污染长期人物档案");
+    }
+
     private StoryStateReducer.Applied run(String scenario, String action, StoryProjection projection,
                                           StoryTurnAgent agent, StoryModelRoute route) {
         int firstOperation = operations.size();
@@ -197,13 +231,13 @@ class TrustedStoryTurnRealModelSmokeTest {
 
         StoryTurnAgent.PlannedOutcome planned = agent.planOutcome(context, route, invocation);
         attempts.addAll(planned.modelResults());
-        StoryPatch plan = eventCompiler.compile(projection, planned.patch(), semanticDuration).normalizedPatch();
+        StoryPatch plan = normalizePlan(projection, contract, planned.patch(), semanticDuration);
         try {
             preflight(projection, contract, plan, explicitDurationMinutes);
         } catch (IllegalArgumentException rejectedPlan) {
             planned = agent.repairOutcomePlan(context, route, invocation, plan, rejectedPlan.getMessage());
             attempts.addAll(planned.modelResults());
-            plan = eventCompiler.compile(projection, planned.patch(), semanticDuration).normalizedPatch();
+            plan = normalizePlan(projection, contract, planned.patch(), semanticDuration);
             preflight(projection, contract, plan, explicitDurationMinutes);
         }
 
@@ -215,7 +249,7 @@ class TrustedStoryTurnRealModelSmokeTest {
             if (review.outcome() == StoryTurnAgent.ReviewOutcome.REPAIR_FACTS) {
                 planned = agent.repairOutcomePlan(context, route, invocation, plan, review.problem());
                 attempts.addAll(planned.modelResults());
-                plan = eventCompiler.compile(projection, planned.patch(), semanticDuration).normalizedPatch();
+                plan = normalizePlan(projection, contract, planned.patch(), semanticDuration);
                 preflight(projection, contract, plan, explicitDurationMinutes);
                 rendered = agent.renderNarrative(context, route, invocation, plan);
                 attempts.addAll(rendered.modelResults());
@@ -243,14 +277,23 @@ class TrustedStoryTurnRealModelSmokeTest {
 
     private void preflight(StoryProjection projection, com.wenxian.game.story.domain.StoryActionContract contract,
                            StoryPatch plan, Long explicitDurationMinutes) {
+        assertTrue(plan.outcome() != null, "真实结果计划必须明确成功、部分成功或失败");
         contractPatches.validate(projection, contract, plan);
+        outcomeConsistency.validate(contract, plan);
         reducer.reduce(projection, plan, explicitDurationMinutes);
+    }
+
+    private StoryPatch normalizePlan(StoryProjection projection,
+                                     com.wenxian.game.story.domain.StoryActionContract contract,
+                                     StoryPatch plan, SemanticDuration duration) {
+        StoryPatch normalized = eventCompiler.compile(projection, plan, duration).normalizedPatch();
+        return outcomeCompiler.compile(contract, normalized);
     }
 
     private StoryPatch compose(StoryPatch plan, StoryTurnAgent.RenderedNarrative rendered) {
         return new StoryPatch(rendered.title(), rendered.narrative(), plan.time(), plan.coreState(), plan.entities(),
                 plan.worldFacts(), plan.knowledge(), plan.memories(), plan.decisionCheckpoint(), rendered.choices(),
-                rendered.rollingSummary());
+                rendered.rollingSummary(), plan.outcome());
     }
 
     private StoryProjection projection(long time, Map<String, EntityState> entities,

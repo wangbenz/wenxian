@@ -26,10 +26,12 @@ import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleValue;
 import com.wenxian.game.story.domain.StoryPatch.NameChange;
+import com.wenxian.game.story.domain.StoryPatch.OutcomeResolution;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
 import com.wenxian.game.story.domain.StoryPatch.RelationshipValue;
 import com.wenxian.game.story.domain.StoryPatch.TimePassage;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
+import com.wenxian.game.story.domain.StoryPatch.TurnOutcome;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactOperation;
 import com.wenxian.game.story.domain.StoryPatch.WorldFactPatch;
 import com.wenxian.game.story.domain.StoryPatchValidator;
@@ -1264,7 +1266,8 @@ class PersistedLightNarrativeEngineTest {
                             new TimePassage(1_440, TimeResolution.COMPLETE, null),
                             new StoryPatch.CoreStatePatch("山溪边", null, null, null),
                             List.of(), List.of(), List.of(), List.of(),
-                            new DecisionCheckpoint(false, null), List.of(), "翌日已抵达山溪边。");
+                            new DecisionCheckpoint(false, null), List.of(), "翌日已抵达山溪边。",
+                            new TurnOutcome(OutcomeResolution.SUCCEEDED, "歇息后按计划抵达山溪边"));
                     return new PlannedOutcome(plan, List.of(modelResult("outcome-plan")));
                 }
 
@@ -1388,7 +1391,8 @@ class PersistedLightNarrativeEngineTest {
                             new TimePassage(60, TimeResolution.COMPLETE, null),
                             new StoryPatch.CoreStatePatch(location, null, null, null),
                             List.of(), List.of(), List.of(), List.of(), new DecisionCheckpoint(false, null),
-                            List.of(), location == null ? "你正在前往山门。" : "你已到青山门前。");
+                            List.of(), location == null ? "你正在前往山门。" : "你已到青山门前。",
+                            new TurnOutcome(OutcomeResolution.SUCCEEDED, "已执行前往青山门的行动"));
                 }
             };
             PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,

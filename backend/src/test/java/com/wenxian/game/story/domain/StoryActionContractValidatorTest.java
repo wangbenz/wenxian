@@ -6,6 +6,7 @@ import com.wenxian.game.story.domain.StoryActionContract.Conflict;
 import com.wenxian.game.story.domain.StoryActionContract.EntityReference;
 import com.wenxian.game.story.domain.StoryActionContract.ItemTransition;
 import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
+import com.wenxian.game.story.domain.StoryActionContract.ReferencePersistence;
 import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
 import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
@@ -276,6 +277,49 @@ class StoryActionContractValidatorTest {
                 () -> validator.validate(projection(new CustodyValue(HolderType.PLAYER, null)), contract));
 
         assertTrue(error.getMessage().contains("没有证据支持你已经持有"));
+    }
+
+    @Test
+    void acceptsTransientSceneCharacterWithoutStableIdDuringAnAttempt() {
+        EntityReference stallOwner = new EntityReference("摊主", ReferenceResolution.NEW,
+                null, "CHARACTER", "摊主", "SCENE", null, List.of(), "scene-owner",
+                ReferencePersistence.TRANSIENT, false);
+        StoryActionContract contract = new StoryActionContract("询问摊主药材价格", ActionMode.ATTEMPT,
+                false, List.of(stallOwner), List.of(), List.of(), null,
+                "问完价格后停下", new Conflict(false, "", ""));
+
+        assertDoesNotThrow(() -> validator.validate(
+                projection(new CustodyValue(HolderType.PLAYER, null)), contract));
+    }
+
+    @Test
+    void rejectsUsingTransientReferenceToBypassAnExistingFactAssertion() {
+        EntityReference claimedAbility = new EntityReference("我早已掌握的御剑术", ReferenceResolution.NEW,
+                null, "ABILITY", "御剑术", "SOURCE", null, List.of(), "claimed-ability",
+                ReferencePersistence.TRANSIENT, false);
+        StoryActionContract contract = new StoryActionContract("施展我早已掌握的御剑术", ActionMode.ASSERT_FACT,
+                false, List.of(claimedAbility), List.of(), List.of(), null,
+                "施展后停下", new Conflict(false, "", ""));
+
+        StoryActionPreconditionException error = assertThrows(StoryActionPreconditionException.class,
+                () -> validator.validate(projection(new CustodyValue(HolderType.PLAYER, null)), contract));
+
+        assertTrue(error.getMessage().contains("不能只作为本轮临时叙事对象"));
+    }
+
+    @Test
+    void rejectsTransientReferenceAsADurableResultTarget() {
+        EntityReference learnedAbility = new EntityReference("学习御剑术", ReferenceResolution.NEW,
+                null, "ABILITY", "御剑术", "RESULT", null, List.of(), "learned-ability",
+                ReferencePersistence.TRANSIENT, true);
+        StoryActionContract contract = new StoryActionContract("尝试学习御剑术", ActionMode.ATTEMPT,
+                false, List.of(learnedAbility), List.of(), List.of(), null,
+                "学习尝试结束后停下", new Conflict(false, "", ""));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(projection(new CustodyValue(HolderType.PLAYER, null)), contract));
+
+        assertTrue(error.getMessage().contains("结果目标不能同时声明"));
     }
 
     private StoryActionContract contract(CustodyValue from, CustodyValue target) {

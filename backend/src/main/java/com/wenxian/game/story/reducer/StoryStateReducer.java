@@ -101,7 +101,8 @@ public final class StoryStateReducer {
                 entities, worldFacts, knowledge, memories, before.initialContract());
         StoryPatch accepted = new StoryPatch(proposal.title(), proposal.narrative(), proposal.time(),
                 proposal.coreState(), acceptedEntities, acceptedWorldFacts, proposal.knowledge(),
-                proposal.memories(), proposal.decisionCheckpoint(), proposal.choices(), proposal.rollingSummary());
+                proposal.memories(), proposal.decisionCheckpoint(), proposal.choices(), proposal.rollingSummary(),
+                proposal.outcome());
         return new Applied(next, accepted, acceptedAliases);
     }
 

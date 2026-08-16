@@ -27,7 +27,8 @@ public final class TrustedStoryEventCompiler {
         List<EntityPatch> normalizedEntities = proposed.entities().stream().map(this::normalizeEntity).toList();
         StoryPatch normalized = new StoryPatch(proposed.title(), proposed.narrative(), proposed.time(),
                 proposed.coreState(), normalizedEntities, proposed.worldFacts(), proposed.knowledge(),
-                proposed.memories(), proposed.decisionCheckpoint(), proposed.choices(), proposed.rollingSummary());
+                proposed.memories(), proposed.decisionCheckpoint(), proposed.choices(), proposed.rollingSummary(),
+                proposed.outcome());
         List<TrustedStoryEvent> events = new ArrayList<>();
         events.add(new TrustedStoryEvent.ActionResolved(proposed.title(),
                 proposed.time() != null && proposed.time().resolution() == TimeResolution.INTERRUPTED

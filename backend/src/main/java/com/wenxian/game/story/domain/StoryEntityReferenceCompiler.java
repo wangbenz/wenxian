@@ -64,6 +64,9 @@ public final class StoryEntityReferenceCompiler {
                                              EntityReference reference) {
         if (reference == null) return null;
         if (reference.resolution() != ReferenceResolution.EXISTING) {
+            if (reference.persistence() == StoryActionContract.ReferencePersistence.TRANSIENT) {
+                return transientReference(reference);
+            }
             return removeMeaninglessCustody(reference);
         }
 
@@ -77,6 +80,11 @@ public final class StoryEntityReferenceCompiler {
             return canonical(reference, resolved);
         }
 
+        // 临时人物和场景对象没有稳定 ID 时可以正常参与本轮，不得仅因模型误写 EXISTING 阻塞普通问路或观察。
+        if (reference.persistence() == StoryActionContract.ReferencePersistence.TRANSIENT) {
+            return transientReference(reference);
+        }
+
         // ID 指向其他类型时不能强行改写。例如功法名称误绑到玉简 ITEM ID，应交给结构修复创建或解析能力。
         return removeMeaninglessCustody(reference);
     }
@@ -84,7 +92,14 @@ public final class StoryEntityReferenceCompiler {
     private EntityReference canonical(EntityReference reference, EntityState stable) {
         return new EntityReference(reference.mention(), reference.resolution(), stable.id(), stable.entityType(),
                 stable.name(), reference.role(), "ITEM".equalsIgnoreCase(stable.entityType())
-                ? reference.expectedCustody() : null, reference.evidenceRefs(), reference.referenceKey());
+                ? reference.expectedCustody() : null, reference.evidenceRefs(), reference.referenceKey(),
+                StoryActionContract.ReferencePersistence.DURABLE, reference.resultTarget());
+    }
+
+    private EntityReference transientReference(EntityReference reference) {
+        return new EntityReference(reference.mention(), ReferenceResolution.NEW, null, reference.entityType(),
+                reference.canonicalName(), reference.role(), null, List.of(), reference.referenceKey(),
+                StoryActionContract.ReferencePersistence.TRANSIENT, reference.resultTarget());
     }
 
     /** 非物品没有保管者语义；清除模型误填字段属于结构归一，不改变剧情结果。 */
@@ -92,7 +107,8 @@ public final class StoryEntityReferenceCompiler {
         if (reference.expectedCustody() == null || "ITEM".equalsIgnoreCase(reference.entityType())) return reference;
         return new EntityReference(reference.mention(), reference.resolution(), reference.entityId(),
                 reference.entityType(), reference.canonicalName(), reference.role(), null,
-                reference.evidenceRefs(), reference.referenceKey());
+                reference.evidenceRefs(), reference.referenceKey(), reference.persistence(),
+                reference.resultTarget());
     }
 
     private EntityState uniqueAliasTarget(StoryProjection projection, AliasIndex index,

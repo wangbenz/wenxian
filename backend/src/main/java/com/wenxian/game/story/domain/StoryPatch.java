@@ -21,7 +21,8 @@ public record StoryPatch(
         List<MemoryDraft> memories,
         DecisionCheckpoint decisionCheckpoint,
         List<ChoiceDraft> choices,
-        String rollingSummary
+        String rollingSummary,
+        TurnOutcome outcome
 ) {
     public StoryPatch {
         entities = safe(entities);
@@ -29,6 +30,16 @@ public record StoryPatch(
         knowledge = safe(knowledge);
         memories = safe(memories);
         choices = safe(choices);
+    }
+
+    /** 兼容结果字段加入前的旧调用方和历史回合。 */
+    public StoryPatch(String title, String narrative, TimePassage time, CoreStatePatch coreState,
+                      List<EntityPatch> entities, List<WorldFactPatch> worldFacts,
+                      List<KnowledgePatch> knowledge, List<MemoryDraft> memories,
+                      DecisionCheckpoint decisionCheckpoint, List<ChoiceDraft> choices,
+                      String rollingSummary) {
+        this(title, narrative, time, coreState, entities, worldFacts, knowledge, memories,
+                decisionCheckpoint, choices, rollingSummary, null);
     }
 
     private static <T> List<T> safe(List<T> values) {
@@ -41,6 +52,18 @@ public record StoryPatch(
     public enum TimeResolution {
         COMPLETE,
         INTERRUPTED
+    }
+
+    /**
+     * 玩家本轮授权行动的直接结果。它与时间是否完整执行分开：行动可以完整执行但失败，也可以只取得部分进展。
+     * 旧回合没有该字段时保持为空，不能从历史正文反向推断。
+     */
+    public record TurnOutcome(OutcomeResolution resolution, String summary) {}
+
+    public enum OutcomeResolution {
+        SUCCEEDED,
+        PARTIAL,
+        FAILED
     }
 
     /** 只表达主角核心快照的可选变化，不携带实体集合。 */

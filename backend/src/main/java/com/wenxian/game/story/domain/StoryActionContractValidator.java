@@ -89,6 +89,27 @@ public final class StoryActionContractValidator {
         if (blank(reference.mention())) throw new IllegalArgumentException("行动契约实体引用缺少玩家原始提及");
         if (blank(reference.entityType())) throw new IllegalArgumentException("行动契约实体引用缺少实体类型");
         if (blank(reference.canonicalName())) throw new IllegalArgumentException("行动契约实体引用缺少标准名称");
+        if (reference.resultTarget() && blank(reference.referenceKey())) {
+            throw new IllegalArgumentException("长期结果目标必须包含回合内引用键：" + reference.canonicalName());
+        }
+        if (reference.persistence() == StoryActionContract.ReferencePersistence.TRANSIENT) {
+            if (contract.actionMode() == ActionMode.ASSERT_FACT
+                    || contract.actionScope() == StoryActionContract.ActionScope.ASSERT_PAST) {
+                throw new StoryActionPreconditionException(
+                        "玩家声称已经成立的对象不能只作为本轮临时叙事对象："
+                                + reference.canonicalName(),
+                        "可以改为寻找、询问、学习或尝试获得，让尚未发生的可能在剧情中产生结果。");
+            }
+            if (reference.expectedCustody() != null) {
+                throw new IllegalArgumentException("本轮临时对象不能直接承担长期物品保管关系："
+                        + reference.canonicalName());
+            }
+            if (reference.resultTarget()) {
+                throw new IllegalArgumentException("本轮结果目标不能同时声明为无需保存的临时对象："
+                        + reference.canonicalName());
+            }
+            return;
+        }
         if (reference.expectedCustody() != null && !"ITEM".equalsIgnoreCase(reference.entityType())) {
             throw new IllegalArgumentException("只有可转移物品可以声明保管关系：" + reference.canonicalName());
         }

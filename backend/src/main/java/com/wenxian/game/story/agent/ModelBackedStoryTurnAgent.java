@@ -147,7 +147,9 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             严格规则：
             1. 只执行 action 授权的行动及直接后果。新的重大不可逆决定必须停下并设置
                decisionCheckpoint.required=true；不得替玩家决定加入、结盟、立誓、处决、放弃或下一步路线。
-            2. narrative 字段不是正文，只写一段不超过180字的 outcomeSummary，准确列出已完成结果和停止点；
+            2. outcome 必须先明确本轮授权行动是 SUCCEEDED（目标达成）、PARTIAL（形成可延续进展）还是 FAILED
+               （本轮没有形成目标结果），summary 只写直接结果。narrative 字段不是正文，只写一段不超过180字的
+               outcomeSummary，准确列出已完成结果和停止点；
                title 是结果计划短标题；choices 必须返回空数组。rollingSummary 只更新已经发生的长期摘要。
             3. 玩家明确时间以 action.semanticDuration、explicitDurationMinutes 和 expectedEndClock 为准。
                完整执行时 elapsedMinutes 必须等于 explicitDurationMinutes；提前中断才使用 INTERRUPTED 并写原因。
@@ -162,6 +164,9 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                entityId 且 referenceKey=""。
             6. 探索未知、尝试突破或挑战强敌可以成功、失败或中断；不要因为结果尚未知就拒绝。玩家输入表达的是
                尝试时，结果由本计划裁定，但爽点、机缘和意外只要不违背已确认事实都允许发生。
+               factContract 中 resultTarget=true 的 ABILITY 是玩家本轮试图获得或推进的能力：SUCCEEDED 必须用相同
+               referenceKey 创建/更新为 MASTERED；PARTIAL 必须创建/更新为 KNOWN 或 LEARNING；FAILED 不得创建该能力。
+               来源玉简、秘籍或师承仍保持自己的 ITEM/CHARACTER 类型，不能代替独立能力实体。
             7. 只保存跨回合确有价值的实体、事实、记忆和关系。普通路人、景物构件、短暂情绪和招式过程不建档。
                新人物、物品、能力的专用字段规则与 objective 中的类型约束保持一致。
                所有 CREATE 必须同时填写非空 name、status、summary。新 ITEM 只在确有跨回合意义时建档；
@@ -172,6 +177,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             只返回一个符合 StoryPatch 结构的 JSON，不要 Markdown 或说明：
             {
               "title":"结果计划短标题","narrative":"不超过180字的结果摘要",
+              "outcome":{"resolution":"SUCCEEDED|PARTIAL|FAILED","summary":"本轮直接结果"},
               "time":{"elapsedMinutes":0,"resolution":"COMPLETE|INTERRUPTED","interruptionReason":null},
               "coreState":{"location":null,"condition":null,"realm":null,"lifeGoal":null},
               "entities":[{"operation":"CREATE|UPDATE|HIDE|RESTORE","entityId":null,
@@ -197,7 +203,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
     private static final String OUTCOME_PLAN_REPAIR_PROMPT = """
             下面的最小结果计划没有通过结构、稳定引用、玩家授权或 Reducer 事实边界。只修复计划本身，
             不写完整正文，不扩展后续剧情，不改变玩家行动。保留没有问题的直接结果；若问题只是可选字段跨类型，
-            删除该可选字段。只返回修复后的完整 StoryPatch JSON。
+            删除该可选字段。必须保留或修正 outcome，并确保 resultTarget 能力的掌握状态与 outcome 一致。
+            只返回修复后的完整 StoryPatch JSON。
             """;
 
     private static final String NARRATIVE_RENDER_PROMPT = """
@@ -206,7 +213,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             能力、境界、世界事实或重大决定。
 
             规则：
-            1. 正面写出 action 的执行过程，并完整覆盖 validatedOutcome 中的结果、实际时间尺度和最终停止位置。
+            1. 正面写出 action 的执行过程，并完整覆盖 validatedOutcome.outcome 中的成功、部分成功或失败结论、
+               实际时间尺度和最终停止位置。不得把 FAILED 写成成功，不得把 PARTIAL 写成已经完全掌握。
             2. 可以自由补充氛围、感官、对话、阻力和不需要长期保存的细节，但不能制造计划外的长期事实。
             3. 不得替玩家执行 action 之后的新行动，不得补写玩家未表达的动机、承诺、路线和下一步计划。
                到新的重大决定前停止，把选择交给玩家。
@@ -230,8 +238,9 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             表现层正文。你不续写、不修正事实，只检查正文是否忠实演绎计划。
 
             分别检查：
-            1. coverage：正文是否明确覆盖玩家行动、结果、时间尺度、最终地点和计划中的重要实体变化；
-            2. contradiction：正文是否与计划或回合开始前权威事实矛盾；
+            1. coverage：正文是否明确覆盖玩家行动、acceptedOutcome.outcome 的明确结果、时间尺度、最终地点和计划中的重要实体变化；
+            2. contradiction：正文是否与计划或回合开始前权威事实矛盾；尤其检查是否把 FAILED 写成成功、把
+               PARTIAL 写成完全掌握，或声称学会了 entities 中没有对应能力状态的功法；
             3. extraDurableFacts：正文是否新增计划中没有的物品取得/失去、数量、人物生死与关系、能力、境界、
                世界规则、长期承诺等跨回合事实；纯氛围和一次性细节不算；
             4. agency：正文是否替玩家执行计划之后的新行动、作出重大决定、补写动机，或越过 required 停止点。
@@ -385,6 +394,14 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                行囊、手、衣袖、地面、屋内等创建 reference，更不能标成 NEW ITEM。
                需要跨回合追踪的水井、屋舍、石桥、山门等场景对象使用 LANDMARK；不需要跨回合追踪的普通环境细节可以不返回 reference。
                LANDMARK 不是物品，expectedCustody 必须为 null，不得进入 itemTransitions；只有可被取得、携带、消耗或转交的对象才是 ITEM。
+               persistence=DURABLE 表示已有长期实体；TRANSIENT 表示只服务本轮的普通路人、摊主、溪水、街道组成部分，
+               不需要稳定 ID，也不应进入人物或地标档案；PROMOTE_ON_CHANGE 表示当前尚无长期身份，但发生物品保管、
+               生死、关系或能力掌握等长期变化后需要晋升建档。TRANSIENT 不得声明 expectedCustody 或 resultTarget。
+               resolution 与 persistence 是两个独立字段：resolution 只能是 EXISTING、ESTABLISHED、NEW、UNRESOLVED，
+               绝不能把 TRANSIENT、DURABLE 或 PROMOTE_ON_CHANGE 填入 resolution。
+               例如本轮第一次出现、无需长期保存的普通摊主，应写 resolution=NEW、persistence=TRANSIENT；
+               不是 resolution=TRANSIENT。
+               当前地点及其普通组成部分不需要作为稳定实体返回；如果模型仍需保留引用，必须使用 TRANSIENT。
             2. resolution=EXISTING 仅用于 facts.entityIndex 中能唯一对应的实体，必须复制稳定 entityId、entityType 和名称；
                resolution=ESTABLISHED 用于对象明确来自 facts.initialContract、facts.sourceExcerpts 或 selectedChoice，
                但尚无稳定实体 ID；entityId=null，并在 evidenceRefs 中逐项复制对应 sourceExcerpts.ref。不得只凭相似名字引用来源。
@@ -417,6 +434,10 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                的命卷事实。ADVANCE_FUTURE 不能仅因当前日期尚早而报冲突；action.explicitDurationMinutes 与
                action.expectedEndClock 非空时是服务端已解析的授权时间。类似“闭关三年突破元婴”中，三年是时间授权，
                突破元婴只是待剧情裁定的目标，不是既成事实。
+               resultTarget=true 只标记玩家本轮希望取得、学会或推进的长期目标。玩家“学习/参悟/自创某能力”时，
+               除了来源玉简、秘籍或人物引用，还必须为能力本身单独返回 ABILITY 引用，设置 resultTarget=true、
+               persistence=PROMOTE_ON_CHANGE；不得因为尚未掌握而报冲突。直接“施展已经掌握的能力”只是依赖既有能力，
+               resultTarget=false；没有可信记录时按事实前提冲突处理。
             7. 如果 action 明确声称“之前已经赠送/卖出/取得/杀死”等事实，或者依赖“师父、道侣、盟友、仇敌”等
                已经成立的人物关系，但 facts 与该前提冲突，
                conflict.present=true，reason 说明当前事实，correction 给出不替玩家决定的可行改写。
@@ -446,7 +467,9 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                 "role":"SOURCE|TARGET|MENTION",
                 "expectedCustody":{"holderType":"PLAYER|CHARACTER|LOCATION|NONE|UNKNOWN","holderRef":null},
                 "evidenceRefs":[],
-                "referenceKey":"r1"
+                "referenceKey":"r1",
+                "persistence":"DURABLE|TRANSIENT|PROMOTE_ON_CHANGE",
+                "resultTarget":false
               }],
               "itemTransitions":[{
                 "itemId":"",
@@ -467,11 +490,18 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             不续写剧情、不改变玩家行动，也不把事实冲突伪装成可执行。
             特别检查：玩家提到的人物是否来自 initialContract/sourceExcerpts；ESTABLISHED 是否复制了有效 evidenceRefs；
             每条 referenceKey 是否唯一；物品交给 ESTABLISHED/NEW 人物时，target.holderRef 必须为空并使用
-            targetReferenceKey；不得猜测另一个已有角色的稳定 ID。
+            targetReferenceKey；不得猜测另一个已有角色的稳定 ID。普通摊主、路人、当前地点和一次性场景对象使用
+            TRANSIENT，不得因为缺少稳定 ID 伪装成 EXISTING；学习能力时必须把能力本身标为非临时 resultTarget。
             如果 validationProblem 是物品起始保管状态冲突，必须重新阅读玩家原话：expectedCustody/expectedFrom 只表达
             行动开始前玩家实际依赖的保管者，赠送自己当前持有的物品时应为 PLAYER；不得为迎合 facts 把玩家明确声称的
             起始保管者改成当前记录。若玩家确实声称了与 facts 冲突的旧归属，保留该声明并设置 conflict.present=true。
             只返回符合行动事实解析完整 JSON 契约的单个对象，不要 Markdown 或解释。
+            """;
+
+    private static final String ACTION_CONTRACT_FORMAT_REPAIR_PROMPT = """
+            上一次行动契约无法按给定 JSON 协议解析。只修正 JSON、枚举字段或字段归属，不改变玩家行动语义，
+            不新增事实、不续写剧情。特别注意 resolution 只允许 EXISTING、ESTABLISHED、NEW、UNRESOLVED；
+            persistence 才允许 DURABLE、TRANSIENT、PROMOTE_ON_CHANGE。返回完整行动契约 JSON，不要说明或 Markdown。
             """;
 
     private static final String AGENCY_REVIEW_PROMPT = """
@@ -740,13 +770,25 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         }
         if (route == null) throw new IllegalArgumentException("行动事实解析缺少模型路由");
         StoryModelRoute contractRoute = flashReviewRoute(route);
+        List<StoryModelGateway.Result> attempts = new ArrayList<>();
         StoryModelGateway.Result result = call(contractRoute, invocation, "STORY_ACTION_CONTRACT_FLASH",
                 ACTION_CONTRACT_PROMPT, actionContractPayload(context), 0.0);
+        attempts.add(result);
         try {
             StoryActionContract contract = tolerantMapper.readValue(rawJson(result.text()), StoryActionContract.class);
-            return new ResolvedAction(contract, List.of(result));
-        } catch (JsonProcessingException error) {
-            throw new IllegalArgumentException("行动事实解析未返回有效结果", error);
+            return new ResolvedAction(contract, attempts);
+        } catch (JsonProcessingException firstError) {
+            StoryModelGateway.Result repaired = call(contractRoute, invocation,
+                    "STORY_ACTION_CONTRACT_FORMAT_REPAIR_FLASH", ACTION_CONTRACT_PROMPT,
+                    actionContractFormatRepairPayload(context, result.text(), firstError.getMessage()), 0.0);
+            attempts.add(repaired);
+            try {
+                StoryActionContract contract = tolerantMapper.readValue(
+                        rawJson(repaired.text()), StoryActionContract.class);
+                return new ResolvedAction(contract, attempts);
+            } catch (JsonProcessingException secondError) {
+                throw new IllegalArgumentException("行动事实解析在自动整理后仍未返回有效结果", secondError);
+            }
         }
     }
 
@@ -1084,7 +1126,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         }
         return new StoryPatch(draft.title(), draft.narrative(), acceptedTime, projected.coreState(),
                 projected.entities(), projected.worldFacts(), projected.knowledge(), projected.memories(),
-                projected.decisionCheckpoint(), draft.choices(), projected.rollingSummary());
+                projected.decisionCheckpoint(), draft.choices(), projected.rollingSummary(), projected.outcome());
     }
 
     private String actionContractRepairPayload(StoryPromptContext context,
@@ -1102,6 +1144,24 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             return mapper.writeValueAsString(payload);
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("行动契约修复请求无法序列化", error);
+        }
+    }
+
+    private String actionContractFormatRepairPayload(StoryPromptContext context,
+                                                     String malformedContract, String problem) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("instruction", ACTION_CONTRACT_FORMAT_REPAIR_PROMPT);
+        try {
+            payload.put("originalContext", mapper.readTree(actionContractPayload(context)));
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("行动契约格式修复上下文无法序列化", error);
+        }
+        payload.put("malformedContract", malformedContract == null ? "" : malformedContract.strip());
+        payload.put("validationProblem", problem == null ? "" : problem.strip());
+        try {
+            return mapper.writeValueAsString(payload);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("行动契约格式修复请求无法序列化", error);
         }
     }
 

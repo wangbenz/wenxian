@@ -30,6 +30,7 @@ public final class StoryPatchValidator {
     public void validate(StoryPatch patch, Long explicitDurationMinutes) {
         require(patch != null, "推演结果不能为空");
         require(present(patch.narrative()), "推演结果必须包含正文");
+        validateOutcome(patch.outcome());
         validateTime(patch, explicitDurationMinutes);
         patch.entities().forEach(this::validateEntity);
         validateEntityAliases(patch);
@@ -46,6 +47,12 @@ public final class StoryPatchValidator {
         if (patch.decisionCheckpoint() != null && patch.decisionCheckpoint().required()) {
             require(present(patch.decisionCheckpoint().prompt()), "重大决定检查点必须说明待玩家决定的内容");
         }
+    }
+
+    private void validateOutcome(StoryPatch.TurnOutcome outcome) {
+        if (outcome == null) return;
+        require(outcome.resolution() != null, "本轮结果必须说明成功、部分成功或失败");
+        require(present(outcome.summary()), "本轮结果必须包含直接结果摘要");
     }
 
     private void validateTime(StoryPatch patch, Long explicitDurationMinutes) {

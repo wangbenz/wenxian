@@ -105,11 +105,23 @@ public record StoryActionContract(
             String role,
             CustodyValue expectedCustody,
             List<String> evidenceRefs,
-            String referenceKey
+            String referenceKey,
+            ReferencePersistence persistence,
+            boolean resultTarget
     ) {
         public EntityReference {
             evidenceRefs = safe(evidenceRefs);
             referenceKey = text(referenceKey);
+            persistence = persistence == null ? defaultPersistence(resolution) : persistence;
+        }
+
+        /** 兼容持久性和结果目标加入前的完整行动引用。 */
+        public EntityReference(String mention, ReferenceResolution resolution, String entityId,
+                               String entityType, String canonicalName, String role,
+                               CustodyValue expectedCustody, List<String> evidenceRefs,
+                               String referenceKey) {
+            this(mention, resolution, entityId, entityType, canonicalName, role, expectedCustody,
+                    evidenceRefs, referenceKey, null, false);
         }
 
         /** 兼容来源引用加入前的实体契约。 */
@@ -117,7 +129,7 @@ public record StoryActionContract(
                                String entityType, String canonicalName, String role,
                                CustodyValue expectedCustody) {
             this(mention, resolution, entityId, entityType, canonicalName, role, expectedCustody,
-                    List.of(), "");
+                    List.of(), "", null, false);
         }
 
         /** 兼容回合内引用键加入前、已经提供来源证据的调用方。 */
@@ -125,11 +137,17 @@ public record StoryActionContract(
                                String entityType, String canonicalName, String role,
                                CustodyValue expectedCustody, List<String> evidenceRefs) {
             this(mention, resolution, entityId, entityType, canonicalName, role, expectedCustody,
-                    evidenceRefs, "");
+                    evidenceRefs, "", null, false);
         }
 
         public EntityReference(String entityId, String entityType, String role) {
-            this("", ReferenceResolution.EXISTING, entityId, entityType, "", role, null, List.of(), "");
+            this("", ReferenceResolution.EXISTING, entityId, entityType, "", role, null, List.of(), "",
+                    ReferencePersistence.DURABLE, false);
+        }
+
+        private static ReferencePersistence defaultPersistence(ReferenceResolution resolution) {
+            return resolution == ReferenceResolution.EXISTING || resolution == ReferenceResolution.ESTABLISHED
+                    ? ReferencePersistence.DURABLE : ReferencePersistence.PROMOTE_ON_CHANGE;
         }
     }
 
@@ -138,6 +156,15 @@ public record StoryActionContract(
         ESTABLISHED,
         NEW,
         UNRESOLVED
+    }
+
+    /**
+     * 实体提及是否需要跨回合保存。TRANSIENT 只参与本轮叙事；PROMOTE_ON_CHANGE 只有在本轮形成长期变化时建档。
+     */
+    public enum ReferencePersistence {
+        DURABLE,
+        TRANSIENT,
+        PROMOTE_ON_CHANGE
     }
 
     /** quantity 为空表示整件或数量未知；有值时表示玩家本轮明确处置的数量。 */
