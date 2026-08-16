@@ -69,7 +69,11 @@ public final class StoryActionContractCanonicalizer {
         if (transition == null) return null;
         ItemTransition linked = linkTargetReference(transition, referencesByKey);
         if (linked.quantity() == null) return linked;
-        EntityState item = projection.entities().get(transition.itemId());
+        if (linked.itemId() == null || linked.itemId().isBlank()) {
+            throw new IllegalArgumentException(
+                    "来源物品尚无稳定ID，不能写入 itemTransition；应通过 ESTABLISHED 物品引用晋升");
+        }
+        EntityState item = projection.entities().get(linked.itemId());
         if (item == null || !"ITEM".equalsIgnoreCase(item.entityType())) return linked;
         QuantityValue current = item.quantity();
         if (current == null || !current.known() || current.value() == null

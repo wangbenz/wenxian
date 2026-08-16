@@ -412,6 +412,9 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                仍原样保留的已有物品不产生持久变化，但仍必须返回 EXISTING reference。
             4. 玩家消耗、赠送、出售、丢弃、存放、取回、夺回已有物品，且会改变总数量或保管者时，
                itemActionDetected=true，并为每件发生持久变化的已有物品返回 itemTransitions。
+               这里的“已有物品”专指 resolution=EXISTING 且已经具有稳定 entityId 的物品；
+               resolution=ESTABLISHED 的来源物品尚无稳定 ID，不得写入 itemTransitions，而应令该 reference 的
+               expectedCustody 表达行动开始前保管者，后续结果计划以相同 canonicalName CREATE 并写入最终 custody。
                玩家拾取并放入行囊的新物品不写 itemTransitions，而是在 NEW reference.expectedCustody 中写 PLAYER；
                只是一闪而过、不需要跨回合追踪的新环境细节，expectedCustody=null。
             5. expectedFrom 表达玩家原话中行动所依赖或声称的起始保管者；target 表达该稳定物品实体在行动成功后的
@@ -493,6 +496,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             每条 referenceKey 是否唯一；物品交给 ESTABLISHED/NEW 人物时，target.holderRef 必须为空并使用
             targetReferenceKey；不得猜测另一个已有角色的稳定 ID。普通摊主、路人、当前地点和一次性场景对象使用
             TRANSIENT，不得因为缺少稳定 ID 伪装成 EXISTING；学习能力时必须把能力本身标为非临时 resultTarget。
+            ESTABLISHED 来源物品没有稳定 entityId，不得写入 itemTransitions；保留 ESTABLISHED reference、有效
+            evidenceRefs 和行动开始前 expectedCustody，让结果计划通过 CREATE 晋升物品并保存最终保管状态。
             如果 validationProblem 是物品起始保管状态冲突，必须重新阅读玩家原话：expectedCustody/expectedFrom 只表达
             行动开始前玩家实际依赖的保管者，赠送自己当前持有的物品时应为 PLAYER；不得为迎合 facts 把玩家明确声称的
             起始保管者改成当前记录。若玩家确实声称了与 facts 冲突的旧归属，保留该声明并设置 conflict.present=true。
