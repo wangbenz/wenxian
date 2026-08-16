@@ -382,7 +382,7 @@ public class StoryTurnPreparationService {
         if (diagnostic != null) diagnostic.review(diagnosticPrefix + "OUTCOME_PLAN_AGENCY_REVIEW", planAgency);
         if (planAgency.accepted()) return plan;
 
-        StoryTurnAgent.PlannedOutcome repaired = agent.repairOutcomePlan(
+        StoryTurnAgent.PlannedOutcome repaired = agent.trimOutcomePlanToAgencyBoundary(
                 context, route, invocation, plan, "玩家授权：" + planAgency.problem());
         attempts.addAll(repaired.modelResults());
         StoryPatch repairedPlan = normalizedPlan(before, semanticDuration, actionContract, repaired.patch());

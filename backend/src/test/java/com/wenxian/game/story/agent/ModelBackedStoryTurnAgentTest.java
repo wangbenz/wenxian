@@ -273,6 +273,27 @@ class ModelBackedStoryTurnAgentTest {
     }
 
     @Test
+    void trimsUnauthorizedOutcomeTailWithDedicatedPrompt() throws Exception {
+        StoryModelGateway gateway = request -> {
+            assertEquals("deepseek-v4-flash", request.model());
+            assertEquals(0.0, request.temperature());
+            assertTrue(request.systemPrompt().contains("授权边界裁剪 Agent"));
+            assertTrue(request.systemPrompt().contains("所有相关字段中同时删除"));
+            assertTrue(request.systemPrompt().contains("保留本轮已授权行动及其直接结果"));
+            assertTrue(request.userPrompt().contains("玩家授权：候选替玩家登记名帖"));
+            return result(VALID_PATCH, 30, 25, 80);
+        };
+        StoryPatch rejected = new ObjectMapper().findAndRegisterModules().readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.PlannedOutcome trimmed = agent(gateway).trimOutcomePlanToAgencyBoundary(
+                context(), route(), new StoryTurnAgent.InvocationContext("save-agency-trim", 12),
+                rejected, "玩家授权：候选替玩家登记名帖");
+
+        assertEquals("石门之后", trimmed.patch().title());
+        assertEquals(1, trimmed.modelResults().size());
+    }
+
+    @Test
     void projectsFactsWithFlashWithoutAllowingProjectionToRewriteNarrative() throws Exception {
         StoryModelGateway gateway = request -> {
             assertEquals("deepseek-v4-flash", request.model());

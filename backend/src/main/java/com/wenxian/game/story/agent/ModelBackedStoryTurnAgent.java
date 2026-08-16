@@ -208,6 +208,25 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             只返回修复后的完整 StoryPatch JSON。
             """;
 
+    private static final String OUTCOME_PLAN_AGENCY_TRIM_PROMPT = """
+            你是《问仙录》的结果计划授权边界裁剪 Agent。rejectedOutcome 中已经包含本轮玩家行动的候选结果，
+            validationProblem 指出了它在何处替玩家继续行动或作出决定。你的职责不是重写剧情，而是把候选裁剪到
+            玩家本轮授权范围内的最后一个安全停止点。
+
+            必须遵守：
+            1. 保留本轮已授权行动及其直接结果。例如玩家询问某事，可以保留 NPC 的直接答复和玩家因此获知的信息。
+            2. 删除停止点后的移动、登记、交易、拜师、承诺、追查、战斗、修炼、使用物品或路线选择；必须从
+               outcome.summary、narrative、worldFacts、knowledge、memories、rollingSummary、entities 和 coreState
+               所有相关字段中同时删除，不能只改其中一句。
+            3. 不得为了让回合成功而发明新的回答、人物、物品或结果。若越权尾部删除后只剩部分进展，使用
+               outcome.resolution=PARTIAL；已完整得到本轮询问的答案时可以保持 SUCCEEDED。
+            4. 若下一步仍需玩家决定，设置 decisionCheckpoint.required=true，并用一句中立问题把决定交还玩家。
+               choices 继续返回 []，由正文阶段生成选项。
+            5. action.factContract.agencyBoundary 是唯一授权边界；rejectedOutcome 不是事实，只是待裁剪候选。
+
+            只返回裁剪后的完整 StoryPatch JSON，不要 Markdown、解释或额外文字。
+            """;
+
     private static final String NARRATIVE_RENDER_PROMPT = """
             你是《问仙录》的回合叙事 Agent。validatedOutcome 是本轮已经通过服务端预校验的唯一结果计划；
             你只能把它演绎成第二人称“你”的玩家可见剧情，无权增删时间、地点、物品、数量、人物生死与关系、
@@ -676,6 +695,22 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             return new PlannedOutcome(parse(result.text()), List.of(result));
         } catch (JsonProcessingException | IllegalArgumentException error) {
             throw new IllegalArgumentException("结果计划自动整理后仍不符合可信协议", error);
+        }
+    }
+
+    @Override
+    public PlannedOutcome trimOutcomePlanToAgencyBoundary(StoryPromptContext context, StoryModelRoute route,
+                                                           InvocationContext invocation,
+                                                           StoryPatch rejected, String problem) {
+        requireContext(context, route, "结果计划授权裁剪");
+        if (rejected == null) throw new IllegalArgumentException("结果计划授权裁剪缺少原计划");
+        StoryModelGateway.Result result = call(flashReviewRoute(route), invocation,
+                "STORY_OUTCOME_PLAN_AGENCY_TRIM_FLASH", OUTCOME_PLAN_AGENCY_TRIM_PROMPT,
+                outcomePlanRepairPayload(context, rejected, problem), 0.0);
+        try {
+            return new PlannedOutcome(parse(result.text()), List.of(result));
+        } catch (JsonProcessingException | IllegalArgumentException error) {
+            throw new IllegalArgumentException("结果计划授权裁剪未形成可校验结果", error);
         }
     }
 

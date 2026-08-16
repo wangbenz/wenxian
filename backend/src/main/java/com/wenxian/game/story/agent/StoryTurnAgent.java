@@ -48,6 +48,18 @@ public interface StoryTurnAgent {
         throw new IllegalArgumentException("当前故事 Agent 不支持结果计划修复");
     }
 
+    /**
+     * 只裁掉结果计划中超出玩家授权的尾部，不借机重写直接结果或增加新事实。
+     *
+     * <p>默认退回一般计划修复以兼容测试替身；生产实现应使用专用提示，避免把事实字段修复与玩家决定权
+     * 修复混在一起。裁剪结果仍须重新经过事实预校验和最终授权复核。</p>
+     */
+    default PlannedOutcome trimOutcomePlanToAgencyBoundary(StoryPromptContext context, StoryModelRoute route,
+                                                            InvocationContext invocation,
+                                                            StoryPatch rejected, String problem) {
+        return repairOutcomePlan(context, route, invocation, rejected, problem);
+    }
+
     /** 根据已经通过预校验的结果计划演绎玩家可见正文；本方法无权增删结构化事实。 */
     default RenderedNarrative renderNarrative(StoryPromptContext context, StoryModelRoute route,
                                               InvocationContext invocation, StoryPatch acceptedPlan) {
