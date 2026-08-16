@@ -38,6 +38,7 @@ public final class StoryCharacterReferenceEvidenceValidator {
                         .map(EntityAlias::aliasName)
                         .forEach(identityNames::add);
             }
+            identityNames.addAll(StoryCharacterIdentityNames.from(entity));
             boolean supported = identityNames.stream().map(StoryEntityRepository::normalizeAlias)
                     .filter(value -> !value.isBlank())
                     .anyMatch(evidence::contains);

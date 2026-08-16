@@ -1,5 +1,6 @@
 package com.wenxian.game.story.domain;
 
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.wenxian.game.story.domain.StoryActionContract.Conflict;
 import com.wenxian.game.story.domain.StoryActionContract.EntityReference;
 import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
@@ -51,6 +52,20 @@ class StoryEntityReferenceCompilerTest {
 
         assertEquals(wolf.id(), compiled.references().getFirst().entityId());
         assertEquals("霜刃", compiled.references().getFirst().canonicalName());
+    }
+
+    @Test
+    void resolvesExactStructuredCharacterRoleForLegacyEntityWithoutAliasRow() {
+        EntityState guide = new EntityState("character-guide", "CHARACTER", "青云观道人", "ACTIVE",
+                "负责引路", JsonNodeFactory.instance.objectNode().put("role", "引路道人"),
+                true, null, null, null, null);
+        EntityReference roleName = new EntityReference("引路道人", ReferenceResolution.EXISTING,
+                null, "CHARACTER", "引路道人", "TARGET", null);
+
+        StoryActionContract compiled = compiler.compile(projection(guide), contract(roleName), List.of());
+
+        assertEquals(guide.id(), compiled.references().getFirst().entityId());
+        assertEquals("青云观道人", compiled.references().getFirst().canonicalName());
     }
 
     @Test

@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.wenxian.game.service.GameVersionService;
 import com.wenxian.game.credit.PlatformTurnAccessService;
 import com.wenxian.game.story.agent.StoryModelRoute;
+import com.wenxian.game.story.domain.StoryCharacterIdentityNames;
+import com.wenxian.game.story.domain.StoryActionContract.EntityReference;
+import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
 import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.diagnostic.StoryTurnDiagnosticService;
 import com.wenxian.game.story.domain.StoryProjection;
@@ -25,6 +28,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -167,6 +171,20 @@ public class StoryTurnCommitService {
                                       StoryTurnPreparationService.Prepared prepared, Instant now) {
         prepared.applied().aliasChanges().forEach(change -> entities.saveAlias(saveId, change.entityId(),
                 change.aliasName(), change.aliasType(), turnNumber, now));
+        if (prepared.actionContract() == null) return;
+        Set<String> referencedCharacters = new HashSet<>();
+        prepared.actionContract().references().stream()
+                .filter(reference -> reference != null
+                        && reference.resolution() == ReferenceResolution.EXISTING
+                        && "CHARACTER".equalsIgnoreCase(reference.entityType())
+                        && reference.entityId() != null && !reference.entityId().isBlank())
+                .map(EntityReference::entityId)
+                .filter(referencedCharacters::add)
+                .map(prepared.applied().projection().entities()::get)
+                .filter(Objects::nonNull)
+                .forEach(character -> StoryCharacterIdentityNames.from(character)
+                        .forEach(alias -> entities.saveAlias(saveId, character.id(), alias,
+                                "TITLE", turnNumber, now)));
     }
 
     private String text(String value, String fallback) {

@@ -12,6 +12,7 @@ import com.wenxian.game.story.agent.StoryPromptContext.PendingDecision;
 import com.wenxian.game.story.agent.StoryTurnAgent;
 import com.wenxian.game.story.domain.StoryProjection;
 import com.wenxian.game.story.domain.StoryPatch;
+import com.wenxian.game.story.domain.StoryActionContract;
 import com.wenxian.game.story.domain.StoryActionPreconditionException;
 import com.wenxian.game.story.domain.StoryActionContractValidator;
 import com.wenxian.game.story.domain.StoryEntityReferenceCompiler;
@@ -224,7 +225,7 @@ public class StoryTurnPreparationService {
         if (diagnostic != null) diagnostic.reduced(applied);
         List<TrustedStoryEvent> trustedEvents = eventCompiler
                 .compile(before, applied.acceptedPatch(), semanticDuration).events();
-        return new Prepared(before, applied, existingEntities, generation, trustedEvents, diagnostic);
+        return new Prepared(before, applied, existingEntities, generation, trustedEvents, actionContract, diagnostic);
     }
 
     /**
@@ -236,7 +237,7 @@ public class StoryTurnPreparationService {
             StoryPromptContext.PreviousTurn previous,
             SemanticDuration semanticDuration,
             Long explicitDurationMinutes,
-            com.wenxian.game.story.domain.StoryActionContract actionContract,
+            StoryActionContract actionContract,
             StoryTurnAgent.ResolvedAction resolvedAction,
             StoryPromptContext context,
             StoryModelRoute route,
@@ -355,7 +356,7 @@ public class StoryTurnPreparationService {
         StoryTurnAgent.Generated generation = new StoryTurnAgent.Generated(candidate, attempts);
         List<TrustedStoryEvent> trustedEvents = eventCompiler
                 .compile(before, applied.acceptedPatch(), semanticDuration).events();
-        return new Prepared(before, applied, existingEntities, generation, trustedEvents, diagnostic);
+        return new Prepared(before, applied, existingEntities, generation, trustedEvents, actionContract, diagnostic);
     }
 
     /**
@@ -603,6 +604,7 @@ public class StoryTurnPreparationService {
             List<Entity> existingEntities,
             StoryTurnAgent.Generated generation,
             List<TrustedStoryEvent> trustedEvents,
+            com.wenxian.game.story.domain.StoryActionContract actionContract,
             StoryTurnDiagnosticService.Session diagnostic
     ) {
         public Prepared {

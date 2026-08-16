@@ -1,5 +1,6 @@
 package com.wenxian.game.story.domain;
 
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.wenxian.game.story.domain.StoryActionContract.Conflict;
 import com.wenxian.game.story.domain.StoryActionContract.EntityReference;
 import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
@@ -39,6 +40,16 @@ class StoryCharacterReferenceEvidenceValidatorTest {
     }
 
     @Test
+    void acceptsExactStructuredRoleWithoutGuessingFromFreeText() {
+        EntityState guide = characterWithRole("character-guide", "青云观道人", "引路道人");
+        StoryActionContract contract = contract(new EntityReference("引路道人", ReferenceResolution.EXISTING,
+                guide.id(), "CHARACTER", guide.name(), "TARGET", null));
+
+        assertDoesNotThrow(() -> validator.validate(projection(guide), contract, List.of(),
+                List.of("继续向引路道人询问玄微道人的生平")));
+    }
+
+    @Test
     void leavesSourceEstablishedSceneCharacterForPromotionOnChange() {
         StoryActionContract contract = contract(new EntityReference("卖画老人", ReferenceResolution.ESTABLISHED,
                 null, "CHARACTER", "卖画老人", "TARGET", null,
@@ -55,6 +66,12 @@ class StoryCharacterReferenceEvidenceValidatorTest {
 
     private EntityState character(String id, String name) {
         return new EntityState(id, "CHARACTER", name, "ACTIVE", "已确认人物", null,
+                true, null, null, null, null);
+    }
+
+    private EntityState characterWithRole(String id, String name, String role) {
+        return new EntityState(id, "CHARACTER", name, "ACTIVE", "已确认人物",
+                JsonNodeFactory.instance.objectNode().put("role", role),
                 true, null, null, null, null);
     }
 

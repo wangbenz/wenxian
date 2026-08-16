@@ -128,7 +128,10 @@ public final class StoryEntityReferenceCompiler {
 
     private AliasIndex index(StoryProjection projection, List<EntityAlias> aliases) {
         Map<String, Set<String>> byName = new LinkedHashMap<>();
-        projection.entities().values().forEach(entity -> add(byName, entity.name(), entity.id()));
+        projection.entities().values().forEach(entity -> {
+            add(byName, entity.name(), entity.id());
+            StoryCharacterIdentityNames.from(entity).forEach(name -> add(byName, name, entity.id()));
+        });
         if (aliases != null) {
             aliases.stream().filter(EntityAlias::active)
                     .filter(alias -> projection.entities().containsKey(alias.entityId()))
