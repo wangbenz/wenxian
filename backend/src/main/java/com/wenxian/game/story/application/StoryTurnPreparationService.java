@@ -15,6 +15,7 @@ import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryActionPreconditionException;
 import com.wenxian.game.story.domain.StoryActionContractValidator;
 import com.wenxian.game.story.domain.StoryEntityReferenceCompiler;
+import com.wenxian.game.story.domain.StoryCharacterReferenceEvidenceValidator;
 import com.wenxian.game.story.domain.StoryActionContractPatchValidator;
 import com.wenxian.game.story.domain.ExplicitDurationParser;
 import com.wenxian.game.story.domain.SemanticDuration;
@@ -66,6 +67,8 @@ public class StoryTurnPreparationService {
     private final StoryTurnDiagnosticService diagnostics;
     private final StoryActionContractValidator actionContracts = new StoryActionContractValidator();
     private final StoryEntityReferenceCompiler referenceCompiler = new StoryEntityReferenceCompiler();
+    private final StoryCharacterReferenceEvidenceValidator characterReferenceEvidence =
+            new StoryCharacterReferenceEvidenceValidator();
     private final StoryActionContractPatchValidator contractPatches = new StoryActionContractPatchValidator();
     private final StoryActionOutcomeCompiler actionOutcomeCompiler = new StoryActionOutcomeCompiler();
     private final StoryOutcomeConsistencyValidator outcomeConsistency = new StoryOutcomeConsistencyValidator();
@@ -144,6 +147,7 @@ public class StoryTurnPreparationService {
         try {
             actionContract = referenceCompiler.compile(before, resolvedAction.contract(), entityAliases,
                     explicitDurationMinutes);
+            characterReferenceEvidence.validate(before, actionContract, entityAliases, referenceEvidence(context));
             if (diagnostic != null) diagnostic.actionResolved(actionContract);
             actionContracts.validate(before, actionContract, availableSourceRefs);
         } catch (StoryActionPreconditionException conflict) {
@@ -156,6 +160,8 @@ public class StoryTurnPreparationService {
             try {
                 actionContract = referenceCompiler.compile(before, repaired.contract(), entityAliases,
                         explicitDurationMinutes);
+                characterReferenceEvidence.validate(before, actionContract, entityAliases,
+                        referenceEvidence(context));
                 if (diagnostic != null) diagnostic.actionResolved(actionContract);
                 actionContracts.validate(before, actionContract, availableSourceRefs);
             } catch (IllegalArgumentException failedAgain) {
@@ -269,6 +275,9 @@ public class StoryTurnPreparationService {
             }
         }
 
+        plan = ensurePlayerAgency(before, semanticDuration, explicitDurationMinutes, actionContract,
+                context, route, invocation, plan, attempts, diagnostic, "");
+
         StoryTurnAgent.RenderedNarrative rendered = agent.renderNarrative(context, route, invocation, plan);
         attempts.addAll(rendered.modelResults());
         StoryPatch candidate = composeOutcome(plan, rendered);
@@ -309,6 +318,8 @@ public class StoryTurnPreparationService {
                     throw new StoryTurnProtocolException("OUTCOME_PLAN_COVERAGE_REPAIR",
                             "结果覆盖审阅发现计划缺项，但自动整理后仍未通过可信事实边界", failedPlan);
                 }
+                plan = ensurePlayerAgency(before, semanticDuration, explicitDurationMinutes, actionContract,
+                        context, route, invocation, plan, attempts, diagnostic, "COVERAGE_");
                 rendered = agent.renderNarrative(context, route, invocation, plan);
                 attempts.addAll(rendered.modelResults());
             } else {
@@ -345,6 +356,54 @@ public class StoryTurnPreparationService {
         List<TrustedStoryEvent> trustedEvents = eventCompiler
                 .compile(before, applied.acceptedPatch(), semanticDuration).events();
         return new Prepared(before, applied, existingEntities, generation, trustedEvents, diagnostic);
+    }
+
+    /**
+     * 每一份即将交给正文模型的结果计划都独立检查玩家决定权。
+     *
+     * <p>不仅首次计划需要检查，事实覆盖审阅补全过的计划同样需要重新检查；否则“修复计划”本身可能
+     * 悄悄替玩家接受交易、作出承诺或选择立场。该方法最多允许一次语义整理，整理后仍越界则整轮不提交。</p>
+     */
+    private StoryPatch ensurePlayerAgency(
+            StoryProjection before,
+            SemanticDuration semanticDuration,
+            Long explicitDurationMinutes,
+            com.wenxian.game.story.domain.StoryActionContract actionContract,
+            StoryPromptContext context,
+            StoryModelRoute route,
+            StoryTurnAgent.InvocationContext invocation,
+            StoryPatch plan,
+            List<StoryModelGateway.Result> attempts,
+            StoryTurnDiagnosticService.Session diagnostic,
+            String diagnosticPrefix) {
+        StoryTurnAgent.Review planAgency = agent.reviewOutcomePlanAgency(context, route, invocation, plan);
+        attempts.addAll(planAgency.modelResults());
+        if (diagnostic != null) diagnostic.review(diagnosticPrefix + "OUTCOME_PLAN_AGENCY_REVIEW", planAgency);
+        if (planAgency.accepted()) return plan;
+
+        StoryTurnAgent.PlannedOutcome repaired = agent.repairOutcomePlan(
+                context, route, invocation, plan, "玩家授权：" + planAgency.problem());
+        attempts.addAll(repaired.modelResults());
+        StoryPatch repairedPlan = normalizedPlan(before, semanticDuration, actionContract, repaired.patch());
+        if (diagnostic != null) diagnostic.proposal(diagnosticPrefix + "AGENCY_REPAIRED_OUTCOME_PLAN", repairedPlan);
+        try {
+            preflightOutcome(before, actionContract, repairedPlan, explicitDurationMinutes);
+        } catch (IllegalArgumentException failedPlan) {
+            throw new StoryTurnProtocolException("OUTCOME_PLAN_AGENCY_REPAIR",
+                    "结果计划越过玩家决定边界，自动整理后仍未通过可信事实校验", failedPlan);
+        }
+        StoryTurnAgent.Review repairedAgency = agent.reviewOutcomePlanAgency(
+                context, route, invocation, repairedPlan);
+        attempts.addAll(repairedAgency.modelResults());
+        if (diagnostic != null) {
+            diagnostic.review(diagnosticPrefix + "REPAIRED_OUTCOME_PLAN_AGENCY_REVIEW", repairedAgency);
+        }
+        if (!repairedAgency.accepted()) {
+            throw new StoryTurnProtocolException("OUTCOME_PLAN_AGENCY_REVIEW",
+                    "结果计划自动整理后仍替玩家作出了保留决定",
+                    new IllegalArgumentException(repairedAgency.problem()));
+        }
+        return repairedPlan;
     }
 
     private StoryPatch normalizedPlan(StoryProjection before, SemanticDuration semanticDuration,
@@ -385,6 +444,26 @@ public class StoryTurnPreparationService {
     private Long explicitDuration(String playerAction, long worldTimeMinutes) {
         Integer minutes = ExplicitDurationParser.parseMinutes(playerAction, worldTimeMinutes);
         return minutes == null ? null : minutes.longValue();
+    }
+
+    /** 汇总当前行动真正可见的身份文本；实体索引本身不能反过来充当模型选中该 ID 的证据。 */
+    private List<String> referenceEvidence(StoryPromptContext context) {
+        List<String> values = new ArrayList<>();
+        values.add(context.action().playerAction());
+        if (context.action().selectedChoice() != null) {
+            values.add(context.action().selectedChoice().title());
+            values.add(context.action().selectedChoice().description());
+        }
+        context.objective().sourceExcerpts().forEach(source -> {
+            values.add(source.title());
+            values.add(source.content());
+        });
+        values.add(context.narrative().rollingSummary());
+        if (context.objective().pendingDecision() != null) {
+            values.add(context.objective().pendingDecision().prompt());
+        }
+        values.add(context.objective().protagonist().location());
+        return values.stream().filter(value -> value != null && !value.isBlank()).toList();
     }
 
     private StoryPromptContext.SelectedChoice selectedChoice(JsonNode state, String choiceId) {

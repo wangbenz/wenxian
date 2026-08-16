@@ -120,6 +120,41 @@ class StoryActionContractPatchValidatorTest {
     }
 
     @Test
+    void rejectsExistingItemCustodyChangeMissingFromActionContract() {
+        CustodyValue player = new CustodyValue(HolderType.PLAYER, null);
+        EntityState jade = new EntityState("item-jade", "ITEM", "《引泉诀》玉简", "完好", "随身保管",
+                null, true, new QuantityValue(true, 1), true, player, null, null);
+        StoryProjection before = new StoryProjection(0,
+                new CoreState("卖画老人摊前", "平静", "启灵", "问道"),
+                Map.of(jade.id(), jade), Map.of(), Map.of(), List.of());
+        StoryActionContract inspectOnly = new StoryActionContract("拿出玉简请老人参详", false,
+                List.of(), List.of(), List.of(), "等待老人答复", new Conflict(false, "", ""));
+        StoryPatch candidate = patch(new EntityPatch(EntityOperation.UPDATE, jade.id(), "ITEM",
+                null, "老人手中", null, null, new QuantityValue(true, 1), false,
+                new CustodyValue(HolderType.CHARACTER, "character-wrong"), null, null));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> validator.validate(before, inspectOnly, candidate));
+    }
+
+    @Test
+    void allowsExistingItemSummaryUpdateWhenCustodyAndQuantityStayUnchanged() {
+        CustodyValue player = new CustodyValue(HolderType.PLAYER, null);
+        EntityState jade = new EntityState("item-jade", "ITEM", "《引泉诀》玉简", "完好", "随身保管",
+                null, true, new QuantityValue(true, 1), true, player, null, null);
+        StoryProjection before = new StoryProjection(0,
+                new CoreState("卖画老人摊前", "平静", "启灵", "问道"),
+                Map.of(jade.id(), jade), Map.of(), Map.of(), List.of());
+        StoryActionContract inspectOnly = new StoryActionContract("查看玉简", false,
+                List.of(), List.of(), List.of(), "查看后停下", new Conflict(false, "", ""));
+        StoryPatch candidate = patch(new EntityPatch(EntityOperation.UPDATE, jade.id(), "ITEM",
+                null, "仍在身边", "确认玉简纹路清晰", null, new QuantityValue(true, 1), true,
+                player, null, null));
+
+        assertDoesNotThrow(() -> validator.validate(before, inspectOnly, candidate));
+    }
+
+    @Test
     void sourceCharacterReceivingItemMustBeCreatedWithMatchingTurnReference() {
         EntityReference liu = new EntityReference("柳青儿", ReferenceResolution.ESTABLISHED,
                 null, "CHARACTER", "柳青儿", "TARGET", null,

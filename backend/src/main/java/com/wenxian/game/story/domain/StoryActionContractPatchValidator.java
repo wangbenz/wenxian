@@ -10,6 +10,7 @@ import com.wenxian.game.story.domain.StoryProjection.EntityState;
 
 import java.util.Objects;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -36,6 +37,7 @@ public final class StoryActionContractPatchValidator {
                         Function.identity(), (left, right) -> {
                             throw new IllegalArgumentException("行动契约存在重复的回合内引用键");
                         }));
+        validateNoUnplannedExistingItemMutation(before, contract, patch);
         for (ItemTransition transition : contract.itemTransitions()) {
             validateTransition(before, referencesByKey, transition, patch);
         }
@@ -49,6 +51,48 @@ public final class StoryActionContractPatchValidator {
                     .filter(value -> "ITEM".equalsIgnoreCase(value.entityType()))
                     .forEach(value -> validateEstablishedItemMutation(value, patch));
         }
+    }
+
+    /**
+     * 既有物品的数量或保管者不能绕过行动契约直接改变。
+     *
+     * <p>这条边界只比较结构化前后状态，不理解“赠送”“出售”等中文。临时拿给别人观看但尚未确认交付时，
+     * 可以只写在本轮叙事中；一旦要形成跨回合的数量或保管变化，行动解析必须先给出 itemTransition，
+     * 否则结果计划进入一次语义整理而不能直接落库。</p>
+     */
+    private void validateNoUnplannedExistingItemMutation(
+            StoryProjection before, StoryActionContract contract, StoryPatch patch) {
+        // 空意图只存在于确定性测试替身和不支持行动解析的兼容 Agent，不能把它误当成完整生产契约。
+        if (before == null || contract.intentSummary() == null || contract.intentSummary().isBlank()) return;
+        Set<String> declared = contract.itemTransitions().stream()
+                .filter(Objects::nonNull)
+                .map(ItemTransition::itemId)
+                .filter(value -> value != null && !value.isBlank())
+                .collect(Collectors.toUnmodifiableSet());
+        for (EntityPatch change : patch.entities()) {
+            if (change == null || change.entityId() == null || change.entityId().isBlank()) continue;
+            EntityState current = before.entities().get(change.entityId());
+            if (current == null || !"ITEM".equalsIgnoreCase(current.entityType())) continue;
+            boolean custodyChanged = changesCustody(current, change);
+            boolean quantityChanged = change.quantity() != null
+                    && !Objects.equals(current.quantity(), change.quantity());
+            if ((custodyChanged || quantityChanged) && !declared.contains(change.entityId())) {
+                throw new IllegalArgumentException("既有物品的数量或保管变化未在行动契约中声明："
+                        + current.name());
+            }
+        }
+    }
+
+    private boolean changesCustody(EntityState current, EntityPatch change) {
+        if (change.custody() == null && change.inPossession() == null) return false;
+        CustodyValue before = normalized(current.custody());
+        if (before == null && current.inPossession() != null) {
+            before = Boolean.TRUE.equals(current.inPossession())
+                    ? new CustodyValue(HolderType.PLAYER, null)
+                    : new CustodyValue(HolderType.UNKNOWN, null);
+        }
+        CustodyValue after = patchCustody(change);
+        return !Objects.equals(before, after);
     }
 
     private void validateNewItem(StoryActionContract.EntityReference reference, StoryPatch patch) {

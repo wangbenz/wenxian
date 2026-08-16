@@ -510,7 +510,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             action.playerAction 是玩家原话；action.factContract.agencyBoundary 是行动解析 Agent 给出的授权边界；
             proposed 是待提交候选。
 
-            必须先独立阅读 proposed.narrative、memories、rollingSummary 和 coreState，完整提取：
+            必须先独立阅读 proposed.narrative、outcome、entities、worldFacts、memories、rollingSummary、
+            decisionCheckpoint 和 coreState，完整提取：
             - chronologicalAgencyEvents：按正文发生顺序列出主角行为与需要玩家决定的场景，不能合并或跳过中段；
             - protagonistActions：正文中主角实际做出的主动行为，包括移动、返程、回答、取放物品、追问、修炼和战斗；
             - protagonistDecisions：已经替主角确定的路线、目标、承诺、态度和下一步计划；
@@ -712,6 +713,33 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             } catch (JsonProcessingException | IllegalArgumentException secondError) {
                 throw new IllegalArgumentException("结果覆盖审阅未返回有效结论", secondError);
             }
+        }
+    }
+
+    @Override
+    public Review reviewOutcomePlanAgency(StoryPromptContext context, StoryModelRoute route,
+                                          InvocationContext invocation, StoryPatch acceptedPlan) {
+        requireContext(context, route, "结果计划授权复核");
+        if (acceptedPlan == null) throw new IllegalArgumentException("结果计划授权复核缺少候选");
+        StoryModelRoute reviewRoute = flashReviewRoute(route);
+        StoryModelGateway.Result result = call(reviewRoute, invocation,
+                "STORY_OUTCOME_PLAN_AGENCY_REVIEW_FLASH", AGENCY_REVIEW_PROMPT,
+                json(agencyReviewPayload(context, acceptedPlan), "结果计划授权复核请求无法序列化"), 0.0);
+        try {
+            AgencyReviewResponse agency = tolerantMapper.readValue(rawJson(result.text()),
+                    AgencyReviewResponse.class);
+            agency.validate();
+            String extractedBoundaryProblem = agency.extractedBoundaryProblem();
+            ReviewOutcome outcome = agency.reviewOutcome();
+            boolean accepted = (outcome == ReviewOutcome.ACCEPT
+                    || outcome == ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL)
+                    && extractedBoundaryProblem.isBlank();
+            String problem = extractedBoundaryProblem.isBlank() ? agency.problem() : extractedBoundaryProblem;
+            return new Review(accepted ? outcome : ReviewOutcome.REPAIR_DECISION,
+                    accepted ? "" : problem.isBlank() ? "结果计划越过玩家授权边界" : problem,
+                    List.of(result));
+        } catch (JsonProcessingException | IllegalArgumentException error) {
+            throw new IllegalArgumentException("结果计划授权复核未返回有效结论", error);
         }
     }
 
@@ -946,7 +974,10 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
     private Map<String, Object> agencyReviewPayload(StoryPromptContext context, StoryPatch proposed) {
         Map<String, Object> candidate = new LinkedHashMap<>();
         candidate.put("narrative", proposed.narrative());
+        candidate.put("outcome", proposed.outcome());
         candidate.put("coreState", proposed.coreState());
+        candidate.put("entities", proposed.entities());
+        candidate.put("worldFacts", proposed.worldFacts());
         candidate.put("memories", proposed.memories());
         candidate.put("decisionCheckpoint", proposed.decisionCheckpoint());
         candidate.put("rollingSummary", proposed.rollingSummary());

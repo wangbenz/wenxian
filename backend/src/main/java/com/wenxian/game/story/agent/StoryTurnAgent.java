@@ -69,6 +69,17 @@ public interface StoryTurnAgent {
     }
 
     /**
+     * 在正文生成前独立检查结果计划是否替玩家回答了保留决定。
+     *
+     * <p>默认通过以兼容确定性测试替身；真实模型实现使用独立轻量审阅。该审阅只否决或要求整理计划，
+     * 不负责解释事实、生成正文或写入状态。</p>
+     */
+    default Review reviewOutcomePlanAgency(StoryPromptContext context, StoryModelRoute route,
+                                           InvocationContext invocation, StoryPatch acceptedPlan) {
+        return new Review(true, "", List.of());
+    }
+
+    /**
      * 从已经完成的剧情草稿中提取需要长期保存的事实变化。
      *
      * <p>默认实现保持确定性测试替身兼容；生产 Agent 使用独立轻量模型完成投影。剧情草稿不是权威事实，

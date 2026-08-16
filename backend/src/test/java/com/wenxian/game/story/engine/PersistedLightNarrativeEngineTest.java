@@ -1380,6 +1380,110 @@ class PersistedLightNarrativeEngineTest {
     }
 
     @Test
+    void outcomeFirstRepairsAPlanThatAcceptsATradeWhilePlayerOnlyWaitedForTheOffer() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            AtomicInteger agencyReviews = new AtomicInteger();
+            AtomicInteger planRepairs = new AtomicInteger();
+            StoryTurnAgent agent = new StoryTurnAgent() {
+                @Override
+                public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+                    throw new AssertionError("结果优先 Agent 不应调用旧入口");
+                }
+
+                @Override
+                public boolean supportsOutcomeFirst() {
+                    return true;
+                }
+
+                @Override
+                public PlannedOutcome planOutcome(StoryPromptContext context, StoryModelRoute route,
+                                                   InvocationContext invocation) {
+                    return new PlannedOutcome(tradePlan(false), List.of(modelResult("agency-bad-plan")));
+                }
+
+                @Override
+                public Review reviewOutcomePlanAgency(StoryPromptContext context, StoryModelRoute route,
+                                                      InvocationContext invocation, StoryPatch acceptedPlan) {
+                    if (agencyReviews.getAndIncrement() == 0) {
+                        return new Review(ReviewOutcome.REPAIR_DECISION,
+                                "玩家只等待答复，结果计划却替玩家接受了交换",
+                                List.of(modelResult("agency-rejected")));
+                    }
+                    return new Review(ReviewOutcome.ACCEPT, "", List.of(modelResult("agency-accepted")));
+                }
+
+                @Override
+                public PlannedOutcome repairOutcomePlan(StoryPromptContext context, StoryModelRoute route,
+                                                        InvocationContext invocation, StoryPatch rejected,
+                                                        String problem) {
+                    planRepairs.incrementAndGet();
+                    return new PlannedOutcome(tradePlan(true), List.of(modelResult("agency-plan-repair")));
+                }
+
+                @Override
+                public RenderedNarrative renderNarrative(StoryPromptContext context, StoryModelRoute route,
+                                                         InvocationContext invocation, StoryPatch acceptedPlan) {
+                    return new RenderedNarrative("老人开价",
+                            "卖画老人看完玉简，提出以三枚灵石交换。你没有答应，也没有拒绝，决定仍在你手中。",
+                            List.of(new StoryPatch.ChoiceDraft("接受交换", "以玉简换取三枚灵石。"),
+                                    new StoryPatch.ChoiceDraft("收回玉简", "谢绝提议并取回玉简。")),
+                            "卖画老人已经开价，是否交换仍由你决定。",
+                            List.of(modelResult("agency-narrative")));
+                }
+
+                @Override
+                public Review reviewOutcomeCoverage(StoryPromptContext context, StoryModelRoute route,
+                                                     InvocationContext invocation, StoryPatch acceptedPlan,
+                                                     RenderedNarrative narrative) {
+                    return new Review(ReviewOutcome.ACCEPT, "", List.of(modelResult("agency-coverage")));
+                }
+
+                private StoryPatch tradePlan(boolean reserveDecision) {
+                    return new StoryPatch("老人开价",
+                            reserveDecision ? "老人提出交换，等待玩家决定。" : "你点头接受了老人的交换。",
+                            new TimePassage(10, TimeResolution.COMPLETE, null),
+                            new StoryPatch.CoreStatePatch(null, null, null, null),
+                            List.of(), List.of(), List.of(), List.of(),
+                            reserveDecision
+                                    ? new DecisionCheckpoint(true, "是否用玉简换取三枚灵石？")
+                                    : new DecisionCheckpoint(false, null),
+                            List.of(), reserveDecision ? "交换尚未决定。" : "你已经接受交换。",
+                            new TurnOutcome(OutcomeResolution.SUCCEEDED,
+                                    reserveDecision ? "对方已经开价，等待玩家决定" : "玩家已经接受交换"));
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    agent, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            engine.takeTurn(USER, created.saveId(),
+                    new TurnRequest("静候卖画老人答复", "request-agency-plan-repair", 1));
+
+            var saved = saves.findOwned(USER.userId(), created.saveId()).orElseThrow();
+            assertEquals(1, saved.turnNumber());
+            assertEquals(1, planRepairs.get());
+            assertEquals(2, agencyReviews.get());
+            String storedNarrative = jdbc.queryForObject(
+                    "select narrative_text from story_turn where save_id=?", String.class, created.saveId());
+            assertTrue(storedNarrative.contains("仍在你手中"));
+            assertFalse(storedNarrative.contains("点头接受"));
+            DecisionCheckpoint checkpoint = new StoryProjectionPersistenceMapper(mapper)
+                    .loadDecisionCheckpoint(saved.state());
+            assertTrue(checkpoint != null);
+            assertTrue(checkpoint.required());
+            assertEquals("是否用玉简换取三枚灵石？", checkpoint.prompt());
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
     void outcomeCoverageCanRepairAMissingPlanBeforeRerendering() {
         EmbeddedDatabase database = database();
         try {

@@ -232,6 +232,47 @@ class ModelBackedStoryTurnAgentTest {
     }
 
     @Test
+    void independentPlanAgencyReviewRejectsAnsweringReservedPlayerDecision() throws Exception {
+        StoryModelGateway gateway = request -> {
+            assertEquals("deepseek-v4-flash", request.model());
+            assertTrue(request.systemPrompt().contains("接受交易或拜师"));
+            assertTrue(request.userPrompt().contains("是否最终接受以玉简抵画款"));
+            assertTrue(request.userPrompt().contains("玉简已经作为画款交付"));
+            return result("""
+                    {"chronologicalAgencyEvents":["老人报价","主角接受交易"],
+                     "protagonistActions":["接受以玉简抵画"],
+                     "protagonistDecisions":["同意交付玉简"],"protagonistMotives":[],
+                     "endingState":"交易已经成立","firstRequiredStopOccurrence":"老人给出答复后",
+                     "actionsAfterRequiredStop":["主角点头同意交易"],
+                     "outcome":"REPAIR_DECISION","passed":false,
+                     "problem":"结果计划替玩家接受了尚未确认的交易"}
+                    """, 40, 30, 100);
+        };
+        StoryActionContract.PlayerAgencyBoundary boundary =
+                new StoryActionContract.PlayerAgencyBoundary(
+                        List.of("等待老人答复"), List.of(),
+                        List.of("是否最终接受以玉简抵画款"), "仍在画摊前");
+        StoryActionContract contract = new StoryActionContract("等待答复",
+                StoryActionContract.ActionMode.QUERY, StoryActionContract.ActionScope.DO_NOW,
+                false, List.of(), List.of(), List.of(), boundary, "", new StoryActionContract.Conflict(false, "", ""));
+        StoryPatch plan = new ObjectMapper().findAndRegisterModules().readValue(VALID_PATCH, StoryPatch.class);
+        plan = new StoryPatch(plan.title(), "老人答复后，你点头同意以玉简抵画。", plan.time(),
+                plan.coreState(), plan.entities(), List.of(new StoryPatch.WorldFactPatch(
+                StoryPatch.WorldFactOperation.EXPAND, null, "玉简已经作为画款交付", "交易成立")),
+                plan.knowledge(), plan.memories(), plan.decisionCheckpoint(), plan.choices(),
+                "玉简已经作为画款交付。", new StoryPatch.TurnOutcome(
+                StoryPatch.OutcomeResolution.SUCCEEDED, "玉简已经作为画款交付"));
+
+        StoryTurnAgent.Review review = agent(gateway).reviewOutcomePlanAgency(
+                context().withActionContract(contract), route(),
+                new StoryTurnAgent.InvocationContext("save-plan-agency", 12), plan);
+
+        assertFalse(review.accepted());
+        assertEquals(StoryTurnAgent.ReviewOutcome.REPAIR_DECISION, review.outcome());
+        assertTrue(review.problem().contains("交易"));
+    }
+
+    @Test
     void projectsFactsWithFlashWithoutAllowingProjectionToRewriteNarrative() throws Exception {
         StoryModelGateway gateway = request -> {
             assertEquals("deepseek-v4-flash", request.model());
