@@ -998,6 +998,58 @@ class PersistedLightNarrativeEngineTest {
     }
 
     @Test
+    void outcomePlanGenerationFailureIsReportedAsSystemRecoveryWithoutChangingSaveOrQuota() {
+        EmbeddedDatabase database = database();
+        try {
+            JdbcTemplate jdbc = new JdbcTemplate(database);
+            StorySaveRepository saves = new StorySaveRepository(jdbc, mapper);
+            StoryEntityRepository entities = new StoryEntityRepository(jdbc, mapper);
+            StoryMemoryRepository memories = new StoryMemoryRepository(jdbc);
+            StoryTurnAgent planFailure = new StoryTurnAgent() {
+                @Override
+                public Generated generate(StoryPromptContext context, StoryModelRoute route) {
+                    throw new AssertionError("结果优先 Agent 不应调用旧入口");
+                }
+
+                @Override
+                public boolean supportsOutcomeFirst() {
+                    return true;
+                }
+
+                @Override
+                public PlannedOutcome planOutcome(StoryPromptContext context, StoryModelRoute route,
+                                                   InvocationContext invocation) {
+                    throw new IllegalArgumentException("最小结果计划连续两次包含无效结构");
+                }
+            };
+            PersistedLightNarrativeEngine engine = trustedEngine(database, saves, entities, memories,
+                    planFailure, testPlayerAi(jdbc));
+            var created = engine.create(USER, new CreateSaveRequest("XUANXU", null, "楚星河", "人族", "男",
+                    "宗门弟子", "你在山门晨钟中醒来。", "自由探索"));
+
+            GameApiException error = assertThrows(GameApiException.class, () -> engine.takeTurn(USER,
+                    created.saveId(), new TurnRequest("前往东街寻找老修士", "request-plan-protocol-failure", 1)));
+
+            assertEquals("STORY_INTERNAL_RECOVERY_FAILED", error.code());
+            assertEquals("SYSTEM", error.category());
+            assertEquals("OUTCOME_PLAN_GENERATION", error.details().get("stage"));
+            assertTrue(error.retryable());
+            assertFalse(error.turnConsumed());
+            assertFalse(error.stateChanged());
+            var unchanged = saves.findOwned(USER.userId(), created.saveId()).orElseThrow();
+            assertEquals(1, unchanged.revision());
+            assertEquals(0, unchanged.turnNumber());
+            assertEquals(0, jdbc.queryForObject("select count(*) from story_turn where save_id=?",
+                    Integer.class, created.saveId()));
+            assertEquals(0, jdbc.queryForObject(
+                    "select coalesce(sum(used_count),0) from user_daily_quota where user_id=?",
+                    Integer.class, USER.userId()));
+        } finally {
+            database.shutdown();
+        }
+    }
+
+    @Test
     void trustedTurnReturnsActionConflictBeforeNarrativeGenerationAndKeepsTurn() {
         EmbeddedDatabase database = database();
         try {

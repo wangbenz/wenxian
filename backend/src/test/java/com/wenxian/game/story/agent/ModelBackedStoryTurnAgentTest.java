@@ -121,6 +121,73 @@ class ModelBackedStoryTurnAgentTest {
     }
 
     @Test
+    void normalizesCrossTypeOptionalFieldsBeforeValidatingOutcomePlan() {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> {
+            calls.incrementAndGet();
+            return result("""
+                    {"title":"东街访人","narrative":"你沿东街寻找那名老修士。",
+                     "time":{"elapsedMinutes":30,"resolution":"COMPLETE","interruptionReason":null},
+                     "coreState":{"location":"青崖集东街","condition":null,"realm":null,"lifeGoal":null},
+                     "entities":[{"operation":"CREATE","entityId":null,"entityType":"LANDMARK",
+                       "name":"青崖集东街","status":"已经抵达","summary":"集市东侧的长街",
+                       "attributes":null,"quantity":null,"inPossession":null,"custody":null,
+                       "abilityState":null,"lifecycle":null,
+                       "relationship":{"label":"初识","changeReason":"本轮抵达"},
+                       "referenceKey":"east-street"}],
+                     "worldFacts":[],"knowledge":[],"memories":[],
+                     "decisionCheckpoint":{"required":false,"prompt":null},"choices":[],
+                     "rollingSummary":"你已经抵达青崖集东街。",
+                     "outcome":{"resolution":"SUCCEEDED","summary":"抵达东街并继续寻找老修士"}}
+                    """, 80, 120, 300);
+        };
+
+        StoryTurnAgent.PlannedOutcome planned = agent(gateway).planOutcome(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-cross-type", 9));
+
+        assertEquals(1, calls.get(), "可安全丢弃的跨类型字段不应触发额外模型修复");
+        assertEquals("LANDMARK", planned.patch().entities().getFirst().entityType());
+        assertEquals("青崖集东街", planned.patch().entities().getFirst().name());
+        assertEquals(null, planned.patch().entities().getFirst().relationship());
+    }
+
+    @Test
+    void repairsInvalidOutcomeContractWithCurrentFactsAndActionContext() {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> {
+            if (calls.incrementAndGet() == 1) {
+                return result("""
+                        {"title":"得到灵石","narrative":"你拾起一块灵石。",
+                         "time":{"elapsedMinutes":10,"resolution":"COMPLETE","interruptionReason":null},
+                         "coreState":{"location":null,"condition":null,"realm":null,"lifeGoal":null},
+                         "entities":[{"operation":"CREATE","entityId":null,"entityType":"ITEM","name":"灵石",
+                           "status":null,"summary":"新拾得的灵石","attributes":null,
+                           "quantity":{"known":true,"value":1},"inPossession":true,
+                           "custody":{"holderType":"PLAYER","holderRef":null},"abilityState":null,
+                           "lifecycle":null,"relationship":null,"referenceKey":"spirit-stone"}],
+                         "worldFacts":[],"knowledge":[],"memories":[],
+                         "decisionCheckpoint":{"required":false,"prompt":null},"choices":[],
+                         "rollingSummary":"你拾得了一块灵石。",
+                         "outcome":{"resolution":"SUCCEEDED","summary":"得到一块灵石"}}
+                        """, 80, 120, 300);
+            }
+            assertTrue(request.userPrompt().contains("最小结果计划没有通过"));
+            assertTrue(request.userPrompt().contains("objective"));
+            assertTrue(request.userPrompt().contains("action"));
+            assertTrue(request.userPrompt().contains("新实体必须包含当前状态"));
+            return result(VALID_PATCH, 90, 140, 320);
+        };
+
+        StoryTurnAgent.PlannedOutcome planned = agent(gateway).planOutcome(context(), route(),
+                new StoryTurnAgent.InvocationContext("save-contract-repair", 9));
+
+        assertEquals(2, calls.get());
+        assertEquals("石门之后", planned.patch().title());
+        assertEquals(170, planned.modelResults().stream().mapToInt(StoryModelGateway.Result::inputTokens).sum());
+        assertEquals(260, planned.modelResults().stream().mapToInt(StoryModelGateway.Result::outputTokens).sum());
+    }
+
+    @Test
     void coverageReviewRejectsNarrativeThatInventsDurableFacts() throws Exception {
         StoryModelGateway gateway = request -> result("""
                 {"coverage":{"passed":true,"problem":""},

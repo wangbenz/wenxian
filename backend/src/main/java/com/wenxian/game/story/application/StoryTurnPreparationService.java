@@ -236,7 +236,16 @@ public class StoryTurnPreparationService {
             StoryModelRoute route,
             StoryTurnAgent.InvocationContext invocation,
             StoryTurnDiagnosticService.Session diagnostic) {
-        StoryTurnAgent.PlannedOutcome planned = agent.planOutcome(context, route, invocation);
+        StoryTurnAgent.PlannedOutcome planned;
+        try {
+            planned = agent.planOutcome(context, route, invocation);
+        } catch (StoryTurnProtocolException protocol) {
+            throw protocol;
+        } catch (IllegalArgumentException structuralProblem) {
+            // 结果模型自身及其一次自动整理均未形成可解析提案，属于系统协议恢复失败，不应归责玩家输入。
+            throw new StoryTurnProtocolException("OUTCOME_PLAN_GENERATION",
+                    "最小结果计划在自动整理后仍未形成可校验结构", structuralProblem);
+        }
         List<StoryModelGateway.Result> attempts = new ArrayList<>(resolvedAction.modelResults());
         attempts.addAll(planned.modelResults());
         StoryPatch plan = normalizedPlan(before, semanticDuration, actionContract, planned.patch());

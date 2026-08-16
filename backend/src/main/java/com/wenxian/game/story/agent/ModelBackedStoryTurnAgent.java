@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wenxian.game.story.domain.StoryPatch;
 import com.wenxian.game.story.domain.StoryActionContract;
 import com.wenxian.game.story.domain.StoryDecisionEnvelope;
+import com.wenxian.game.story.domain.StoryPatchNormalizer;
 import com.wenxian.game.story.domain.StoryPatchValidator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -559,6 +560,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
     private final StoryModelInvocationRecorder invocations;
     private final ObjectMapper mapper;
     private final ObjectMapper tolerantMapper;
+    private final StoryPatchNormalizer normalizer = new StoryPatchNormalizer();
     private final StoryPatchValidator validator;
     private final String flashReviewModel;
 
@@ -609,10 +611,20 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         attempts.add(result);
         try {
             return new PlannedOutcome(parse(result.text()), attempts);
-        } catch (JsonProcessingException | IllegalArgumentException firstError) {
+        } catch (JsonProcessingException firstError) {
             StoryModelGateway.Result repaired = call(planningRoute, invocation,
                     "STORY_OUTCOME_PLAN_FORMAT_REPAIR_FLASH", OUTCOME_PLAN_PROMPT,
                     repairPrompt(result.text(), firstError.getMessage()), 0.0);
+            attempts.add(repaired);
+            try {
+                return new PlannedOutcome(parse(repaired.text()), attempts);
+            } catch (JsonProcessingException | IllegalArgumentException secondError) {
+                throw new IllegalArgumentException("最小结果计划未形成可校验结果", secondError);
+            }
+        } catch (IllegalArgumentException firstError) {
+            StoryModelGateway.Result repaired = call(planningRoute, invocation,
+                    "STORY_OUTCOME_PLAN_CONTRACT_REPAIR_FLASH", OUTCOME_PLAN_PROMPT,
+                    invalidOutcomePlanRepairPayload(context, result.text(), firstError.getMessage()), 0.0);
             attempts.add(repaired);
             try {
                 return new PlannedOutcome(parse(repaired.text()), attempts);
@@ -963,6 +975,20 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         return json(payload, "结果计划修复请求无法序列化");
     }
 
+    /**
+     * JSON 已能读取但契约字段不完整时，携带当前权威事实和行动重新整理计划。
+     * 这与纯 JSON 格式修复分开，避免模型在缺少稳定引用上下文时反复返回同类错误。
+     */
+    private String invalidOutcomePlanRepairPayload(StoryPromptContext context, String rejected, String problem) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("instruction", OUTCOME_PLAN_REPAIR_PROMPT);
+        payload.put("objective", context.objective());
+        payload.put("action", context.action());
+        payload.put("rejectedOutcome", rejected == null ? "" : rejected);
+        payload.put("validationProblem", problem == null ? "结果计划契约字段不完整" : problem.strip());
+        return json(payload, "结果计划契约修复请求无法序列化");
+    }
+
     private String narrativePayload(StoryPromptContext context, StoryPatch acceptedPlan) {
         Map<String, Object> objective = new LinkedHashMap<>();
         objective.put("worldClock", context.objective().worldClock());
@@ -1189,7 +1215,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
     }
 
     private StoryPatch parse(String raw) throws JsonProcessingException {
-        StoryPatch patch = tolerantMapper.readValue(rawJson(raw), StoryPatch.class);
+        StoryPatch patch = normalizer.normalize(tolerantMapper.readValue(rawJson(raw), StoryPatch.class));
         validator.validate(patch);
         return patch;
     }

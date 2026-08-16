@@ -1,6 +1,5 @@
 package com.wenxian.game.story.domain;
 
-import com.wenxian.game.story.domain.StoryPatch.AbilityState;
 import com.wenxian.game.story.domain.StoryPatch.CoreStatePatch;
 import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
 import com.wenxian.game.story.domain.StoryPatch.EntityOperation;
@@ -21,14 +20,12 @@ import java.util.List;
  * 让一次错误的无关字段不再迫使整章重写；缺少稳定引用、保管者或生命周期等重大字段仍由后续校验拒绝。</p>
  */
 public final class TrustedStoryEventCompiler {
+    private final StoryPatchNormalizer normalizer = new StoryPatchNormalizer();
 
     public Compiled compile(StoryProjection before, StoryPatch proposed, SemanticDuration planned) {
         if (before == null || proposed == null) throw new IllegalArgumentException("可信事件编译缺少投影或提案");
-        List<EntityPatch> normalizedEntities = proposed.entities().stream().map(this::normalizeEntity).toList();
-        StoryPatch normalized = new StoryPatch(proposed.title(), proposed.narrative(), proposed.time(),
-                proposed.coreState(), normalizedEntities, proposed.worldFacts(), proposed.knowledge(),
-                proposed.memories(), proposed.decisionCheckpoint(), proposed.choices(), proposed.rollingSummary(),
-                proposed.outcome());
+        StoryPatch normalized = normalizer.normalize(proposed);
+        List<EntityPatch> normalizedEntities = normalized.entities();
         List<TrustedStoryEvent> events = new ArrayList<>();
         events.add(new TrustedStoryEvent.ActionResolved(proposed.title(),
                 proposed.time() != null && proposed.time().resolution() == TimeResolution.INTERRUPTED
@@ -41,30 +38,6 @@ public final class TrustedStoryEventCompiler {
                         ? EventType.WORLD_FACT_ESTABLISHED : EventType.WORLD_FACT_REVISED,
                 fact.factId(), fact.statement(), fact.reason())));
         return new Compiled(normalized, events);
-    }
-
-    private EntityPatch normalizeEntity(EntityPatch patch) {
-        if (patch == null || patch.entityType() == null) return patch;
-        String type = patch.entityType().strip().toUpperCase();
-        return switch (type) {
-            case "ITEM" -> copy(patch, patch.quantity(), patch.inPossession(), patch.custody(),
-                    null, null, null);
-            case "CHARACTER" -> copy(patch, null, null, null,
-                    null, patch.lifecycle(), patch.relationship());
-            case "ABILITY" -> copy(patch, null, null, null,
-                    patch.abilityState(), null, null);
-            case "LANDMARK" -> copy(patch, null, null, null,
-                    null, null, null);
-            default -> patch;
-        };
-    }
-
-    private EntityPatch copy(EntityPatch patch, StoryPatch.QuantityValue quantity, Boolean inPossession,
-                             CustodyValue custody, AbilityState abilityState,
-                             StoryPatch.LifecycleValue lifecycle, StoryPatch.RelationshipValue relationship) {
-        return new EntityPatch(patch.operation(), patch.entityId(), patch.entityType(), patch.name(), patch.status(),
-                patch.summary(), patch.attributes(), quantity, inPossession, custody, abilityState, lifecycle,
-                relationship, patch.nameChange(), patch.referenceKey());
     }
 
     private void compileEntity(StoryProjection before, EntityPatch patch, List<TrustedStoryEvent> events) {
