@@ -1,7 +1,10 @@
 package com.wenxian.game.story.domain;
 
 import com.wenxian.game.story.domain.StoryActionContract.Conflict;
+import com.wenxian.game.story.domain.StoryActionContract.EntityReference;
 import com.wenxian.game.story.domain.StoryActionContract.ItemTransition;
+import com.wenxian.game.story.domain.StoryActionContract.ReferencePersistence;
+import com.wenxian.game.story.domain.StoryActionContract.ReferenceResolution;
 import com.wenxian.game.story.domain.StoryPatch.CustodyValue;
 import com.wenxian.game.story.domain.StoryPatch.HolderType;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
@@ -45,6 +48,24 @@ class StoryActionContractCanonicalizerTest {
 
         assertEquals("来源物品尚无稳定ID，不能写入 itemTransition；应通过 ESTABLISHED 物品引用晋升",
                 error.getMessage());
+    }
+
+    @Test
+    void promotesTransientRecipientWhenItemTransitionWouldCreateDurableCustody() {
+        CustodyValue player = new CustodyValue(HolderType.PLAYER, null);
+        EntityReference merchant = new EntityReference("百草堂掌柜", ReferenceResolution.NEW,
+                null, "CHARACTER", "百草堂掌柜", "TARGET", null, List.of(), "merchant",
+                ReferencePersistence.TRANSIENT, false);
+        StoryActionContract raw = new StoryActionContract("尝试交付灵石", true, List.of(merchant),
+                List.of(new ItemTransition("item-pill", player,
+                        new CustodyValue(HolderType.CHARACTER, "contract-ref:merchant"), 1, "merchant")),
+                List.of(), "掌柜回应后停下", new Conflict(false, "", ""));
+
+        StoryActionContract result = canonicalizer.canonicalize(projection(1), raw);
+
+        assertEquals(ReferencePersistence.PROMOTE_ON_CHANGE,
+                result.references().getFirst().persistence());
+        assertEquals("contract-ref:merchant", result.itemTransitions().getFirst().target().holderRef());
     }
 
     private StoryActionContract contract(int used) {

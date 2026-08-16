@@ -7,8 +7,11 @@ import com.wenxian.game.story.domain.StoryPatch.AbilityState;
 import com.wenxian.game.story.domain.StoryPatch.EntityOperation;
 import com.wenxian.game.story.domain.StoryPatch.EntityPatch;
 import com.wenxian.game.story.domain.StoryPatch.HolderType;
+import com.wenxian.game.story.domain.StoryPatch.LifecycleState;
+import com.wenxian.game.story.domain.StoryPatch.LifecycleValue;
 import com.wenxian.game.story.domain.StoryPatch.OutcomeResolution;
 import com.wenxian.game.story.domain.StoryPatch.QuantityValue;
+import com.wenxian.game.story.domain.StoryProjection.EntityState;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -25,6 +28,16 @@ import java.util.Map;
 public final class StoryActionOutcomeCompiler {
 
     public StoryPatch compile(StoryActionContract contract, StoryPatch patch) {
+        return compile(null, contract, patch);
+    }
+
+    /**
+     * 依据提交前投影，将模型已经判定成功的物品变化编译成无歧义的稳定补丁。
+     *
+     * <p>模型仍决定行动成功或失败；服务器只落实行动契约已经声明的物品、接收者与数量关系。这样模型即使
+     * 把接收者误写成另一个稳定人物 ID，也不会污染长期事实，更不会因为同一次修复仍猜错 ID 而卡住回合。</p>
+     */
+    public StoryPatch compile(StoryProjection before, StoryActionContract contract, StoryPatch patch) {
         if (contract == null || patch == null) return patch;
         Map<String, EntityReference> references = references(contract);
         List<EntityPatch> entities = patch.entities().stream()
@@ -32,6 +45,7 @@ public final class StoryActionOutcomeCompiler {
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         compileEstablishedItemPromotions(contract, entities);
         compileNewItemResults(contract, patch, entities);
+        compileSuccessfulItemTransitions(before, contract, patch, references, entities);
         if (patch.outcome() != null) {
             contract.references().stream()
                     .filter(this::isNewAbilityResult)
@@ -41,6 +55,90 @@ public final class StoryActionOutcomeCompiler {
         return new StoryPatch(patch.title(), patch.narrative(), patch.time(), patch.coreState(), entities,
                 patch.worldFacts(), patch.knowledge(), patch.memories(), patch.decisionCheckpoint(),
                 patch.choices(), patch.rollingSummary(), patch.outcome());
+    }
+
+    /** 成功交付时，物品归属只能落到行动契约的目标，且回合内接收者必须同时晋升为稳定人物。 */
+    private void compileSuccessfulItemTransitions(
+            StoryProjection before, StoryActionContract contract, StoryPatch patch,
+            Map<String, EntityReference> references, List<EntityPatch> entities) {
+        if (patch.outcome() == null || patch.outcome().resolution() != OutcomeResolution.SUCCEEDED) return;
+        contract.itemTransitions().stream().filter(java.util.Objects::nonNull).forEach(transition -> {
+            StoryPatch.CustodyValue target = transition.target();
+            if (target == null) return;
+            String key = StoryReferenceAlias.keyOf(target.holderRef());
+            if (target.holderType() == HolderType.CHARACTER && key != null) {
+                materializeRecipient(references.get(key), key, patch, entities);
+            }
+            materializeSuccessfulItemTransition(before, transition, patch, entities);
+        });
+    }
+
+    private void materializeRecipient(EntityReference reference, String key, StoryPatch patch,
+                                      List<EntityPatch> entities) {
+        if (reference == null || reference.resolution() == ReferenceResolution.EXISTING) return;
+        List<Integer> matches = new ArrayList<>();
+        for (int index = 0; index < entities.size(); index++) {
+            EntityPatch entity = entities.get(index);
+            if (entity != null && entity.operation() == EntityOperation.CREATE
+                    && "CHARACTER".equalsIgnoreCase(entity.entityType())
+                    && key.equals(StoryReferenceAlias.normalizeKey(entity.referenceKey()))) {
+                matches.add(index);
+            }
+        }
+        if (matches.size() == 1) return;
+        if (!matches.isEmpty()) return;
+        String summary = outcomeSummary(patch, reference);
+        entities.add(new EntityPatch(EntityOperation.CREATE, null, "CHARACTER",
+                reference.canonicalName(), "本轮已确认", summary, null, null, null, null,
+                null, new LifecycleValue(LifecycleState.ACTIVE, "本轮形成持续物品保管关系"),
+                null, null, key));
+    }
+
+    private void materializeSuccessfulItemTransition(
+            StoryProjection before, StoryActionContract.ItemTransition transition,
+            StoryPatch patch, List<EntityPatch> entities) {
+        EntityState current = before == null ? null : before.entities().get(transition.itemId());
+        int index = -1;
+        for (int candidate = 0; candidate < entities.size(); candidate++) {
+            EntityPatch entity = entities.get(candidate);
+            if (entity != null && transition.itemId().equals(entity.entityId())) {
+                index = candidate;
+                break;
+            }
+        }
+        EntityPatch planned = index < 0 ? null : entities.get(index);
+        QuantityValue quantity = successfulTransferQuantity(current, transition, planned);
+        boolean playerHeld = transition.target().holderType() == HolderType.PLAYER;
+        EntityPatch compiled = new EntityPatch(EntityOperation.UPDATE, transition.itemId(), "ITEM",
+                planned == null ? null : planned.name(),
+                planned == null ? "本轮状态已更新" : planned.status(),
+                planned == null ? patch.outcome().summary() : planned.summary(),
+                planned == null ? null : planned.attributes(), quantity, playerHeld, transition.target(),
+                planned == null ? null : planned.abilityState(),
+                planned == null ? null : planned.lifecycle(),
+                planned == null ? null : planned.relationship(),
+                planned == null ? null : planned.nameChange(), "");
+        if (index < 0) entities.add(compiled);
+        else entities.set(index, compiled);
+    }
+
+    /**
+     * 整组转交给其他保管者时数量不应归零；只有目标为 NONE 的消耗/销毁才扣除整组数量。
+     * 部分处置已经由行动契约归一为“原保管者持有剩余部分”，此处保留结果模型给出的剩余数量。
+     */
+    private QuantityValue successfulTransferQuantity(
+            EntityState current, StoryActionContract.ItemTransition transition, EntityPatch planned) {
+        if (current == null || current.quantity() == null || !current.quantity().known()
+                || current.quantity().value() == null || transition.quantity() == null) {
+            return planned == null ? current == null ? null : current.quantity() : planned.quantity();
+        }
+        int currentValue = current.quantity().value();
+        if (transition.quantity() >= currentValue) {
+            int value = transition.target().holderType() == HolderType.NONE ? 0 : currentValue;
+            return new QuantityValue(true, value);
+        }
+        return planned == null ? new QuantityValue(true, currentValue - transition.quantity())
+                : planned.quantity();
     }
 
     /**

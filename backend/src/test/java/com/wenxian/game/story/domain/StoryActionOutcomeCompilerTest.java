@@ -13,9 +13,12 @@ import com.wenxian.game.story.domain.StoryPatch.OutcomeResolution;
 import com.wenxian.game.story.domain.StoryPatch.TimePassage;
 import com.wenxian.game.story.domain.StoryPatch.TimeResolution;
 import com.wenxian.game.story.domain.StoryPatch.TurnOutcome;
+import com.wenxian.game.story.domain.StoryProjection.CoreState;
+import com.wenxian.game.story.domain.StoryProjection.EntityState;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -128,6 +131,42 @@ class StoryActionOutcomeCompilerTest {
                 patch(OutcomeResolution.FAILED, List.of()));
 
         assertTrue(compiled.entities().isEmpty());
+    }
+
+    @Test
+    void successfulTransferUsesContractRecipientInsteadOfModelGuessedCharacterId() {
+        var player = new StoryPatch.CustodyValue(StoryPatch.HolderType.PLAYER, null);
+        var recipient = new EntityReference("百草堂掌柜", ReferenceResolution.NEW, null,
+                "CHARACTER", "百草堂掌柜", "TARGET", null, List.of(), "merchant",
+                ReferencePersistence.PROMOTE_ON_CHANGE, false);
+        var transition = new StoryActionContract.ItemTransition("item-stone", player,
+                new StoryPatch.CustodyValue(StoryPatch.HolderType.CHARACTER, "contract-ref:merchant"),
+                1, "merchant");
+        StoryActionContract contract = new StoryActionContract("尝试把灵石交给掌柜", ActionMode.ATTEMPT,
+                true, List.of(recipient), List.of(transition), List.of(), null,
+                "掌柜回应后停下", new Conflict(false, "", ""));
+        EntityState stone = new EntityState("item-stone", "ITEM", "灵石", "完好", "一枚灵石",
+                null, true, new StoryPatch.QuantityValue(true, 1), true, player, null, null);
+        StoryProjection before = new StoryProjection(3,
+                new CoreState("百草堂", "平静", "启灵初期", "问仙"),
+                Map.of(stone.id(), stone), Map.of(), Map.of(), List.of());
+        EntityPatch guessedWrongHolder = new EntityPatch(EntityOperation.UPDATE, stone.id(), "ITEM",
+                "灵石", "已经交付", "掌柜接受预付", null,
+                new StoryPatch.QuantityValue(true, 0), false,
+                new StoryPatch.CustodyValue(StoryPatch.HolderType.CHARACTER, "character-master"),
+                null, null, null, "");
+
+        StoryPatch compiled = compiler.compile(before, contract,
+                patch(OutcomeResolution.SUCCEEDED, List.of(guessedWrongHolder)));
+
+        EntityPatch item = compiled.entities().stream()
+                .filter(value -> "ITEM".equals(value.entityType())).findFirst().orElseThrow();
+        EntityPatch character = compiled.entities().stream()
+                .filter(value -> "CHARACTER".equals(value.entityType())).findFirst().orElseThrow();
+        assertEquals("contract-ref:merchant", item.custody().holderRef());
+        assertEquals(1, item.quantity().value());
+        assertEquals("百草堂掌柜", character.name());
+        assertEquals("merchant", character.referenceKey());
     }
 
     private EntityReference learningTarget() {

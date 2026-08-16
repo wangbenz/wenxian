@@ -410,7 +410,7 @@ public class StoryTurnPreparationService {
                                       com.wenxian.game.story.domain.StoryActionContract actionContract,
                                       StoryPatch plan) {
         StoryPatch normalized = eventCompiler.compile(before, plan, semanticDuration).normalizedPatch();
-        return actionOutcomeCompiler.compile(actionContract, normalized);
+        return actionOutcomeCompiler.compile(before, actionContract, normalized);
     }
 
     private void preflightOutcome(StoryProjection before,

@@ -20,7 +20,9 @@ public final class StoryActionContractCanonicalizer {
 
     public StoryActionContract canonicalize(StoryProjection projection, StoryActionContract contract) {
         if (projection == null || contract == null || contract.itemTransitions().isEmpty()) return contract;
-        Map<String, StoryActionContract.EntityReference> referencesByKey = contract.references().stream()
+        List<StoryActionContract.EntityReference> durableReferences = promoteTransitionTargets(
+                contract.references(), contract.itemTransitions());
+        Map<String, StoryActionContract.EntityReference> referencesByKey = durableReferences.stream()
                 .filter(value -> value != null && value.referenceKey() != null && !value.referenceKey().isBlank())
                 .collect(Collectors.toMap(value -> StoryReferenceAlias.normalizeKey(value.referenceKey()),
                         Function.identity(), (left, right) -> {
@@ -38,7 +40,7 @@ public final class StoryActionContractCanonicalizer {
                             }
                             return left;
                         }));
-        List<StoryActionContract.EntityReference> references = contract.references().stream()
+        List<StoryActionContract.EntityReference> references = durableReferences.stream()
                 .map(value -> canonicalizeItemReference(value, expectedCustodyByItem))
                 .toList();
         if (transitions.equals(contract.itemTransitions()) && references.equals(contract.references())) return contract;
@@ -46,6 +48,35 @@ public final class StoryActionContractCanonicalizer {
                 contract.itemActionDetected(),
                 references, transitions, contract.characterPreconditions(),
                 contract.agencyBoundary(), contract.stopBoundary(), contract.conflict());
+    }
+
+    /**
+     * 一次成功的物品交付会形成跨回合保管关系，因此接收者不能仍是纯场景临时人物。
+     *
+     * <p>这里不判断交付是否成功，只把被行动契约明确引用为目标保管者的人物改为“发生变化时晋升”。
+     * 若结果失败，结果编译器不会创建人物；若成功，人物和物品归属会使用同一个回合内引用键提交。</p>
+     */
+    private List<StoryActionContract.EntityReference> promoteTransitionTargets(
+            List<StoryActionContract.EntityReference> references, List<ItemTransition> transitions) {
+        var targetKeys = transitions.stream()
+                .filter(value -> value != null)
+                .map(ItemTransition::targetReferenceKey)
+                .map(StoryReferenceAlias::normalizeKey)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (targetKeys.isEmpty()) return references;
+        return references.stream().map(reference -> {
+            if (reference == null
+                    || reference.persistence() != StoryActionContract.ReferencePersistence.TRANSIENT
+                    || !"CHARACTER".equalsIgnoreCase(reference.entityType())
+                    || !targetKeys.contains(StoryReferenceAlias.normalizeKey(reference.referenceKey()))) {
+                return reference;
+            }
+            return new StoryActionContract.EntityReference(reference.mention(), reference.resolution(),
+                    reference.entityId(), reference.entityType(), reference.canonicalName(), reference.role(),
+                    reference.expectedCustody(), reference.evidenceRefs(), reference.referenceKey(),
+                    StoryActionContract.ReferencePersistence.PROMOTE_ON_CHANGE, reference.resultTarget());
+        }).toList();
     }
 
     /**
