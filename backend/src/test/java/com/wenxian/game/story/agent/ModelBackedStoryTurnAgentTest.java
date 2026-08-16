@@ -294,6 +294,33 @@ class ModelBackedStoryTurnAgentTest {
     }
 
     @Test
+    void repairsAgencyTrimContractOnceWithoutReplanningTheStory() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> {
+            if (calls.incrementAndGet() == 1) {
+                assertTrue(request.systemPrompt().contains("授权边界裁剪 Agent"));
+                return result(VALID_PATCH.replace(
+                        "\"required\":false,\"prompt\":null",
+                        "\"required\":true,\"prompt\":null"), 25, 20, 60);
+            }
+            assertTrue(request.systemPrompt().contains("授权边界裁剪 Agent"));
+            assertTrue(request.userPrompt().contains("重大决定检查点必须说明待玩家决定的内容"));
+            return result(VALID_PATCH.replace(
+                    "\"required\":false,\"prompt\":null",
+                    "\"required\":true,\"prompt\":\"是否继续下一步？\""), 18, 12, 40);
+        };
+        StoryPatch rejected = new ObjectMapper().findAndRegisterModules().readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.PlannedOutcome trimmed = agent(gateway).trimOutcomePlanToAgencyBoundary(
+                context(), route(), new StoryTurnAgent.InvocationContext("save-agency-trim-format", 12),
+                rejected, "玩家授权：候选继续执行了下一步");
+
+        assertTrue(trimmed.patch().decisionCheckpoint().required());
+        assertEquals("是否继续下一步？", trimmed.patch().decisionCheckpoint().prompt());
+        assertEquals(2, trimmed.modelResults().size());
+    }
+
+    @Test
     void projectsFactsWithFlashWithoutAllowingProjectionToRewriteNarrative() throws Exception {
         StoryModelGateway gateway = request -> {
             assertEquals("deepseek-v4-flash", request.model());

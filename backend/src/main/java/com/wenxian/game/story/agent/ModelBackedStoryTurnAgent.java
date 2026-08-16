@@ -704,13 +704,24 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                                                            StoryPatch rejected, String problem) {
         requireContext(context, route, "结果计划授权裁剪");
         if (rejected == null) throw new IllegalArgumentException("结果计划授权裁剪缺少原计划");
-        StoryModelGateway.Result result = call(flashReviewRoute(route), invocation,
+        StoryModelRoute trimRoute = flashReviewRoute(route);
+        List<StoryModelGateway.Result> attempts = new ArrayList<>();
+        StoryModelGateway.Result result = call(trimRoute, invocation,
                 "STORY_OUTCOME_PLAN_AGENCY_TRIM_FLASH", OUTCOME_PLAN_AGENCY_TRIM_PROMPT,
                 outcomePlanRepairPayload(context, rejected, problem), 0.0);
+        attempts.add(result);
         try {
-            return new PlannedOutcome(parse(result.text()), List.of(result));
-        } catch (JsonProcessingException | IllegalArgumentException error) {
-            throw new IllegalArgumentException("结果计划授权裁剪未形成可校验结果", error);
+            return new PlannedOutcome(parse(result.text()), attempts);
+        } catch (JsonProcessingException | IllegalArgumentException firstError) {
+            StoryModelGateway.Result repaired = call(trimRoute, invocation,
+                    "STORY_OUTCOME_PLAN_AGENCY_TRIM_FORMAT_REPAIR_FLASH", OUTCOME_PLAN_AGENCY_TRIM_PROMPT,
+                    repairPrompt(result.text(), firstError.getMessage()), 0.0);
+            attempts.add(repaired);
+            try {
+                return new PlannedOutcome(parse(repaired.text()), attempts);
+            } catch (JsonProcessingException | IllegalArgumentException secondError) {
+                throw new IllegalArgumentException("结果计划授权裁剪在一次格式整理后仍未形成可校验结果", secondError);
+            }
         }
     }
 
