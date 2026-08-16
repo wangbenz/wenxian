@@ -188,6 +188,46 @@ class StoryActionContractPatchValidatorTest {
     }
 
     @Test
+    void failedExistingItemTransferMayKeepOriginalCustodyAndQuantity() {
+        CustodyValue player = new CustodyValue(HolderType.PLAYER, null);
+        CustodyValue merchant = new CustodyValue(HolderType.CHARACTER, "character-merchant");
+        EntityState stone = new EntityState("item-stone", "ITEM", "灵石", "完好", "一枚灵石",
+                null, true, new QuantityValue(true, 1), true, player, null, null);
+        StoryProjection before = new StoryProjection(0,
+                new CoreState("百草堂", "平静", "启灵", "问仙"),
+                Map.of(stone.id(), stone), Map.of(), Map.of(), List.of());
+        StoryActionContract contract = new StoryActionContract("尝试把灵石交给掌柜", true, List.of(),
+                List.of(new ItemTransition(stone.id(), player, merchant, 1)),
+                List.of(), "掌柜回应后停下", new Conflict(false, "", ""));
+        EntityPatch unchanged = new EntityPatch(EntityOperation.UPDATE, stone.id(), "ITEM",
+                null, "仍在手中", "掌柜拒绝预付", null, new QuantityValue(true, 1), true,
+                player, null, null);
+        StoryPatch failed = outcomePatch(StoryPatch.OutcomeResolution.FAILED, List.of(unchanged));
+
+        assertDoesNotThrow(() -> validator.validate(before, contract, failed));
+    }
+
+    @Test
+    void failedExistingItemTransferCannotMoveOrConsumeTheItem() {
+        CustodyValue player = new CustodyValue(HolderType.PLAYER, null);
+        CustodyValue merchant = new CustodyValue(HolderType.CHARACTER, "character-merchant");
+        EntityState stone = new EntityState("item-stone", "ITEM", "灵石", "完好", "一枚灵石",
+                null, true, new QuantityValue(true, 1), true, player, null, null);
+        StoryProjection before = new StoryProjection(0,
+                new CoreState("百草堂", "平静", "启灵", "问仙"),
+                Map.of(stone.id(), stone), Map.of(), Map.of(), List.of());
+        StoryActionContract contract = new StoryActionContract("尝试把灵石交给掌柜", true, List.of(),
+                List.of(new ItemTransition(stone.id(), player, merchant, 1)),
+                List.of(), "掌柜回应后停下", new Conflict(false, "", ""));
+        EntityPatch wronglyMoved = new EntityPatch(EntityOperation.UPDATE, stone.id(), "ITEM",
+                null, "掌柜手中", "错误转移", null, new QuantityValue(true, 1), false,
+                merchant, null, null);
+        StoryPatch failed = outcomePatch(StoryPatch.OutcomeResolution.FAILED, List.of(wronglyMoved));
+
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(before, contract, failed));
+    }
+
+    @Test
     void sourceCharacterReceivingItemMustBeCreatedWithMatchingTurnReference() {
         EntityReference liu = new EntityReference("柳青儿", ReferenceResolution.ESTABLISHED,
                 null, "CHARACTER", "柳青儿", "TARGET", null,
@@ -259,5 +299,12 @@ class StoryActionContractPatchValidatorTest {
         return new StoryPatch("交付", "你把断剑尖交给老妇，然后停下。",
                 new TimePassage(5, TimeResolution.COMPLETE, null), null, List.of(entity), List.of(),
                 List.of(), List.of(), new StoryPatch.DecisionCheckpoint(false, null), List.of(), "已完成交付。");
+    }
+
+    private StoryPatch outcomePatch(StoryPatch.OutcomeResolution resolution, List<EntityPatch> entities) {
+        return new StoryPatch("物品行动", "掌柜作出了回应。",
+                new TimePassage(5, TimeResolution.COMPLETE, null), null, entities, List.of(),
+                List.of(), List.of(), new StoryPatch.DecisionCheckpoint(false, null), List.of(),
+                "物品行动已经结束。", new StoryPatch.TurnOutcome(resolution, "本轮物品行动结果"));
     }
 }

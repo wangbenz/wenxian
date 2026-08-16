@@ -147,16 +147,72 @@ public final class StoryActionContractPatchValidator {
         EntityPatch entityPatch = patch.entities().stream()
                 .filter(value -> value != null && transition.itemId().equals(value.entityId()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "本轮物品行动没有写入对应状态变化：" + transition.itemId()));
-        CustodyValue actual = patchCustody(entityPatch);
+                .orElse(null);
+        StoryPatch.OutcomeResolution resolution = patch.outcome() == null
+                ? StoryPatch.OutcomeResolution.SUCCEEDED : patch.outcome().resolution();
+        if (resolution == StoryPatch.OutcomeResolution.FAILED) {
+            validateUnchangedTransition(before, transition, entityPatch);
+            return;
+        }
+        if (resolution == StoryPatch.OutcomeResolution.PARTIAL && entityPatch == null) return;
+        if (entityPatch == null) {
+            throw new IllegalArgumentException("本轮物品行动没有写入对应状态变化：" + transition.itemId());
+        }
+        CustodyValue actual = effectiveCustody(before, transition, entityPatch);
         CustodyValue expected = normalized(transition.target());
+        if (resolution == StoryPatch.OutcomeResolution.PARTIAL
+                && sameNullable(actual, normalized(transition.expectedFrom()))) {
+            validateUnchangedTransition(before, transition, entityPatch);
+            return;
+        }
         if (actual == null || expected == null || !same(actual, expected)) {
             throw new IllegalArgumentException("物品状态补丁没有落实行动契约中的目标保管者："
                     + transition.itemId());
         }
         validateReferencedHolder(referencesByKey, transition, patch);
         validatePartialQuantity(before, transition, entityPatch);
+    }
+
+    /** 失败或尚未落实物品转移的部分成功，必须保持行动开始前的归属与数量。 */
+    private void validateUnchangedTransition(StoryProjection before, ItemTransition transition,
+                                             EntityPatch entityPatch) {
+        if (entityPatch == null) return;
+        if (entityPatch.operation() != StoryPatch.EntityOperation.UPDATE) {
+            throw new IllegalArgumentException("未完成的物品行动不能隐藏、恢复或重建原物品："
+                    + transition.itemId());
+        }
+        CustodyValue actual = effectiveCustody(before, transition, entityPatch);
+        CustodyValue original = normalized(transition.expectedFrom());
+        if (actual != null && original != null && !same(actual, original)) {
+            throw new IllegalArgumentException("未完成的物品行动改变了原保管者：" + transition.itemId());
+        }
+        if (before == null || entityPatch.quantity() == null) return;
+        EntityState current = before.entities().get(transition.itemId());
+        if (current == null || current.quantity() == null || !current.quantity().known()
+                || current.quantity().value() == null) return;
+        QuantityValue quantity = entityPatch.quantity();
+        if (!quantity.known() || quantity.value() == null
+                || !Objects.equals(current.quantity().value(), quantity.value())) {
+            throw new IllegalArgumentException("未完成的物品行动改变了原数量：" + transition.itemId());
+        }
+    }
+
+    private CustodyValue effectiveCustody(StoryProjection before, ItemTransition transition,
+                                          EntityPatch entityPatch) {
+        CustodyValue actual = patchCustody(entityPatch);
+        if (actual != null || before == null) return actual;
+        EntityState current = before.entities().get(transition.itemId());
+        if (current == null) return null;
+        CustodyValue custody = normalized(current.custody());
+        if (custody != null) return custody;
+        if (current.inPossession() == null) return null;
+        return Boolean.TRUE.equals(current.inPossession())
+                ? new CustodyValue(HolderType.PLAYER, null)
+                : new CustodyValue(HolderType.UNKNOWN, null);
+    }
+
+    private boolean sameNullable(CustodyValue left, CustodyValue right) {
+        return left != null && right != null && same(left, right);
     }
 
     private void validateReferencedHolder(
