@@ -393,7 +393,7 @@ public class StoryTurnPreparationService {
             throw new StoryTurnProtocolException("OUTCOME_PLAN_AGENCY_REPAIR",
                     "结果计划越过玩家决定边界，自动整理后仍未通过可信事实校验", failedPlan);
         }
-        StoryTurnAgent.Review repairedAgency = agent.reviewOutcomePlanAgency(
+        StoryTurnAgent.Review repairedAgency = agent.reviewRepairedOutcomePlanAgency(
                 context, route, invocation, repairedPlan);
         attempts.addAll(repairedAgency.modelResults());
         if (diagnostic != null) {

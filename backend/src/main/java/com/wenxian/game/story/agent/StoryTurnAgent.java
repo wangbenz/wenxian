@@ -80,6 +80,17 @@ public interface StoryTurnAgent {
     }
 
     /**
+     * 对已经按首次授权问题整理过的结果计划做最终复核。
+     *
+     * <p>默认沿用普通复核，保持测试替身兼容。真实模型实现可以在最终拒绝前增加一次独立仲裁，避免复核模型
+     * 引用了整理前的旧行为，导致已经安全收束的结果仍然卡住；仲裁不可用时仍保留拒绝，不放宽玩家决定边界。</p>
+     */
+    default Review reviewRepairedOutcomePlanAgency(StoryPromptContext context, StoryModelRoute route,
+                                                   InvocationContext invocation, StoryPatch repairedPlan) {
+        return reviewOutcomePlanAgency(context, route, invocation, repairedPlan);
+    }
+
+    /**
      * 从已经完成的剧情草稿中提取需要长期保存的事实变化。
      *
      * <p>默认实现保持确定性测试替身兼容；生产 Agent 使用独立轻量模型完成投影。剧情草稿不是权威事实，

@@ -563,8 +563,10 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             """;
 
     private static final String AGENCY_REVIEW_RECONCILIATION_PROMPT = """
-            你是《问仙录》的玩家授权复核仲裁 Agent。上一份授权复核的语义结论与结构化分类互相矛盾，
-            你只负责重新分类，不续写剧情、不修改候选，也不因为措辞差异扩大玩家授权。
+            你是《问仙录》的玩家授权复核仲裁 Agent。上一份授权复核可能出现两类争议：语义结论与结构化分类
+            互相矛盾，或复核描述了 proposed 中根本没有发生的行为。你只负责依据当前 proposed 重新裁定，
+            不续写剧情、不修改候选，也不因为措辞差异扩大玩家授权。不得引用整理前的旧候选；originalReview
+            只能作为待核查意见，不能当作已经发生的事实。
 
             重新阅读 action、decisionEnvelope、proposed 和 originalReview，返回一份完整的授权复核 JSON：
             chronologicalAgencyEvents、protagonistActions、protagonistDecisions、protagonistMotives、endingState、
@@ -747,7 +749,17 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
         requireContext(context, route, "结果计划授权复核");
         if (acceptedPlan == null) throw new IllegalArgumentException("结果计划授权复核缺少候选");
         return evaluateAgencyReview(context, route, invocation, acceptedPlan,
-                "STORY_OUTCOME_PLAN_AGENCY_REVIEW_FLASH", "结果计划授权复核未返回有效结论");
+                "STORY_OUTCOME_PLAN_AGENCY_REVIEW_FLASH", "结果计划授权复核未返回有效结论", false);
+    }
+
+    @Override
+    public Review reviewRepairedOutcomePlanAgency(StoryPromptContext context, StoryModelRoute route,
+                                                  InvocationContext invocation, StoryPatch repairedPlan) {
+        requireContext(context, route, "整理后结果计划授权复核");
+        if (repairedPlan == null) throw new IllegalArgumentException("整理后结果计划授权复核缺少候选");
+        return evaluateAgencyReview(context, route, invocation, repairedPlan,
+                "STORY_REPAIRED_OUTCOME_PLAN_AGENCY_REVIEW_FLASH",
+                "整理后结果计划授权复核未返回有效结论", true);
     }
 
     @Override
@@ -922,7 +934,7 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                 return new Review(ReviewOutcome.REPAIR_FACTS, String.join("；", problems), List.of(result));
             }
             Review agency = evaluateAgencyReview(context, route, invocation, proposed,
-                    "STORY_TURN_AGENCY_REVIEW_FLASH", "回合授权复核未返回有效结论");
+                    "STORY_TURN_AGENCY_REVIEW_FLASH", "回合授权复核未返回有效结论", false);
             List<StoryModelGateway.Result> attempts = new ArrayList<>();
             attempts.add(result);
             attempts.addAll(agency.modelResults());
@@ -943,7 +955,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
      */
     private Review evaluateAgencyReview(StoryPromptContext context, StoryModelRoute route,
                                         InvocationContext invocation, StoryPatch proposed,
-                                        String operation, String invalidMessage) {
+                                        String operation, String invalidMessage,
+                                        boolean arbitrateRejectedVerdict) {
         StoryModelRoute reviewRoute = flashReviewRoute(route);
         List<StoryModelGateway.Result> attempts = new ArrayList<>();
         StoryModelGateway.Result first = call(reviewRoute, invocation, operation, AGENCY_REVIEW_PROMPT,
@@ -953,7 +966,9 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             AgencyReviewResponse agency = tolerantMapper.readValue(rawJson(first.text()),
                     AgencyReviewResponse.class);
             agency.validate();
-            if (!agency.hasAcceptedClassificationConflict()) {
+            boolean needsArbitration = agency.hasAcceptedClassificationConflict()
+                    || arbitrateRejectedVerdict && !Boolean.TRUE.equals(agency.passed());
+            if (!needsArbitration) {
                 return agency.toReview(attempts, false);
             }
 
@@ -969,8 +984,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                 reconciled.validate();
                 return reconciled.toReview(attempts, true);
             } catch (JsonProcessingException | RuntimeException arbitrationFailure) {
-                // 仲裁只是审阅歧义的辅助调用，不能因其暂时不可用把已被初审明确判为安全的回合永久锁死。
-                return agency.toReview(attempts, true);
+                // 安全初审不能因可选仲裁不可用而被锁死；拒绝初审则维持拒绝，不能在仲裁失败时越过边界。
+                return agency.toReview(attempts, Boolean.TRUE.equals(agency.passed()));
             }
         } catch (JsonProcessingException | IllegalArgumentException error) {
             throw new IllegalArgumentException(invalidMessage, error);

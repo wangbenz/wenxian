@@ -826,6 +826,75 @@ class ModelBackedStoryTurnAgentTest {
     }
 
     @Test
+    void arbitratesFalseRejectionAfterOutcomePlanWasAlreadyRepaired() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> {
+            if (calls.incrementAndGet() == 1) {
+                return result("""
+                        {"chronologicalAgencyEvents":["向路过弟子询问","得知需要登记名帖"],
+                         "protagonistActions":["前往偏殿登记名帖"],
+                         "protagonistDecisions":["决定立即登记"],"protagonistMotives":[],
+                         "endingState":"正殿前等候","firstRequiredStopOccurrence":"弟子作出答复",
+                         "actionsAfterRequiredStop":["前往偏殿登记名帖"],
+                         "outcome":"REPAIR_DECISION","passed":false,
+                         "problem":"候选替玩家前往偏殿登记名帖"}
+                        """, 20, 15, 40);
+            }
+            assertTrue(request.systemPrompt().contains("不得引用整理前的旧候选"));
+            assertTrue(request.userPrompt().contains("originalReview"));
+            assertTrue(request.userPrompt().contains("尚未登记"));
+            return result("""
+                    {"chronologicalAgencyEvents":["向路过弟子询问","得知需要登记名帖"],
+                     "protagonistActions":["向路过弟子询问"],"protagonistDecisions":[],
+                     "protagonistMotives":[],"endingState":"仍在正殿前，尚未登记",
+                     "firstRequiredStopOccurrence":"弟子作出答复",
+                     "actionsAfterRequiredStop":["听到询问的直接答复"],
+                     "outcome":"ACCEPT_WITH_NARRATIVE_TAIL","passed":true,"problem":""}
+                    """, 18, 12, 35);
+        };
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        StoryPatch base = mapper.readValue(VALID_PATCH, StoryPatch.class);
+        StoryPatch repaired = new StoryPatch(base.title(),
+                "你向路过弟子询问，得知需先登记名帖。你仍在正殿前，尚未登记。",
+                base.time(), base.coreState(), base.entities(), base.worldFacts(), base.knowledge(),
+                base.memories(), new StoryPatch.DecisionCheckpoint(true, "是否前往偏殿登记名帖？"),
+                base.choices(), "已得知需登记名帖，但尚未登记。", base.outcome());
+
+        StoryTurnAgent.Review review = agent(gateway).reviewRepairedOutcomePlanAgency(
+                context(), route(), new StoryTurnAgent.InvocationContext("save-repaired-agency", 15), repaired);
+
+        assertTrue(review.accepted());
+        assertEquals(StoryTurnAgent.ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL, review.outcome());
+        assertEquals(2, review.modelResults().size());
+    }
+
+    @Test
+    void keepsRepairedPlanRejectedWhenFinalArbitrationIsUnavailable() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> {
+            if (calls.incrementAndGet() == 1) {
+                return result("""
+                        {"chronologicalAgencyEvents":["得到答复","前往偏殿"],
+                         "protagonistActions":["前往偏殿"],"protagonistDecisions":["决定登记"],
+                         "protagonistMotives":[],"endingState":"偏殿",
+                         "firstRequiredStopOccurrence":"得到答复",
+                         "actionsAfterRequiredStop":["前往偏殿"],
+                         "outcome":"REPAIR_DECISION","passed":false,"problem":"替玩家前往偏殿"}
+                        """, 20, 14, 35);
+            }
+            throw new IllegalStateException("最终仲裁暂时不可用");
+        };
+        StoryPatch plan = new ObjectMapper().findAndRegisterModules().readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Review review = agent(gateway).reviewRepairedOutcomePlanAgency(
+                context(), route(), new StoryTurnAgent.InvocationContext("save-repaired-reject", 16), plan);
+
+        assertFalse(review.accepted());
+        assertEquals(StoryTurnAgent.ReviewOutcome.REPAIR_DECISION, review.outcome());
+        assertEquals(1, review.modelResults().size());
+    }
+
+    @Test
     void acceptsNaturalNarrativeTailAfterAuthorizedActionCompletes() throws Exception {
         AtomicInteger calls = new AtomicInteger();
         StoryModelGateway gateway = request -> calls.incrementAndGet() == 1
