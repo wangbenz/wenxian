@@ -65,6 +65,33 @@ class StoryActionOutcomeCompilerTest {
         assertTrue(compiled.entities().isEmpty());
     }
 
+    @Test
+    void promotesUniqueEstablishedSourceItemInsteadOfKeepingInventedUpdateId() {
+        EntityReference sourceItem = new EntityReference("《照泉诀》玉简", ReferenceResolution.ESTABLISHED,
+                null, "ITEM", "《照泉诀》玉简", "TARGET",
+                new StoryPatch.CustodyValue(StoryPatch.HolderType.PLAYER, null),
+                List.of("initial:origin"), "source-jade",
+                ReferencePersistence.PROMOTE_ON_CHANGE, false);
+        StoryActionContract contract = new StoryActionContract("调整来源玉简保管位置",
+                ActionMode.ATTEMPT, true, List.of(sourceItem), List.of(), List.of(), null,
+                "放好后停下", new Conflict(false, "", ""));
+        EntityPatch inventedUpdate = new EntityPatch(EntityOperation.UPDATE,
+                "item-zhaocquan-yujian", "ITEM", "《照泉诀》玉简", "完好",
+                "放在行囊内层", null, new StoryPatch.QuantityValue(true, 1), true,
+                new StoryPatch.CustodyValue(StoryPatch.HolderType.PLAYER, null),
+                null, null, null, "");
+
+        StoryPatch compiled = compiler.compile(contract,
+                patch(OutcomeResolution.SUCCEEDED, List.of(inventedUpdate)));
+
+        EntityPatch promoted = compiled.entities().getFirst();
+        assertEquals(EntityOperation.CREATE, promoted.operation());
+        assertEquals(null, promoted.entityId());
+        assertEquals("source-jade", promoted.referenceKey());
+        assertEquals("《照泉诀》玉简", promoted.name());
+        assertEquals(StoryPatch.HolderType.PLAYER, promoted.custody().holderType());
+    }
+
     private EntityReference learningTarget() {
         return new EntityReference("学习御剑术", ReferenceResolution.NEW, null,
                 "ABILITY", "御剑术", "RESULT", null, List.of(), "ability-result",

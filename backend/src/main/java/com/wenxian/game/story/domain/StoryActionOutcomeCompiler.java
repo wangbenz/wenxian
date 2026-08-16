@@ -28,6 +28,7 @@ public final class StoryActionOutcomeCompiler {
         List<EntityPatch> entities = patch.entities().stream()
                 .filter(entity -> !belongsToTransientReference(references, entity))
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        compileEstablishedItemPromotions(contract, entities);
         if (patch.outcome() != null) {
             contract.references().stream()
                     .filter(this::isNewAbilityResult)
@@ -37,6 +38,47 @@ public final class StoryActionOutcomeCompiler {
         return new StoryPatch(patch.title(), patch.narrative(), patch.time(), patch.coreState(), entities,
                 patch.worldFacts(), patch.knowledge(), patch.memories(), patch.decisionCheckpoint(),
                 patch.choices(), patch.rollingSummary(), patch.outcome());
+    }
+
+    /**
+     * 来源中已确立但尚无稳定 ID 的物品发生持久变化时，必须以 CREATE 晋升。
+     *
+     * <p>模型偶尔会为此类对象臆造一个可读 ID 并返回 UPDATE。行动契约已经证明该对象来自可信来源且
+     * 当前尚无 ID，因此这里只把“类型、标准名称都唯一匹配”的补丁机械改成 CREATE；不匹配、重名或
+     * 未声明物品变化时一律不处理，继续交给严格校验拒绝。</p>
+     */
+    private void compileEstablishedItemPromotions(StoryActionContract contract, List<EntityPatch> entities) {
+        if (!contract.itemActionDetected()) return;
+        contract.references().stream()
+                .filter(reference -> reference != null
+                        && reference.resolution() == ReferenceResolution.ESTABLISHED
+                        && reference.persistence() != ReferencePersistence.TRANSIENT
+                        && "ITEM".equalsIgnoreCase(reference.entityType()))
+                .forEach(reference -> promoteUniqueMatchingItem(reference, entities));
+    }
+
+    private void promoteUniqueMatchingItem(EntityReference reference, List<EntityPatch> entities) {
+        String referenceKey = StoryReferenceAlias.normalizeKey(reference.referenceKey());
+        if (referenceKey == null) return;
+        List<Integer> matches = new ArrayList<>();
+        for (int index = 0; index < entities.size(); index++) {
+            EntityPatch entity = entities.get(index);
+            if (entity != null && "ITEM".equalsIgnoreCase(entity.entityType())
+                    && reference.canonicalName().equals(entity.name())) {
+                matches.add(index);
+            }
+        }
+        if (matches.size() != 1) return;
+        int index = matches.getFirst();
+        EntityPatch current = entities.get(index);
+        if (current.operation() == EntityOperation.CREATE && current.entityId() == null
+                && referenceKey.equals(StoryReferenceAlias.normalizeKey(current.referenceKey()))) {
+            return;
+        }
+        entities.set(index, new EntityPatch(EntityOperation.CREATE, null, "ITEM",
+                reference.canonicalName(), current.status(), current.summary(), current.attributes(),
+                current.quantity(), current.inPossession(), current.custody(), null, null, null,
+                current.nameChange(), referenceKey));
     }
 
     private Map<String, EntityReference> references(StoryActionContract contract) {

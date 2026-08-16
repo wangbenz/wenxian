@@ -421,3 +421,8 @@ warning/error。
 `itemTransition`，归一化器用空 ID 查询实体映射并触发 500。该问题改为明确的结构错误并进入既有的一次契约整理：
 来源物品保留 `ESTABLISHED` 引用与来源证据，不能填写只适用于稳定物品的 `itemTransition`，后续结果通过
 `CREATE` 晋升并写入最终保管状态。失败回合未改变 revision、回合或额度。
+
+契约整理后复测，结果模型仍为同一来源玉简臆造可读 ID 并返回 `UPDATE`，一次计划整理后重复，最终以
+`WX-20260816-CEFB4D` 停在 `OUTCOME_PLAN`，仍未改变命卷与额度。结果编译器因此增加一条契约驱动归一：
+只有 `ESTABLISHED`、已声明物品变化、类型和标准名称唯一匹配时，才把伪 `UPDATE` 机械转换为带同一
+`referenceKey` 的 `CREATE`；重名、不匹配或未声明变化继续严格拒绝。
