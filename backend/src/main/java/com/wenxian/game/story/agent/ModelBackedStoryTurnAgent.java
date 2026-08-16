@@ -562,6 +562,26 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             }
             """;
 
+    private static final String AGENCY_REVIEW_RECONCILIATION_PROMPT = """
+            你是《问仙录》的玩家授权复核仲裁 Agent。上一份授权复核的语义结论与结构化分类互相矛盾，
+            你只负责重新分类，不续写剧情、不修改候选，也不因为措辞差异扩大玩家授权。
+
+            重新阅读 action、decisionEnvelope、proposed 和 originalReview，返回一份完整的授权复核 JSON：
+            chronologicalAgencyEvents、protagonistActions、protagonistDecisions、protagonistMotives、endingState、
+            firstRequiredStopOccurrence、actionsAfterRequiredStop、outcome、passed、problem。
+
+            分类规则：
+            - 候选没有越过玩家授权，也不存在停止点后的行动：outcome=ACCEPT、passed=true；
+            - 停止点后只有已授权行动的直接结果或当前场景内的自然收尾：
+              outcome=ACCEPT_WITH_NARRATIVE_TAIL、passed=true；
+            - 停止点后替玩家移动到新地点、接受交易或委托、作出承诺、选定路线、开始新行动，或回答尚待玩家
+              决定的事项：outcome=REPAIR_DECISION、passed=false，并在 problem 中说明具体越权行为。
+
+            NPC 对询问作出回答、玩家获得这次询问直接请求的信息、已有死亡消息被进一步确认，本身不是玩家的新决定。
+            不得再次返回 passed=true、outcome=ACCEPT，却同时保留非空 actionsAfterRequiredStop 的矛盾组合；若这些行动
+            只是自然收尾，必须使用 ACCEPT_WITH_NARRATIVE_TAIL。只返回 JSON，不要 Markdown 或额外解释。
+            """;
+
     private final StoryModelGateway gateway;
     private final StoryModelInvocationRecorder invocations;
     private final ObjectMapper mapper;
@@ -726,26 +746,8 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                                           InvocationContext invocation, StoryPatch acceptedPlan) {
         requireContext(context, route, "结果计划授权复核");
         if (acceptedPlan == null) throw new IllegalArgumentException("结果计划授权复核缺少候选");
-        StoryModelRoute reviewRoute = flashReviewRoute(route);
-        StoryModelGateway.Result result = call(reviewRoute, invocation,
-                "STORY_OUTCOME_PLAN_AGENCY_REVIEW_FLASH", AGENCY_REVIEW_PROMPT,
-                json(agencyReviewPayload(context, acceptedPlan), "结果计划授权复核请求无法序列化"), 0.0);
-        try {
-            AgencyReviewResponse agency = tolerantMapper.readValue(rawJson(result.text()),
-                    AgencyReviewResponse.class);
-            agency.validate();
-            String extractedBoundaryProblem = agency.extractedBoundaryProblem();
-            ReviewOutcome outcome = agency.reviewOutcome();
-            boolean accepted = (outcome == ReviewOutcome.ACCEPT
-                    || outcome == ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL)
-                    && extractedBoundaryProblem.isBlank();
-            String problem = extractedBoundaryProblem.isBlank() ? agency.problem() : extractedBoundaryProblem;
-            return new Review(accepted ? outcome : ReviewOutcome.REPAIR_DECISION,
-                    accepted ? "" : problem.isBlank() ? "结果计划越过玩家授权边界" : problem,
-                    List.of(result));
-        } catch (JsonProcessingException | IllegalArgumentException error) {
-            throw new IllegalArgumentException("结果计划授权复核未返回有效结论", error);
-        }
+        return evaluateAgencyReview(context, route, invocation, acceptedPlan,
+                "STORY_OUTCOME_PLAN_AGENCY_REVIEW_FLASH", "结果计划授权复核未返回有效结论");
     }
 
     @Override
@@ -919,25 +921,59 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
             if (!problems.isEmpty()) {
                 return new Review(ReviewOutcome.REPAIR_FACTS, String.join("；", problems), List.of(result));
             }
-            StoryModelGateway.Result agencyResult = call(reviewRoute, invocation,
-                    "STORY_TURN_AGENCY_REVIEW_FLASH", AGENCY_REVIEW_PROMPT,
-                    mapper.writeValueAsString(agencyReviewPayload(context, proposed)), 0.0);
-            AgencyReviewResponse agency = tolerantMapper.readValue(rawJson(agencyResult.text()),
-                    AgencyReviewResponse.class);
-            agency.validate();
-            String extractedBoundaryProblem = agency.extractedBoundaryProblem();
-            ReviewOutcome outcome = agency.reviewOutcome();
-            boolean agencyPassed = (outcome == ReviewOutcome.ACCEPT
-                    || outcome == ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL)
-                    && extractedBoundaryProblem.isBlank();
-            String problem = !extractedBoundaryProblem.isBlank()
-                    ? extractedBoundaryProblem : agency.problem();
-            String agencyProblem = agencyPassed
-                    ? "" : "玩家授权：" + (problem.isBlank() ? "授权复核未通过" : problem);
-            return new Review(agencyPassed ? outcome : ReviewOutcome.REPAIR_DECISION,
-                    agencyProblem, List.of(result, agencyResult));
+            Review agency = evaluateAgencyReview(context, route, invocation, proposed,
+                    "STORY_TURN_AGENCY_REVIEW_FLASH", "回合授权复核未返回有效结论");
+            List<StoryModelGateway.Result> attempts = new ArrayList<>();
+            attempts.add(result);
+            attempts.addAll(agency.modelResults());
+            String agencyProblem = agency.accepted()
+                    ? "" : "玩家授权：" + (agency.problem().isBlank() ? "授权复核未通过" : agency.problem());
+            return new Review(agency.outcome(), agencyProblem, attempts);
         } catch (JsonProcessingException error) {
             throw new IllegalArgumentException("回合审阅未返回有效结果", error);
+        }
+    }
+
+    /**
+     * 独立执行玩家授权复核，并只在复核自身出现“语义通过、结构分类冲突”时追加一次极小仲裁。
+     *
+     * <p>事实引用、数量、归属与生命周期仍由 Reducer 和事实校验器硬性约束；这里解决的是审阅模型把
+     * 自然收尾列入 actionsAfterRequiredStop，却仍返回 ACCEPT 的协议歧义。该歧义不能再被当成玩家越权，
+     * 否则正常询问或观察会永久卡在同一回合。</p>
+     */
+    private Review evaluateAgencyReview(StoryPromptContext context, StoryModelRoute route,
+                                        InvocationContext invocation, StoryPatch proposed,
+                                        String operation, String invalidMessage) {
+        StoryModelRoute reviewRoute = flashReviewRoute(route);
+        List<StoryModelGateway.Result> attempts = new ArrayList<>();
+        StoryModelGateway.Result first = call(reviewRoute, invocation, operation, AGENCY_REVIEW_PROMPT,
+                json(agencyReviewPayload(context, proposed), "授权复核请求无法序列化"), 0.0);
+        attempts.add(first);
+        try {
+            AgencyReviewResponse agency = tolerantMapper.readValue(rawJson(first.text()),
+                    AgencyReviewResponse.class);
+            agency.validate();
+            if (!agency.hasAcceptedClassificationConflict()) {
+                return agency.toReview(attempts, false);
+            }
+
+            Map<String, Object> arbitrationPayload = new LinkedHashMap<>(agencyReviewPayload(context, proposed));
+            arbitrationPayload.put("originalReview", agency);
+            try {
+                StoryModelGateway.Result arbitration = call(reviewRoute, invocation,
+                        operation + "_RECONCILE", AGENCY_REVIEW_RECONCILIATION_PROMPT,
+                        json(arbitrationPayload, "授权复核仲裁请求无法序列化"), 0.0);
+                attempts.add(arbitration);
+                AgencyReviewResponse reconciled = tolerantMapper.readValue(rawJson(arbitration.text()),
+                        AgencyReviewResponse.class);
+                reconciled.validate();
+                return reconciled.toReview(attempts, true);
+            } catch (JsonProcessingException | RuntimeException arbitrationFailure) {
+                // 仲裁只是审阅歧义的辅助调用，不能因其暂时不可用把已被初审明确判为安全的回合永久锁死。
+                return agency.toReview(attempts, true);
+            }
+        } catch (JsonProcessingException | IllegalArgumentException error) {
+            throw new IllegalArgumentException(invalidMessage, error);
         }
     }
 
@@ -1421,6 +1457,39 @@ public class ModelBackedStoryTurnAgent implements StoryTurnAgent {
                 if (error.getMessage() != null && error.getMessage().startsWith("玩家授权复核")) throw error;
                 throw new IllegalArgumentException("玩家授权复核返回了未知分类：" + outcome, error);
             }
+        }
+
+        /** 初审明确通过，但停止点提取与 ACCEPT 分类不一致时，需要语义仲裁而不是直接拒绝玩家回合。 */
+        private boolean hasAcceptedClassificationConflict() {
+            return Boolean.TRUE.equals(passed) && !extractedBoundaryProblem().isBlank();
+        }
+
+        /**
+         * 将已被语义复核判为安全、但仍沿用粗粒度 ACCEPT 的结果归一成可提交分类。
+         * 只有通过结论才允许归一；明确的 REPAIR_DECISION 永远不会被这里改写为通过。
+         */
+        private ReviewOutcome normalizedAcceptedOutcome() {
+            if (!Boolean.TRUE.equals(passed)) return ReviewOutcome.REPAIR_DECISION;
+            return !firstRequiredStopOccurrence.isBlank() && !actionsAfterRequiredStop.isEmpty()
+                    ? ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL : ReviewOutcome.ACCEPT;
+        }
+
+        /** 把完整语义提取转换为统一审阅结果；仲裁后仍有分类歧义时只归一枚举，不猜测中文剧情。 */
+        private Review toReview(List<StoryModelGateway.Result> attempts, boolean allowClassificationNormalization) {
+            validate();
+            String extractedBoundaryProblem = extractedBoundaryProblem();
+            ReviewOutcome parsed = reviewOutcome();
+            if (allowClassificationNormalization && Boolean.TRUE.equals(passed)
+                    && !extractedBoundaryProblem.isBlank()) {
+                return new Review(normalizedAcceptedOutcome(), "", attempts);
+            }
+            boolean accepted = (parsed == ReviewOutcome.ACCEPT
+                    || parsed == ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL)
+                    && extractedBoundaryProblem.isBlank();
+            String detail = extractedBoundaryProblem.isBlank() ? problem : extractedBoundaryProblem;
+            return new Review(accepted ? parsed : ReviewOutcome.REPAIR_DECISION,
+                    accepted ? "" : detail.isBlank() ? "结果计划越过玩家授权边界" : detail,
+                    attempts);
         }
 
         /**

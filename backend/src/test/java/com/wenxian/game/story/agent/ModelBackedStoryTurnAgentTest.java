@@ -717,19 +717,32 @@ class ModelBackedStoryTurnAgentTest {
     @Test
     void rejectsAgencyReviewThatClaimsPassAfterActionsBeyondRequiredStop() throws Exception {
         AtomicInteger calls = new AtomicInteger();
-        StoryModelGateway gateway = request -> calls.incrementAndGet() == 1
-                ? result("""
+        StoryModelGateway gateway = request -> switch (calls.incrementAndGet()) {
+            case 1 -> result("""
                         {"reference":{"passed":true,"problem":""},"inventory":{"passed":true,"problem":""},
                          "authorization":{"passed":true,"problem":""},"decision":{"passed":true,"problem":""},
                          "time":{"passed":true,"problem":""},"state":{"passed":true,"problem":""}}
-                        """, 30, 10, 50)
-                : result("""
+                        """, 30, 10, 50);
+            case 2 -> result("""
                         {"chronologicalAgencyEvents":["到达第一处岔路","选择主路继续前行"],
                          "protagonistActions":["继续前行"],"protagonistDecisions":["选择主路"],
                          "protagonistMotives":[],"endingState":"第二处岔路",
                          "firstRequiredStopOccurrence":"第一处岔路","actionsAfterRequiredStop":["选择主路继续前行"],
                          "passed":true,"problem":""}
                         """, 20, 15, 45);
+            default -> {
+                assertTrue(request.systemPrompt().contains("授权复核仲裁 Agent"));
+                assertTrue(request.userPrompt().contains("originalReview"));
+                yield result("""
+                        {"chronologicalAgencyEvents":["到达第一处岔路","选择主路继续前行"],
+                         "protagonistActions":["继续前行"],"protagonistDecisions":["选择主路"],
+                         "protagonistMotives":[],"endingState":"第二处岔路",
+                         "firstRequiredStopOccurrence":"第一处岔路","actionsAfterRequiredStop":["选择主路继续前行"],
+                         "outcome":"REPAIR_DECISION","passed":false,
+                         "problem":"候选替玩家选择主路并继续前行"}
+                        """, 18, 12, 35);
+            }
+        };
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         StoryPatch proposed = mapper.readValue(VALID_PATCH, StoryPatch.class);
 
@@ -738,7 +751,78 @@ class ModelBackedStoryTurnAgentTest {
 
         assertFalse(review.accepted());
         assertTrue(review.requiresFreshNarrative());
-        assertTrue(review.problem().contains("首次应停止位置之后"));
+        assertTrue(review.problem().contains("选择主路"));
+        assertEquals(3, review.modelResults().size());
+    }
+
+    @Test
+    void reconcilesHarmlessInformationTailWithoutBlockingQueryTurn() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> {
+            if (calls.incrementAndGet() == 1) {
+                return result("""
+                        {"chronologicalAgencyEvents":["向引路道人询问玄微道人的生平","得知玄微道人过往"],
+                         "protagonistActions":["询问玄微道人的生平"],"protagonistDecisions":[],
+                         "protagonistMotives":[],"endingState":"仍在青云观正殿前等候",
+                         "firstRequiredStopOccurrence":"引路道人回答询问",
+                         "actionsAfterRequiredStop":["得知玄微道人过往"],
+                         "outcome":"ACCEPT","passed":true,"problem":""}
+                        """, 24, 16, 40);
+            }
+            assertTrue(request.systemPrompt().contains("授权复核仲裁 Agent"));
+            assertTrue(request.systemPrompt().contains("已有死亡消息被进一步确认"));
+            assertTrue(request.userPrompt().contains("originalReview"));
+            return result("""
+                    {"chronologicalAgencyEvents":["向引路道人询问玄微道人的生平","引路道人回答"],
+                     "protagonistActions":["询问玄微道人的生平"],"protagonistDecisions":[],
+                     "protagonistMotives":[],"endingState":"仍在青云观正殿前等候",
+                     "firstRequiredStopOccurrence":"引路道人回答询问",
+                     "actionsAfterRequiredStop":["听到询问的直接答复"],
+                     "outcome":"ACCEPT_WITH_NARRATIVE_TAIL","passed":true,"problem":""}
+                    """, 18, 12, 30);
+        };
+        StoryActionContract.PlayerAgencyBoundary boundary =
+                new StoryActionContract.PlayerAgencyBoundary(
+                        List.of("向引路道人询问玄微道人的生平", "了解玄微道人与青云观的渊源"),
+                        List.of(), List.of(), "仍位于青云观正殿前，等待主持安排");
+        StoryActionContract contract = new StoryActionContract("询问玄微道人生平",
+                StoryActionContract.ActionMode.QUERY, StoryActionContract.ActionScope.DO_NOW,
+                false, List.of(), List.of(), List.of(), boundary, "", new StoryActionContract.Conflict(false, "", ""));
+        StoryPatch plan = new ObjectMapper().findAndRegisterModules().readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Review review = agent(gateway).reviewOutcomePlanAgency(
+                context().withActionContract(contract), route(),
+                new StoryTurnAgent.InvocationContext("save-query-tail", 13), plan);
+
+        assertTrue(review.accepted());
+        assertEquals(StoryTurnAgent.ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL, review.outcome());
+        assertEquals(2, review.modelResults().size());
+    }
+
+    @Test
+    void keepsSafeInitialAgencyVerdictWhenOptionalReconciliationIsUnavailable() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        StoryModelGateway gateway = request -> {
+            if (calls.incrementAndGet() == 1) {
+                return result("""
+                        {"chronologicalAgencyEvents":["询问旧事","听到直接答复"],
+                         "protagonistActions":["询问旧事"],"protagonistDecisions":[],
+                         "protagonistMotives":[],"endingState":"仍在原地",
+                         "firstRequiredStopOccurrence":"对方作出答复",
+                         "actionsAfterRequiredStop":["听到直接答复"],
+                         "outcome":"ACCEPT","passed":true,"problem":""}
+                        """, 20, 12, 35);
+            }
+            throw new IllegalStateException("仲裁服务暂时不可用");
+        };
+        StoryPatch plan = new ObjectMapper().findAndRegisterModules().readValue(VALID_PATCH, StoryPatch.class);
+
+        StoryTurnAgent.Review review = agent(gateway).reviewOutcomePlanAgency(
+                context(), route(), new StoryTurnAgent.InvocationContext("save-query-fallback", 14), plan);
+
+        assertTrue(review.accepted());
+        assertEquals(StoryTurnAgent.ReviewOutcome.ACCEPT_WITH_NARRATIVE_TAIL, review.outcome());
+        assertEquals(1, review.modelResults().size());
     }
 
     @Test
