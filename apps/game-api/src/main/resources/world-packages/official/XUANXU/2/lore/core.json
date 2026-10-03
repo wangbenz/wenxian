@@ -1,0 +1,36 @@
+{
+  "entries": [
+    {
+      "loreId": "lore:xuanxu:inheritance",
+      "title": "修行传承",
+      "content": "玄墟界的完整修行法通常由组织或师承控制，散修更多依靠残篇、交易与探索补全道路。",
+      "priority": 80,
+      "tags": ["cultivation", "sect", "inheritance"],
+      "relatedRefs": ["region:xuanxu:qingqi"],
+      "activation": {
+        "always": false,
+        "identityRefs": [],
+        "locationRefs": ["region:xuanxu:qingqi"],
+        "entityTags": ["sect", "inheritance"],
+        "storyThreadRefs": ["seed:xuanxu:qingqi-arrival"],
+        "terms": ["传承", "宗门", "师承", "残篇"]
+      }
+    },
+    {
+      "loreId": "lore:xuanxu:plural-orders",
+      "title": "多族秩序",
+      "content": "宗门、世族与妖庭各有秩序，没有一方能够替整个世界决定所有族群的立场。",
+      "priority": 60,
+      "tags": ["society", "race"],
+      "relatedRefs": ["race:xuanxu:human", "race:xuanxu:yao"],
+      "activation": {
+        "always": false,
+        "identityRefs": ["race:xuanxu:human", "race:xuanxu:yao"],
+        "locationRefs": [],
+        "entityTags": ["sect", "clan", "yao-court"],
+        "storyThreadRefs": [],
+        "terms": ["宗门", "世族", "妖庭", "族群"]
+      }
+    }
+  ]
+}

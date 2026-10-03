@@ -1,0 +1,20 @@
+{
+  "entries": [
+    {
+      "loreId": "lore:dreamsea:memory-tide",
+      "title": "记忆潮",
+      "content": "梦海涨潮时会带来遗失记忆的碎片，退潮后只有被确认和保存的经历不会被重新解释。",
+      "priority": 80,
+      "tags": ["memory", "tide"],
+      "relatedRefs": ["region:dreamsea:harbor"],
+      "activation": {
+        "always": false,
+        "identityRefs": ["race:dreamsea:tideborn"],
+        "locationRefs": ["region:dreamsea:harbor"],
+        "entityTags": ["memory"],
+        "storyThreadRefs": ["seed:dreamsea:harbor"],
+        "terms": ["记忆潮", "遗物", "退潮"]
+      }
+    }
+  ]
+}

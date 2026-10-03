@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: ${GAME_DATABASE_URL}
+    username: ${GAME_DATABASE_USERNAME}
+    password: ${GAME_DATABASE_PASSWORD}
+  sql:
+    init:
+      mode: never
+
+game:
+  cors:
+    allowed-origin-patterns: ${WENXIAN_CORS_ALLOWED_ORIGIN_PATTERNS}
+  invite:
+    bootstrap-code: ${WENXIAN_INVITE_CODE:}
+  auth:
+    secure-cookie: true
+    ip-hash-pepper: ${WENXIAN_IP_HASH_PEPPER}
+    email-verification:
+      enabled: ${WENXIAN_EMAIL_VERIFICATION_ENABLED:false}
+      digest-pepper: ${WENXIAN_EMAIL_VERIFICATION_PEPPER:}
+  account-retention:
+    policy-evaluation-enabled: ${WENXIAN_ACCOUNT_POLICY_EVALUATION_ENABLED:false}
+    notification-delivery-enabled: ${WENXIAN_ACCOUNT_NOTIFICATION_DELIVERY_ENABLED:false}
+    automatic-deletion-enabled: ${WENXIAN_ACCOUNT_AUTOMATIC_DELETION_ENABLED:false}
+    notice-after-days: ${WENXIAN_ACCOUNT_NOTICE_AFTER_DAYS:23}
+    delete-after-days: ${WENXIAN_ACCOUNT_DELETE_AFTER_DAYS:30}
+    minimum-notice-days: ${WENXIAN_ACCOUNT_MINIMUM_NOTICE_DAYS:7}
+    notice-retry-hours: ${WENXIAN_ACCOUNT_NOTICE_RETRY_HOURS:6}
+    scheduler-batch-size: ${WENXIAN_ACCOUNT_RETENTION_BATCH_SIZE:50}
+    subject-hash-pepper: ${WENXIAN_ACCOUNT_SUBJECT_HASH_PEPPER}
+  ai-config-master-key: ${WENXIAN_AI_CONFIG_MASTER_KEY}
+  story-correction-token-secret: ${WENXIAN_STORY_CORRECTION_TOKEN_SECRET}

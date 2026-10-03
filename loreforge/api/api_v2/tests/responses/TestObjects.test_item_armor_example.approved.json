@@ -1,0 +1,51 @@
+{
+    "armor": {
+        "ac_add_dexmod": false,
+        "ac_base": 17,
+        "ac_cap_dexmod": null,
+        "ac_display": "17",
+        "category": "heavy",
+        "grants_stealth_disadvantage": true,
+        "key": "srd_splint",
+        "name": "Splint",
+        "strength_score_required": 15
+    },
+    "category": {
+        "key": "armor",
+        "name": "Armor"
+    },
+    "cost": "200.00",
+    "crossreferences": {
+        "to": [
+            {
+                "anchor": "Chain mail",
+                "url": "http://localhost:8000/v2/items/srd_chain-mail/"
+            }
+        ]
+    },
+    "desc": "This armor is made of narrow vertical strips of metal riveted to a backing of leather that is worn over cloth padding. Flexible chain mail protects the joints.",
+    "document": {
+        "display_name": "5e 2014 Rules",
+        "gamesystem": {
+            "key": "5e-2014",
+            "name": "5th Edition 2014"
+        },
+        "key": "srd-2014",
+        "name": "System Reference Document 5.1",
+        "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+        "publisher": {
+            "key": "wizards-of-the-coast",
+            "name": "Wizards of the Coast"
+        },
+        "type": "SOURCE"
+    },
+    "key": "srd_splint-armor",
+    "name": "Splint Armor",
+    "size": {
+        "key": "tiny",
+        "name": "Tiny"
+    },
+    "weapon": null,
+    "weight": "60.000",
+    "weight_unit": "lb"
+}

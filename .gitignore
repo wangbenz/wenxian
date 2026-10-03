@@ -7,9 +7,12 @@ target/
 .env
 .env.*
 !.env.example
-backend/src/main/resources/application-secret.yml
+apps/game-api/src/main/resources/application-secret.yml
 backups/
 .DS_Store
 .idea/
 .vscode/
 *.iml
+.codex-audit/
+apps/admin-web/qa/
+apps/admin-web/design-qa.md

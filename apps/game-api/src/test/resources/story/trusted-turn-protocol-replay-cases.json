@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "source": "ANONYMIZED_GRAY_AND_PLAYER_BEHAVIOR",
+  "purpose": "V0.15旧链路与精简可信回合候选链路使用同一批输入做离线对照",
+  "cases": [
+    {
+      "id": "server-choice-established-character",
+      "category": "DIALOGUE",
+      "actionSource": "SERVER_CHOICE",
+      "authority": [
+        {"level": "SCENE", "ref": "scene-guide", "statement": "上一回合由系统介绍了一名正在门前值守的引路人"},
+        {"level": "SCENE", "ref": "choice-ask-entry", "statement": "当前推荐行动是向引路人询问入内手续"}
+      ],
+      "action": "向引路人询问进入内院是否需要登记。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["使用服务端choiceId对应的行动", "可以得到回答或被拒绝", "普通引路人无需自动建成长期人物"],
+      "forbidden": ["否认系统刚介绍的人物", "把ESTABLISHED等内部字段展示给玩家"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "transient-vendor-question",
+      "category": "DIALOGUE",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "SCENE", "ref": "scene-market", "statement": "主角正在有普通摊贩往来的集市"}
+      ],
+      "action": "向附近卖茶的摊主打听前方道路是否畅通，得到回答后仍留在摊前。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["允许临时人物参与本轮", "行动结束后交还玩家决定"],
+      "forbidden": ["因为人物表中没有摊主而中断回合", "自动把普通摊主加入重要人物关系"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "unknown-treasure-search",
+      "category": "EXPLORATION",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "location-ravine", "statement": "主角正在一处尚未完全探索的山涧"}
+      ],
+      "action": "沿山涧寻找可能存在的古修遗物，没有找到也如实返回。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["寻找属于尚未发生的尝试", "成功部分成功或失败都可成为正常剧情结果"],
+      "forbidden": ["把寻找解释成已经持有遗物", "因数据库没有遗物而返回技术错误"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "learning-attempt-with-open-result",
+      "category": "TRAINING",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "SCENE", "ref": "scene-sword-marks", "statement": "石壁上存在可供参悟的无名剑痕"}
+      ],
+      "action": "临摹石壁剑痕，尝试领悟一门御剑术法，只完成这次参悟便停下。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["学习是允许尝试而非既成事实", "成功需形成能力事实", "部分成功只能形成已知或修习中", "失败不能生成已掌握能力"],
+      "forbidden": ["要求玩家先证明已经掌握待学能力", "正文宣布掌握但没有对应事件"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "unsupported-mastery-claim",
+      "category": "FACT_CLAIM",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "ability-index", "statement": "当前能力记录中不存在九霄雷法"}
+      ],
+      "action": "我早已掌握九霄雷法，现在直接施展它劈开山门。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["可以把无依据声明演绎为言语愿望或失败尝试", "不得直接新增已掌握能力", "故事内失败也正常提交"],
+      "forbidden": ["玩家一句话直接获得已掌握能力", "用协议错误要求玩家反复改写合法表达"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "mastered-ability-use",
+      "category": "TRAINING",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "ability-reflection", "statement": "照影诀已掌握且当前可用"}
+      ],
+      "action": "施展照影诀查看石门后的禁制。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["继续使用原能力稳定ID", "环境可以影响施展结果但不能抹除掌握事实"],
+      "forbidden": ["声称尚未掌握照影诀", "创建第二个同名能力"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "combat-attempt-preserves-outcome-freedom",
+      "category": "COMBAT",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "SCENE", "ref": "character-road-guard", "statement": "一名拦路修士正在当前场景中威胁主角"},
+        {"level": "AUTHORITATIVE", "ref": "player-condition", "statement": "主角当前没有被记录为失去行动能力"}
+      ],
+      "action": "趁他分神出手攻击，若无法得手便设法拉开距离，不替我决定是否追杀。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["胜负由主模型结合上下文决定", "允许必要的攻防与退让收尾", "停在是否继续追杀的决定前"],
+      "forbidden": ["Java按境界词汇直接判定胜负", "自动替玩家追杀或效忠"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "known-item-consumption",
+      "category": "ITEM",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "item-clearing-pill", "statement": "主角持有三枚清心丹"}
+      ],
+      "action": "服下一枚清心丹，观察药效后停下。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["成功服用后数量从3变为2", "药效可以成功部分成功或无明显效果"],
+      "forbidden": ["使用后数量仍为3", "数量变成负数", "创建第二条清心丹记录"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "accepted-item-gift",
+      "category": "ITEM",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "item-broken-tip", "statement": "断剑尖由主角持有"},
+        {"level": "SCENE", "ref": "character-elder", "statement": "老妇正在当前场景并愿意听主角说明"}
+      ],
+      "action": "把断剑尖交给老妇保管；她若接受便停下，不替我安排之后的去向。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["接受时原物品稳定ID转移保管", "拒绝时物品仍由主角持有", "人物只有产生长期影响时才晋升"],
+      "forbidden": ["拒绝赠送却清空玩家物品", "复制一份断剑尖", "赠送后自动离开"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "false-item-takeback-premise",
+      "category": "ITEM",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "item-broken-tip", "statement": "断剑尖仍由主角持有，从未交给老妇"}
+      ],
+      "action": "让老妇把我之前交给她的断剑尖还回来。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["指出或演绎前提不成立", "原物品归属保持不变", "结果作为正常故事回合返回"],
+      "forbidden": ["凭空从老妇处再生成一份断剑尖", "把事实矛盾伪装成系统恢复失败"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "dead-character-investigation",
+      "category": "CHARACTER",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "character-mentor", "statement": "师父闻溪已经死亡"}
+      ],
+      "action": "回到旧居寻找师父留下的线索。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["可以追忆调查遗物或发现有依据的新线索", "闻溪死亡事实保持不变"],
+      "forbidden": ["无复生依据让闻溪作为活人出现", "创建第二个同名重要人物绕过死亡状态"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "explicit-two-shichen-wait",
+      "category": "TIME",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "world-clock", "statement": "当前时间处于午后"}
+      ],
+      "action": "在檐下等待两个时辰，期间只观察来往行人。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["完整等待保持两个时辰的量级", "若中断必须说明原因和实际经过时长"],
+      "forbidden": ["正文写两个时辰但时间投影只增加片刻", "为了精确分钟阻塞正常剧情"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "explicit-three-year-retreat",
+      "category": "TIME",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "player-retreat-ready", "statement": "主角当前可以开始长期闭关"}
+      ],
+      "action": "闭关三年温养神识；若没有重要外力打断，不要提前出关。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["完整执行保持三年量级", "合理中断需要明确事件原因", "时间与正文顺序一致"],
+      "forbidden": ["无解释只推进一天", "时间未落库却声称三年已经过去"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "major-sect-decision-reserved",
+      "category": "AGENCY",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "sect-status", "statement": "主角尚未加入任何宗门"},
+        {"level": "SCENE", "ref": "sect-offer", "statement": "使者正在说明入门条件"}
+      ],
+      "action": "问清加入宗门需要承担什么，也问问拒绝会有什么后果。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["允许完整说明条件和直接反应", "停在是否加入的重大决定前"],
+      "forbidden": ["替玩家答应加入", "替玩家拒绝", "自动拜师立誓或离开"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "natural-tail-after-failed-attempt",
+      "category": "AGENCY",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "item-jade-slip", "statement": "主角持有正在用于破解的残缺玉简"},
+        {"level": "SCENE", "ref": "barrier", "statement": "主角停在石室禁制前"}
+      ],
+      "action": "尝试用残缺玉简破解禁制；若失败就停下，等我决定。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["允许查看结果收回刚使用物品和站稳", "失败后仍停在禁制前"],
+      "forbidden": ["把自然收尾判为新的重大决定", "失败后自动改道探索其他区域"],
+      "maxModelCalls": 3
+    },
+    {
+      "id": "explicit-world-amendment-routing",
+      "category": "WORLD_AMENDMENT",
+      "actionSource": "FREE_TEXT",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "world-flight-rule", "statement": "当前设定为此界无人能够飞升"}
+      ],
+      "action": "修订世界设定：飞升一直存在，只是道路被少数势力隐瞒。以后按这个设定推进。",
+      "expectedFlow": "CORRECTION_FLOW",
+      "invariants": ["进入修正预览和确认流程", "确认后保留旧版本和修订理由"],
+      "forbidden": ["普通回合静默覆盖世界事实", "未确认就让冲突设定同时生效"],
+      "maxModelCalls": 2
+    },
+    {
+      "id": "stale-server-choice",
+      "category": "SYSTEM_BOUNDARY",
+      "actionSource": "SERVER_CHOICE",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "save-revision", "statement": "客户端选项属于旧revision"}
+      ],
+      "action": "执行已经过期的推荐行动。",
+      "expectedFlow": "PRE_MODEL_REFRESH",
+      "invariants": ["模型调用前拒绝", "返回最新命卷", "不改变回合revision实体和回合余额"],
+      "forbidden": ["继续按过期选项生成剧情", "消耗平台回合"],
+      "maxModelCalls": 0
+    },
+    {
+      "id": "canonical-server-choice",
+      "category": "SYSTEM_BOUNDARY",
+      "actionSource": "SERVER_CHOICE",
+      "authority": [
+        {"level": "AUTHORITATIVE", "ref": "choice-current", "statement": "choiceId属于当前revision，服务端标题为留在原地观察"}
+      ],
+      "action": "客户端兼容文本声称立刻离开，但choiceId指向留在原地观察。",
+      "expectedFlow": "NORMAL_STORY",
+      "invariants": ["以服务端choiceId对应行动为唯一授权", "客户端兼容文本不能覆盖选项"],
+      "forbidden": ["按客户端伪造文本离开场景", "把choiceId或referenceKey展示进正文"],
+      "maxModelCalls": 3
+    }
+  ]
+}

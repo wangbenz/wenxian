@@ -1,0 +1,326 @@
+{
+  "caseId": "C08_conditional_retreat_bound",
+  "sourceEvidence": {
+    "kind": "GENERALIZED_FROM_OBSERVED_SUBMITTED_ACTION",
+    "sourceSample": "S020/31",
+    "historicalInputMode": "UNKNOWN",
+    "simulationInputMode": "TEXT_NO_CHOICE_ID",
+    "prestateConfidence": "RECONSTRUCTED_FROM_NEIGHBOR_TURNS",
+    "transformations": "人物、地方、书物名称改写；旧分钟改用语义时钟；旧凡境映射当前 L1，精确前态为重构而非迁移。",
+    "notHistoricalReplay": true,
+    "variant": "official progression binding corrected before comparative rerun; intent and facts unchanged"
+  },
+  "initialState": {
+    "schemaVersion": 2,
+    "saveId": "reviewed-C08_conditional_retreat",
+    "turnNumber": 30,
+    "status": "ACTIVE",
+    "worldTime": {
+      "year": 1,
+      "day": 10,
+      "phase": "MORNING"
+    },
+    "coreState": {
+      "currentLocationRef": "region:xuanxu:qingqi",
+      "currentLocationName": "青岐州瘴林边缘",
+      "condition": "炼气中期，已学毒术且对常见毒物有经验，尚未受伤，对本蜂群抵抗能力未知",
+      "lifeGoal": "探索并积累修行本领"
+    },
+    "trustedProjection": {
+      "creationContract": {
+        "worldBinding": {
+          "packageId": "XUANXU",
+          "revision": 2,
+          "nameSnapshot": "玄墟界",
+          "premiseSnapshot": "仙路真假难辨，众生在未知中求取自己的道路。",
+          "openingRegionRef": "region:xuanxu:qingqi"
+        },
+        "identity": {
+          "protagonistName": "行舟",
+          "genderCode": "MALE",
+          "raceId": "race:xuanxu:human",
+          "raceNameSnapshot": "人族"
+        },
+        "origin": {
+          "summary": "出身青岐州的修行者，正凭自己的选择寻找修行道路。",
+          "establishedFacts": [],
+          "openHooks": [],
+          "startingEntityRefs": []
+        },
+        "opening": {
+          "locationRef": "region:xuanxu:qingqi",
+          "situation": "出身青岐州的修行者，正凭自己的选择寻找修行道路。"
+        },
+        "realmBinding": {
+          "scaleId": "realm-scale:xuanxu",
+          "scaleRevision": 1,
+          "startingRankKey": "L1",
+          "startingPhase": "EARLY"
+        }
+      },
+      "playPreference": {
+        "focus": [
+          "EXPLORATION",
+          "RELATIONSHIP"
+        ],
+        "combatFrequency": "BALANCED",
+        "pace": "BALANCED",
+        "guidance": "LIGHT",
+        "additionalNote": "",
+        "updatedAt": "2026-09-06T00:00:00Z"
+      },
+      "cultivationSystem": {
+        "systemId": "realm-scale:xuanxu",
+        "schemaVersion": 1,
+        "name": "玄墟界公共境界",
+        "summary": "世界包固定的三族八境公共标尺。",
+        "race": "人族",
+        "recommendedStartStageId": "realm:xuanxu:human:l1",
+        "stages": [
+          {
+            "stageId": "realm:xuanxu:human:l1",
+            "order": 1,
+            "name": "炼气",
+            "description": "引气入体，建立最初的灵力循环。",
+            "aliases": [
+              "练气"
+            ],
+            "allowedNextStageIds": [
+              "realm:xuanxu:human:l2"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:human:l2",
+            "order": 2,
+            "name": "筑基",
+            "description": "稳固道基，使灵力运行脱离短暂吐纳。",
+            "aliases": [],
+            "allowedNextStageIds": [
+              "realm:xuanxu:human:l3"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:human:l3",
+            "order": 3,
+            "name": "金丹",
+            "description": "精气神凝为金丹，修行进入稳定内循环。",
+            "aliases": [],
+            "allowedNextStageIds": [
+              "realm:xuanxu:human:l4"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:human:l4",
+            "order": 4,
+            "name": "元婴",
+            "description": "金丹蜕变为元婴，神识与生命形态进一步稳固。",
+            "aliases": [],
+            "allowedNextStageIds": [
+              "realm:xuanxu:human:l5"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:human:l5",
+            "order": 5,
+            "name": "化神",
+            "description": "元婴与神识相融，能够更直接感应天地法理。",
+            "aliases": [],
+            "allowedNextStageIds": [
+              "realm:xuanxu:human:l6"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:human:l6",
+            "order": 6,
+            "name": "炼虚",
+            "description": "以自身之道触及虚空与天地灵机的深层联系。",
+            "aliases": [],
+            "allowedNextStageIds": [
+              "realm:xuanxu:human:l7"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:human:l7",
+            "order": 7,
+            "name": "合体",
+            "description": "形神与自身之道高度统一。",
+            "aliases": [],
+            "allowedNextStageIds": [
+              "realm:xuanxu:human:l8"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:human:l8",
+            "order": 8,
+            "name": "大乘",
+            "description": "此界人族修行道路的圆熟顶点。",
+            "aliases": [],
+            "allowedNextStageIds": []
+          }
+        ],
+        "confirmation": {
+          "source": "WORLD_PACKAGE_FIXED",
+          "confirmedAt": "2026-09-06T00:00:00Z"
+        }
+      },
+      "protagonistCultivation": {
+        "systemId": "realm-scale:xuanxu",
+        "currentStageId": "realm:xuanxu:human:l1",
+        "phase": "MIDDLE",
+        "progressMarks": 0,
+        "requiredProgressMarks": 2,
+        "progressNote": "炼气中期，已学毒术，尚未受伤"
+      },
+      "worldFacts": [],
+      "knowledge": []
+    },
+    "scene": {
+      "title": "当前处境",
+      "narrative": "五人临时队伍已进入瘴林边缘，蜂群刚发动攻击。同行四人分别擅长辨毒、重剑防御、采毒材和辨路。行舟曾展示普通驱毒手法，但隐蔽毒纹能力从未向这些同伴公开。林间来路尚可辨认，蜂群实力和退路安全未明。",
+      "situation": "五人临时队伍已进入瘴林边缘，蜂群刚发动攻击。同行四人分别擅长辨毒、重剑防御、采毒材和辨路。行舟曾展示普通驱毒手法，但隐蔽毒纹能力从未向这些同伴公开。林间来路尚可辨认，蜂群实力和退路安全未明。",
+      "pendingDecision": null,
+      "choices": []
+    }
+  },
+  "initialSummary": "五人临时队伍已进入瘴林边缘，蜂群刚发动攻击。同行四人分别擅长辨毒、重剑防御、采毒材和辨路。行舟曾展示普通驱毒手法，但隐蔽毒纹能力从未向这些同伴公开。林间来路尚可辨认，蜂群实力和退路安全未明。",
+  "entities": [
+    {
+      "id": "entity:case:a",
+      "type": "CHARACTER",
+      "name": "陈识草",
+      "status": "有明确近况",
+      "visible": true,
+      "summary": "临时同伴，辨毒，炼气中期",
+      "attributes": {
+        "lastKnownLocation": "青岐州瘴林边缘",
+        "identity": "临时同伴，辨毒，炼气中期",
+        "_trusted": {
+          "lifecycle": "ACTIVE",
+          "relationship": {
+            "label": "相识",
+            "changeReason": "模拟前态已确认关系"
+          }
+        }
+      },
+      "firstTurn": 0,
+      "lastChangedTurn": 1
+    },
+    {
+      "id": "entity:case:b",
+      "type": "CHARACTER",
+      "name": "杜重剑",
+      "status": "有明确近况",
+      "visible": true,
+      "summary": "临时同伴，持重剑警戒，炼气后期",
+      "attributes": {
+        "lastKnownLocation": "青岐州瘴林边缘",
+        "identity": "临时同伴，持重剑警戒，炼气后期",
+        "_trusted": {
+          "lifecycle": "ACTIVE",
+          "relationship": {
+            "label": "相识",
+            "changeReason": "模拟前态已确认关系"
+          }
+        }
+      },
+      "firstTurn": 0,
+      "lastChangedTurn": 1
+    },
+    {
+      "id": "entity:case:c",
+      "type": "CHARACTER",
+      "name": "方采药",
+      "status": "有明确近况",
+      "visible": true,
+      "summary": "临时同伴，采毒材，炼气中期",
+      "attributes": {
+        "lastKnownLocation": "青岐州瘴林边缘",
+        "identity": "临时同伴，采毒材，炼气中期",
+        "_trusted": {
+          "lifecycle": "ACTIVE",
+          "relationship": {
+            "label": "相识",
+            "changeReason": "模拟前态已确认关系"
+          }
+        }
+      },
+      "firstTurn": 0,
+      "lastChangedTurn": 1
+    },
+    {
+      "id": "entity:case:d",
+      "type": "CHARACTER",
+      "name": "梁引路",
+      "status": "有明确近况",
+      "visible": true,
+      "summary": "临时同伴，认识路径，炼气中期",
+      "attributes": {
+        "lastKnownLocation": "青岐州瘴林边缘",
+        "identity": "临时同伴，认识路径，炼气中期",
+        "_trusted": {
+          "lifecycle": "ACTIVE",
+          "relationship": {
+            "label": "相识",
+            "changeReason": "模拟前态已确认关系"
+          }
+        }
+      },
+      "firstTurn": 0,
+      "lastChangedTurn": 1
+    },
+    {
+      "id": "entity:case:public",
+      "type": "ABILITY",
+      "name": "基础驱毒法",
+      "status": "已知",
+      "visible": true,
+      "summary": "已经向同伴展示的基础毒术",
+      "attributes": {
+        "_trusted": {
+          "abilityState": "KNOWN"
+        }
+      },
+      "firstTurn": 0,
+      "lastChangedTurn": 1
+    },
+    {
+      "id": "entity:case:secret",
+      "type": "ABILITY",
+      "name": "隐蔽毒纹",
+      "status": "已知",
+      "visible": true,
+      "summary": "已掌握且从未向临时同伴公开的底牌",
+      "attributes": {
+        "_trusted": {
+          "abilityState": "KNOWN"
+        }
+      },
+      "firstTurn": 0,
+      "lastChangedTurn": 1
+    }
+  ],
+  "memories": [
+    {
+      "id": "memory:case:prior",
+      "memoryType": "KEY_EVENT",
+      "title": "已确认前情",
+      "summary": "五人临时队伍已进入瘴林边缘，蜂群刚发动攻击。同行四人分别擅长辨毒、重剑防御、采毒材和辨路。行舟曾展示普通驱毒手法，但隐蔽毒纹能力从未向这些同伴公开。林间来路尚可辨认，蜂群实力和退路安全未明。",
+      "occurredTurn": 30,
+      "worldTime": 64,
+      "importance": "KEY"
+    }
+  ],
+  "history": [
+    {
+      "turnNumber": 30,
+      "playerAction": "完成此前已记录的行动。",
+      "narrative": "五人临时队伍已进入瘴林边缘，蜂群刚发动攻击。同行四人分别擅长辨毒、重剑防御、采毒材和辨路。行舟曾展示普通驱毒手法，但隐蔽毒纹能力从未向这些同伴公开。林间来路尚可辨认，蜂群实力和退路安全未明。",
+      "choices": [],
+      "statePatch": {},
+      "worldTimeBefore": 64,
+      "worldTimeAfter": 64
+    }
+  ],
+  "action": "绝不暴露我的底牌，先冷眼观察。一旦这几人抵挡不住蜂群，我就立即寻找机会撤走。",
+  "choiceId": null
+}

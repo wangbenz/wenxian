@@ -1,0 +1,74 @@
+.point-rules-page { display: grid; gap: 16px; }
+
+.point-rules-intro { align-items: flex-start; background: #fff; border-left: 4px solid #4e9b7d; border-radius: 8px; box-shadow: 0 4px 18px rgba(25, 37, 55, .05); display: flex; justify-content: space-between; padding: 24px 28px; }
+.point-rules-intro > div:first-child { max-width: 780px; }
+.point-rules-intro > div:first-child > span { color: #3f8269; font-size: 11px; font-weight: 800; letter-spacing: .16em; }
+.point-rules-intro .ant-typography { margin-bottom: 0; }
+.point-rules-intro h2.ant-typography { margin: 6px 0; }
+
+.point-rules-compatibility { border-color: #eed8ac; }
+.point-rules-metrics { display: grid; gap: 1px; grid-template-columns: repeat(5, minmax(0, 1fr)); overflow: hidden; border: 1px solid #e7ebf1; border-radius: 8px; background: #e7ebf1; }
+.point-rules-metrics > div { background: #fff; display: grid; gap: 4px; padding: 18px 20px; }
+.point-rules-metrics span { color: #687385; font-size: 12px; }
+.point-rules-metrics strong { color: #18202d; font-size: 25px; line-height: 1.1; }
+.point-rules-metrics small { color: #929baa; }
+
+.point-rules-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, .9fr) minmax(480px, 1.1fr); }
+.point-rules-grid > .ant-card, .point-tier-prices { box-shadow: 0 4px 18px rgba(25, 37, 55, .045); }
+.point-opening-rule .ant-card-body { display: grid; gap: 18px; }
+.point-opening-rule label { display: grid; gap: 8px; }
+.point-opening-rule .ant-input-number { max-width: 280px; width: 100%; }
+.point-rule-actions { border-top: 1px solid #edf0f4; display: flex; gap: 8px; justify-content: flex-end; padding-top: 18px; }
+
+.point-settlement-flow { align-items: stretch; display: grid; gap: 10px; grid-template-columns: 1fr auto 1fr auto 1fr; }
+.point-settlement-flow > div { background: #f6f8fb; border: 1px solid #e7ebf1; border-radius: 8px; display: grid; gap: 6px; padding: 14px; }
+.point-settlement-flow > svg { align-self: center; color: #9aa3b0; }
+.point-settlement-flow > div > span { align-items: center; background: #e7edff; border-radius: 999px; color: #315ec4; display: flex; font-size: 11px; font-weight: 800; height: 24px; justify-content: center; width: 24px; }
+.point-settlement-flow small { color: #7b8594; line-height: 1.55; }
+.point-policy-descriptions { margin-top: 20px; }
+.point-policy-seal { align-items: center; background: #f0f7f4; border: 1px solid #d7e9e1; border-radius: 8px; color: #377861; display: flex; gap: 10px; margin-top: 18px; padding: 12px 14px; }
+.point-policy-seal span { display: grid; }
+.point-policy-seal small { color: #68877b; }
+
+.point-tier-heading { align-items: center; display: flex; gap: 10px; margin-bottom: 14px; }
+.point-tier-grid { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.point-tier-card { background: #f8f9fb; border: 1px solid #e5e9ef; border-radius: 8px; display: grid; gap: 9px; min-width: 0; padding: 18px; }
+.point-tier-card > div { align-items: center; display: flex; justify-content: space-between; }
+.point-tier-card > div > span { color: #7c8796; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
+.point-tier-card > strong { font-size: 18px; }
+.point-tier-card > b { color: #2858bc; font-size: 28px; }
+.point-tier-card > b small { color: #6d7786; font-size: 12px; font-weight: 500; }
+.point-tier-card p { color: #6f7987; line-height: 1.55; margin: 0; min-height: 44px; }
+.point-tier-card footer { border-top: 1px solid #e5e9ef; display: grid; gap: 4px; padding-top: 10px; }
+.point-tier-card footer span { color: #8b94a2; font-size: 11px; }
+.point-tier-card code { color: #445064; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.point-tier-light { border-top: 3px solid #4e9b7d; }
+.point-tier-balanced { border-top: 3px solid #4a6fe2; }
+.point-tier-deep { border-top: 3px solid #805bc6; }
+
+@media (max-width: 1180px) {
+  .point-rules-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .point-rules-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .point-rules-intro { display: grid; gap: 18px; padding: 20px; }
+  .point-rules-intro > .ant-space { width: 100%; }
+  .point-rules-intro > .ant-space .ant-btn { flex: 1; }
+  .point-rules-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .point-rules-metrics > div { padding: 14px; }
+  .point-rules-metrics > div:first-child { grid-column: span 2; }
+  .point-settlement-flow { grid-template-columns: 1fr; }
+  .point-settlement-flow > svg { justify-self: center; transform: rotate(90deg); }
+  .point-policy-descriptions table { table-layout: fixed; width: 100%; }
+  .point-policy-descriptions .ant-descriptions-item,
+  .point-policy-descriptions .ant-descriptions-item-container,
+  .point-policy-descriptions .ant-descriptions-item-content { min-width: 0; white-space: normal; }
+  .point-policy-descriptions .ant-descriptions-item-container { align-items: start; display: grid; gap: 8px; grid-template-columns: 84px minmax(0, 1fr); }
+  .point-tier-grid { grid-template-columns: 1fr; }
+  .point-rule-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .point-rule-confirm .ant-descriptions-view { overflow: hidden; }
+  .point-rule-confirm .ant-descriptions table { table-layout: fixed; width: 100%; }
+  .point-rule-confirm .ant-descriptions-item-label { width: 96px; }
+  .point-rule-confirm .ant-descriptions-item-content { overflow-wrap: anywhere; white-space: normal; }
+}

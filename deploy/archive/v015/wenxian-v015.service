@@ -1,0 +1,25 @@
+[Unit]
+Description=Wenxian V0.15 Isolated Test Backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wenxian
+Group=wenxian
+WorkingDirectory=/opt/wenxian-v015/current
+ExecStart=/usr/bin/java -Xms128m -Xmx640m -jar /opt/wenxian-v015/current/wenxian-game-backend.jar --server.address=127.0.0.1 --server.port=18181 --spring.config.additional-location=optional:file:/opt/wenxian-test/application-secret.yml
+Restart=on-failure
+RestartSec=5
+SuccessExitStatus=143
+
+# V0.15 灰度服务只共享 RDS 和密钥配置，不改动线上 V0.14 的版本开关。
+Environment=LANG=C.UTF-8
+Environment=SPRING_SQL_INIT_MODE=never
+Environment=GAME_DATABASE_MAX_POOL_SIZE=10
+Environment=WENXIAN_GAME_VERSION_OVERRIDE=V0.15
+Environment=WENXIAN_SECURE_COOKIE=false
+Environment=WENXIAN_CORS_ALLOWED_ORIGIN_PATTERNS=http://116.198.232.119:25173
+
+[Install]
+WantedBy=multi-user.target

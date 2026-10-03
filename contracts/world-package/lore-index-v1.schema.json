@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["files"],
+  "properties": {
+    "files": {
+      "type": "array", "maxItems": 200, "uniqueItems": true,
+      "items": {"$ref": "./common-v1.schema.json#/$defs/jsonPath"}
+    }
+  }
+}

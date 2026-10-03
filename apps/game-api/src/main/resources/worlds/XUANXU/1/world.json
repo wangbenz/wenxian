@@ -1,0 +1,74 @@
+{
+  "packageId": "XUANXU",
+  "revision": 1,
+  "name": "玄墟界",
+  "premise": "仙路真假难辨，宗门、世族、妖庭与散修仍为长生争夺资源。",
+  "coreRules": [
+    "修行传承通常依附宗门、家族、师承或危险机缘，公开知识并不完整。",
+    "境界带来身份与机会差异，但不直接决定一次行动必然成功。",
+    "人、妖、灵可以修行，族群身份会影响社会关系而不是锁死立场。"
+  ],
+  "races": [
+    {
+      "raceId": "race:xuanxu:human",
+      "name": "人族",
+      "description": "城邦、宗门与世族中的主要族群，传承选择广，但常受出身和门第牵制。",
+      "identityFacts": ["属于人族，寿元与体魄起点遵循玄墟界常见人族边界。"],
+      "socialHooks": ["宗门和世族通常先询问师承、籍贯与家世。"],
+      "opportunityTags": ["sect", "clan", "city"]
+    },
+    {
+      "raceId": "race:xuanxu:demon",
+      "name": "妖族",
+      "description": "由血脉、族地与化形经历共同塑造身份，可能游离于人族秩序之外。",
+      "identityFacts": ["属于妖族，具体本相与血脉能力必须由创角根源确认。"],
+      "socialHooks": ["不同宗门、妖庭与凡人聚落对妖族的信任程度不同。"],
+      "opportunityTags": ["bloodline", "wilderness", "demon-court"]
+    },
+    {
+      "raceId": "race:xuanxu:spirit",
+      "name": "灵族",
+      "description": "由器物、草木、山川或灵气生出灵智，来历本身往往就是修行线索。",
+      "identityFacts": ["属于灵族，本体来源和已具备的能力必须由创角根源确认。"],
+      "socialHooks": ["修士可能把灵族视为同道、异类或可争夺的机缘。"],
+      "opportunityTags": ["artifact", "spirit-land", "awakening"]
+    }
+  ],
+  "regions": [
+    {
+      "regionId": "region:xuanxu:qingqi",
+      "name": "东陆青岐州",
+      "description": "宗门山门、凡人城镇与荒野遗迹交错，适合作为多数身份的开场区域。",
+      "openingEligible": true,
+      "tags": ["sect", "city", "ruins"]
+    },
+    {
+      "regionId": "region:xuanxu:cangling",
+      "name": "苍岭妖境",
+      "description": "妖族部落与山野灵地相连，人族秩序只能触及边缘。",
+      "openingEligible": true,
+      "tags": ["wilderness", "demon-court", "spirit-land"]
+    }
+  ],
+  "loreEntries": [
+    {
+      "loreId": "lore:xuanxu:inheritance",
+      "tags": ["cultivation", "sect", "inheritance"],
+      "content": "玄墟界的完整修行法通常由组织或师承控制，散修更多依靠残篇、交易与探索补全道路。",
+      "priority": 80,
+      "relatedRefs": ["region:xuanxu:qingqi"]
+    },
+    {
+      "loreId": "lore:xuanxu:plural-orders",
+      "tags": ["society", "race"],
+      "content": "宗门、世族与妖庭各有秩序，没有一方能够替整个世界决定所有族群的立场。",
+      "priority": 60,
+      "relatedRefs": ["race:xuanxu:human", "race:xuanxu:demon"]
+    }
+  ],
+  "narrativeGuidance": "古典宗门修仙，强调选择、机缘与代价；未知内容通过经历揭示，不预设唯一正道。",
+  "contentBoundaries": [
+    "不能把境界差距直接写成玩家行动必然失败。",
+    "不能因为种族身份自动指定玩家阵营或道德立场。"
+  ]
+}

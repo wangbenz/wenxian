@@ -1,0 +1,37 @@
+/* Extending Tailwind's preflight reset: layout, rendering, scroll behaviour, etc. */
+
+@layer base {
+  html {
+    font-size: 16px;
+    word-spacing: 1px;
+    -ms-text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-font-smoothing: antialiased;
+    box-sizing: border-box;
+    scrollbar-gutter: stable;
+  }
+
+  body, html {
+    overflow-x: hidden;
+  }
+
+  *,
+  *:before,
+  *:after {
+    box-sizing: border-box;
+    margin: 0;
+  }
+}
+
+/* Page transitions (fade-in/out), confiured in nuxt.config.ts */
+.fade-enter-active,
+.fade-leave-active {
+  transition: all 300ms ease;
+}
+
+.fade-enter,
+.fade-leave-to {
+  opacity: 0;
+}
+.brand-block{display:flex;flex-direction:column;align-items:center;padding:24px;color:#205d63}.brand-block strong{font-family:"Songti SC",serif;font-size:38px;line-height:1.25}.brand-block span{font-family:serif;letter-spacing:.3em;font-size:10px;margin-top:4px}.trial-note{margin:0 0 22px;font-size:12px;line-height:1.8;color:#637b7d}.main-content{overflow-wrap:anywhere}.main-content a{color:#205d63}.main-content h1{margin-bottom:20px}.main-content table{border-top-width:1px;border-bottom-width:1px}.main-content td,.main-content th{padding:16px 10px}.form-input::placeholder{color:#637b7d}.form-select{max-width:100%;min-width:6rem}.markdown table{display:block;overflow-x:auto}.markdown pre{overflow-x:auto}.main-content h2{font-size:1.35rem;border-bottom-width:1px} @media(max-width:640px){.main-content td,.main-content th{padding:12px 6px}.main-content h1{font-size:28px}.trial-note{font-size:11px}}

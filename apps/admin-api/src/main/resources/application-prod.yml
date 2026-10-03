@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: ${ADMIN_DATABASE_URL}
+    username: ${ADMIN_DATABASE_USERNAME}
+    password: ${ADMIN_DATABASE_PASSWORD}
+  sql:
+    init:
+      mode: never
+
+wenxian:
+  ai-config-master-key: ${WENXIAN_AI_CONFIG_MASTER_KEY}
+  game-service:
+    base-url: ${WENXIAN_GAME_SERVICE_BASE_URL}

@@ -1,0 +1,37 @@
+server:
+  port: ${ADMIN_PORT:18081}
+
+spring:
+  application:
+    name: wenxian-admin-backend
+  config:
+    # 仅用于从 apps/admin-api 目录本地启动；服务器继续使用外置配置或环境变量。
+    import: optional:file:../game-api/src/main/resources/application-secret.yml
+  datasource:
+    url: ${ADMIN_DATABASE_URL:jdbc:mysql://127.0.0.1:3306/wenxian?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${ADMIN_DATABASE_USERNAME:wenxian_app}
+    password: ${ADMIN_DATABASE_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      connection-timeout: 10000
+      maximum-pool-size: 10
+      minimum-idle: 2
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+
+wenxian:
+  ai-config-master-key: ${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}
+  turn-credit:
+    enabled: ${WENXIAN_TURN_CREDIT_ENABLED:false}
+  admin:
+    initial-username: ${ADMIN_INITIAL_USERNAME:}
+    initial-password: ${ADMIN_INITIAL_PASSWORD:}
+  game-service:
+    base-url: ${WENXIAN_GAME_SERVICE_BASE_URL:http://127.0.0.1:18080}
+    migration-admin-token: ${WENXIAN_MIGRATION_ADMIN_TOKEN:}
+    model-validation-token: ${WENXIAN_MODEL_VALIDATION_TOKEN:}
+
+deepseek:
+  api-key: ${DEEPSEEK_API_KEY:}

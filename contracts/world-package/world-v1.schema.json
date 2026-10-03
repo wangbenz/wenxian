@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["premise", "coreRules", "contentBoundaries", "races", "regions", "narrativeProfile"],
+  "properties": {
+    "premise": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "coreRules": {
+      "type": "array", "minItems": 1, "maxItems": 32,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["ruleId", "text", "priority"],
+        "properties": {
+          "ruleId": {"$ref": "./common-v1.schema.json#/$defs/stableId"},
+          "text": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "priority": {"type": "integer", "minimum": 0, "maximum": 1000}
+        }
+      }
+    },
+    "contentBoundaries": {
+      "type": "array", "maxItems": 32,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["boundaryId", "text"],
+        "properties": {
+          "boundaryId": {"$ref": "./common-v1.schema.json#/$defs/stableId"},
+          "text": {"type": "string", "minLength": 1, "maxLength": 1000}
+        }
+      }
+    },
+    "races": {
+      "type": "array", "minItems": 1, "maxItems": 20,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": [
+          "raceId", "name", "description", "identityFacts", "socialHooks",
+          "opportunityTags", "primaryProgressionTrackRef"
+        ],
+        "properties": {
+          "raceId": {"$ref": "./common-v1.schema.json#/$defs/stableId"},
+          "name": {"type": "string", "minLength": 1, "maxLength": 80},
+          "description": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "identityFacts": {
+            "type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1, "maxLength": 500}
+          },
+          "socialHooks": {
+            "type": "array", "maxItems": 16, "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1, "maxLength": 500}
+          },
+          "opportunityTags": {
+            "type": "array", "maxItems": 32, "uniqueItems": true,
+            "items": {"$ref": "./common-v1.schema.json#/$defs/tag"}
+          },
+          "primaryProgressionTrackRef": {"$ref": "./common-v1.schema.json#/$defs/stableId"}
+        }
+      }
+    },
+    "regions": {
+      "type": "array", "minItems": 1, "maxItems": 100,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["regionId", "name", "description", "tags"],
+        "properties": {
+          "regionId": {"$ref": "./common-v1.schema.json#/$defs/stableId"},
+          "name": {"type": "string", "minLength": 1, "maxLength": 100},
+          "description": {"type": "string", "minLength": 1, "maxLength": 1500},
+          "tags": {
+            "type": "array", "maxItems": 32, "uniqueItems": true,
+            "items": {"$ref": "./common-v1.schema.json#/$defs/tag"}
+          }
+        }
+      }
+    },
+    "narrativeProfile": {
+      "type": "object", "additionalProperties": false,
+      "required": ["guidance", "tone", "conflictThemes", "openSpace"],
+      "properties": {
+        "guidance": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "tone": {
+          "type": "array", "minItems": 1, "maxItems": 12, "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 120}
+        },
+        "conflictThemes": {
+          "type": "array", "maxItems": 20, "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 120}
+        },
+        "openSpace": {"type": "string", "minLength": 1, "maxLength": 1000}
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "playableRaceRefs": ["race:dreamsea:islander", "race:dreamsea:tideborn"],
+  "openingRegionRefs": ["region:dreamsea:harbor"],
+  "defaultOpeningRegionRef": "region:dreamsea:harbor",
+  "requiredOriginFacts": [
+    {"identityRef": "race:dreamsea:tideborn", "factType": "IDENTITY", "semanticRole": "identity:tide-memory", "playerLabel": "潮汐记忆"}
+  ],
+  "routeThemes": [
+    {"themeId": "route:dreamsea:return", "summary": "寻找一段尚未兑现的归航承诺。", "loreRefs": ["lore:dreamsea:memory-tide"]}
+  ],
+  "scenarioSeeds": [
+    {"seedId": "seed:dreamsea:harbor", "eligibleRegionRefs": ["region:dreamsea:harbor"], "tags": ["arrival", "memory"], "summary": "一件不属于当前潮期的遗物被送到港口。"}
+  ]
+}

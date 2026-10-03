@@ -1,0 +1,37 @@
+{
+  "systems": [
+    {
+      "systemId": "progression:dreamsea:memory",
+      "revision": 1,
+      "kind": "LINEAR_TIERED",
+      "displayName": "记忆潮阶",
+      "completion": {"position": "TRACK_END", "unlocks": "player-confirmed-ending-v1"},
+      "steps": [
+        {"stepId": "step:dreamsea:forming", "order": 1, "name": "凝形"},
+        {"stepId": "step:dreamsea:stable", "order": 2, "name": "定潮"}
+      ],
+      "tracks": [
+        {
+          "trackId": "track:dreamsea:islander",
+          "identityRefs": ["race:dreamsea:islander"],
+          "start": {"stageRef": "stage:dreamsea:islander:listener", "stepRef": "step:dreamsea:forming"},
+          "stages": [
+            {"stageId": "stage:dreamsea:islander:listener", "order": 1, "comparisonTier": 1, "name": "听潮", "description": "辨认潮汐中的残留记忆。", "capabilityBoundary": "只能识别近岸和熟悉记忆。", "aliases": []},
+            {"stageId": "stage:dreamsea:islander:keeper", "order": 2, "comparisonTier": 2, "name": "守梦", "description": "保存并重述完整梦境。", "capabilityBoundary": "能够保护一段记忆不被普通潮汐冲散。", "aliases": []},
+            {"stageId": "stage:dreamsea:islander:beacon", "order": 3, "comparisonTier": 3, "name": "灯塔", "description": "以自身记忆为他人标定归航方向。", "capabilityBoundary": "可以稳定一条航路但不能替他人决定归处。", "aliases": []}
+          ]
+        },
+        {
+          "trackId": "track:dreamsea:tideborn",
+          "identityRefs": ["race:dreamsea:tideborn"],
+          "start": {"stageRef": "stage:dreamsea:tideborn:ripple", "stepRef": "step:dreamsea:forming"},
+          "stages": [
+            {"stageId": "stage:dreamsea:tideborn:ripple", "order": 1, "comparisonTier": 1, "name": "微澜", "description": "在一段记忆中维持自我。", "capabilityBoundary": "只能短暂离开苏醒的潮水。", "aliases": []},
+            {"stageId": "stage:dreamsea:tideborn:current", "order": 2, "comparisonTier": 2, "name": "长流", "description": "让自我跨越多个潮期。", "capabilityBoundary": "可以携带一段记忆远行但仍受退潮影响。", "aliases": []},
+            {"stageId": "stage:dreamsea:tideborn:sea", "order": 3, "comparisonTier": 3, "name": "归海", "description": "在不失去自我的前提下连接梦海。", "capabilityBoundary": "可以影响一片潮区但不能吞没其他人的记忆。", "aliases": []}
+          ]
+        }
+      ]
+    }
+  ]
+}

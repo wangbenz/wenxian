@@ -1,0 +1,67 @@
+.operations-management-page { min-width: 0; display: grid; gap: 16px; }
+.operations-management-intro { min-width: 0; display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; padding: 24px 28px; background: #fff; border-left: 4px solid #356ae6; border-radius: 8px; box-shadow: 0 4px 18px rgba(25, 37, 55, .05); }
+.operations-management-intro > div { min-width: 0; max-width: 800px; }
+.operations-management-intro > div > span { color: #356ae6; font-size: 11px; font-weight: 800; letter-spacing: .16em; }
+.operations-management-intro h2.ant-typography { margin: 6px 0; }
+.operations-management-intro .ant-typography { margin-bottom: 0; }
+.operations-management-intro > .ant-tag { margin: 0; padding: 5px 10px; }
+.release-control-grid { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.release-control-grid > .ant-card, .operations-table-card.ant-card, .operations-management-page > .ant-card { min-width: 0; box-shadow: 0 4px 18px rgba(25, 37, 55, .045); }
+.release-version-control { min-width: 0; display: grid; gap: 10px; }
+.release-version-control > strong { color: #1f2937; font-size: 26px; overflow-wrap: anywhere; }
+.release-version-control .ant-typography { margin: 0; }
+.release-pinned-status { min-width: 0; min-height: 104px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; }
+.release-pinned-status > svg { color: #356ae6; }
+.release-pinned-status > div { min-width: 0; display: grid; gap: 5px; }
+.release-pinned-status .ant-typography { margin: 0; }
+.operations-table-card .ant-card-body { min-width: 0; }
+.operations-table-heading { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 14px; }
+.operations-table-heading > div:first-child { min-width: 0; display: grid; gap: 2px; }
+.operations-table-heading .ant-input-search { width: 290px; }
+.operations-table-heading .ant-select { width: 140px; }
+.operations-management-page .ant-pagination { margin: 18px 0 0; justify-content: flex-end; }
+.release-note-cell { max-width: 420px; display: grid; gap: 3px; }
+.release-note-cell > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.release-note-cell > span { display: -webkit-box; overflow: hidden; color: #7a8594; font-size: 11px; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.release-editor-drawer .ant-drawer-body { min-width: 0; padding-bottom: 84px; }
+.release-editor-actions { position: absolute; z-index: 2; right: 0; bottom: 0; left: 0; display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; background: #fff; border-top: 1px solid #e6eaf0; }
+.access-metrics { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.access-metrics > .ant-card { min-width: 0; }
+.access-metrics .ant-statistic-content { font-size: 24px; }
+.access-metrics .ant-statistic-content-prefix { color: #356ae6; }
+.access-rule-form { max-width: 760px; }
+.access-rule-form .ant-radio-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.access-rule-form .ant-radio-button-wrapper { text-align: center; }
+.access-resume-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.access-resume-fields .ant-picker { width: 100%; }
+.access-form-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+.access-add-form.ant-form { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(260px, 1.2fr) auto; gap: 10px; margin-bottom: 16px; }
+.access-add-form .ant-form-item { min-width: 0; margin: 0; }
+.access-add-form .ant-input { width: 100%; }
+
+@media (max-width: 900px) {
+  .release-control-grid { grid-template-columns: 1fr; }
+  .operations-table-heading { align-items: flex-start; }
+  .operations-table-heading > .ant-space { justify-content: flex-end; }
+  .access-add-form.ant-form { grid-template-columns: 1fr 1fr; }
+  .access-add-form .ant-form-item:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) {
+  .operations-management-intro { display: grid; gap: 16px; padding: 20px; }
+  .operations-management-intro > .ant-btn { width: 100%; }
+  .release-pinned-status { grid-template-columns: auto minmax(0, 1fr); }
+  .release-pinned-status > .ant-btn { grid-column: 2; justify-self: start; }
+  .operations-table-heading { display: grid; }
+  .operations-table-heading > .ant-space { display: grid; grid-template-columns: 1fr; }
+  .operations-table-heading .ant-input-search, .operations-table-heading .ant-select { width: 100%; }
+  .release-editor-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .release-editor-actions .ant-btn:last-child { grid-column: 1 / -1; }
+  .access-metrics { grid-template-columns: 1fr 1fr; }
+  .access-metrics .ant-card-body { padding: 14px; }
+  .access-metrics .ant-statistic-content { font-size: 19px; }
+  .access-resume-fields { grid-template-columns: 1fr; gap: 0; }
+  .access-add-form.ant-form { grid-template-columns: 1fr; }
+  .access-add-form .ant-form-item:last-child { grid-column: auto; }
+  .access-add-form .ant-btn { width: 100%; }
+  .operations-management-page .ant-pagination { justify-content: center; }
+}

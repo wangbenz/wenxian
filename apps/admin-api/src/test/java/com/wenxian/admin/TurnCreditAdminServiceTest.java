@@ -1,0 +1,249 @@
+package com.wenxian.admin;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class TurnCreditAdminServiceTest {
+    private EmbeddedDatabase database;
+    private JdbcTemplate jdbc;
+    private TurnCreditAdminService service;
+
+    @BeforeEach
+    void setUp() {
+        database = new EmbeddedDatabaseBuilder()
+                .setType(EmbeddedDatabaseType.H2)
+                .setName("turn-credit-admin-" + UUID.randomUUID())
+                .build();
+        jdbc = new JdbcTemplate(database);
+        jdbc.execute("""
+                create table app_user(
+                    id varchar(64) primary key,email varchar(255) not null,status varchar(32) not null,
+                    registered_at timestamp not null,last_login_at timestamp
+                )
+                """);
+        jdbc.execute("create table gameplay_config(config_key varchar(64) primary key,config_value varchar(255) not null,updated_at timestamp not null)");
+        jdbc.execute("create table user_daily_quota(user_id varchar(64),usage_date date,used_count integer not null,updated_at timestamp not null,primary key(user_id,usage_date))");
+        jdbc.execute("create table admin_operation_log(id varchar(80) primary key,operated_at timestamp not null,operation varchar(64) not null,detail clob not null,subject_user_id varchar(64))");
+        jdbc.execute("""
+                create table turn_credit_grant(
+                    id varchar(80) primary key,user_id varchar(64) not null,credit_class varchar(24) not null,
+                    grant_type varchar(32) not null,campaign_code varchar(64),source_reference varchar(160),
+                    idempotency_key varchar(180) not null unique,granted_count integer not null,
+                    available_count integer not null,reserved_count integer not null,consumed_count integer not null,
+                    expired_count integer not null,revoked_count integer not null,status varchar(24) not null,
+                    expires_at timestamp,reason varchar(240) not null,created_by varchar(64) not null,
+                    created_at timestamp not null,updated_at timestamp not null
+                )
+                """);
+        jdbc.execute("""
+                create table turn_credit_reservation(
+                    id varchar(80) primary key,user_id varchar(64) not null,save_id varchar(80) not null,
+                    request_id varchar(80) not null,grant_id varchar(80) not null,amount integer not null,
+                    status varchar(24) not null,expires_at timestamp not null,turn_id varchar(80),
+                    created_at timestamp not null,updated_at timestamp not null
+                )
+                """);
+        jdbc.execute("""
+                create table turn_credit_ledger(
+                    id varchar(80) primary key,user_id varchar(64) not null,grant_id varchar(80) not null,
+                    reservation_id varchar(80),event_type varchar(24) not null,event_key varchar(200) not null unique,
+                    available_delta integer not null,reserved_delta integer not null,consumed_delta integer not null,
+                    balance_after integer not null,business_reference varchar(160),operator_id varchar(64) not null,
+                    remark varchar(240) not null,created_at timestamp not null
+                )
+                """);
+        Instant now = Instant.now();
+        jdbc.update("insert into app_user values ('user-1','player@example.com','ACTIVE',?,?)",
+                Timestamp.from(now.minusSeconds(3600)), Timestamp.from(now));
+        jdbc.update("insert into app_user values ('user-disabled','disabled@example.com','DISABLED',?,?)",
+                Timestamp.from(now.minusSeconds(3600)), Timestamp.from(now));
+        jdbc.update("insert into gameplay_config values ('account_public_turn_limit','20',?)", Timestamp.from(now));
+        jdbc.update("insert into user_daily_quota values ('user-1',?,3,?)", Date.valueOf("2026-08-12"), Timestamp.from(now));
+        service = new TurnCreditAdminService(jdbc);
+    }
+
+    @AfterEach
+    void tearDown() {
+        database.shutdown();
+    }
+
+    @Test
+    void grantInitializesLegacyBalanceAndRemainsIdempotent() {
+        var request = new TurnCreditAdminService.GrantRequest(
+                "playtest-001", "PLAYTEST", 50, "V015_GRAY", "tester-1", null, "V0.15灰度测试");
+
+        Map<String, Object> first = service.grant("user-1", request, "admin-1");
+        Map<String, Object> second = service.grant("user-1", request, "admin-1");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> balance = (Map<String, Object>) first.get("balance");
+        assertEquals(70, balance.get("granted"));
+        assertEquals(67, balance.get("available"));
+        assertEquals(3, balance.get("consumed"));
+        assertEquals(first.get("grants"), second.get("grants"));
+        assertEquals(2, jdbc.queryForObject("select count(*) from turn_credit_grant", Integer.class));
+        assertEquals(2, jdbc.queryForObject("select count(*) from turn_credit_ledger", Integer.class));
+        assertEquals(1, jdbc.queryForObject("select count(*) from admin_operation_log", Integer.class));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> operation = (Map<String, Object>) first.get("operation");
+        assertEquals(50, operation.get("count"));
+        assertEquals(67, operation.get("balanceAfter"));
+        assertEquals(false, operation.get("idempotent"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> retriedOperation = (Map<String, Object>) second.get("operation");
+        assertEquals(true, retriedOperation.get("idempotent"));
+    }
+
+    @Test
+    void revokesOnlyUnusedSponsoredBalanceAndKeepsLedger() {
+        service.grant("user-1", new TurnCreditAdminService.GrantRequest(
+                "feedback-001", "FEEDBACK", 10, "", "WX-001", null, "有效问题反馈"), "admin-1");
+        String grantId = jdbc.queryForObject(
+                "select id from turn_credit_grant where grant_type='FEEDBACK'", String.class);
+
+        Map<String, Object> result = service.revoke("user-1", grantId, "奖励发放错误", "admin-1");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> balance = (Map<String, Object>) result.get("balance");
+        assertEquals(17, balance.get("available"));
+        assertEquals(10, balance.get("revoked"));
+        assertEquals("REVOKED", jdbc.queryForObject(
+                "select status from turn_credit_grant where id=?", String.class, grantId));
+        assertEquals(1, jdbc.queryForObject(
+                "select count(*) from turn_credit_ledger where event_type='REVOKE'", Integer.class));
+    }
+
+    @Test
+    void rejectsChangedPayloadWhenRetryingSameOperation() {
+        Instant expiresAt = Instant.now().plusSeconds(3600).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        service.grant("user-1", new TurnCreditAdminService.GrantRequest(
+                "same-operation", "PLAYTEST", 10, "V015_GRAY", "tester-1", expiresAt, "灰度测试"),
+                "admin-1");
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.grant("user-1", new TurnCreditAdminService.GrantRequest(
+                        "same-operation", "PLAYTEST", 10, "V015_GRAY", "tester-1",
+                        expiresAt.plusSeconds(3600), "灰度测试"), "admin-1"));
+
+        assertEquals(409, error.getStatusCode().value());
+        assertEquals(2, jdbc.queryForObject("select count(*) from turn_credit_grant", Integer.class));
+    }
+
+    @Test
+    void rejectsRevokeWhileGrantHasReservation() {
+        service.grant("user-1", new TurnCreditAdminService.GrantRequest(
+                "activity-001", "ACTIVITY", 5, "", "", null, "活动奖励"), "admin-1");
+        String grantId = jdbc.queryForObject(
+                "select id from turn_credit_grant where grant_type='ACTIVITY'", String.class);
+        jdbc.update("update turn_credit_grant set available_count=4,reserved_count=1 where id=?", grantId);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.revoke("user-1", grantId, "撤销", "admin-1"));
+
+        assertEquals(409, error.getStatusCode().value());
+        assertTrue(error.getReason().contains("预占"));
+    }
+
+    @Test
+    void searchesAccountsWithoutCreatingCredits() {
+        Map<String, Object> result = service.accounts("player@", 0, 20);
+
+        assertEquals(1L, result.get("total"));
+        @SuppressWarnings("unchecked")
+        var rows = (java.util.List<Map<String, Object>>) result.get("rows");
+        assertEquals("player@example.com", rows.getFirst().get("email"));
+        assertEquals(false, rows.getFirst().get("ledgerInitialized"));
+        assertEquals(20, rows.getFirst().get("granted"));
+        assertEquals(17, rows.getFirst().get("available"));
+        assertEquals(3, rows.getFirst().get("consumed"));
+        assertEquals(0, jdbc.queryForObject("select count(*) from turn_credit_grant", Integer.class));
+    }
+
+    @Test
+    void rejectsGrantForDisabledAccount() {
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.grant("user-disabled", new TurnCreditAdminService.GrantRequest(
+                        "disabled-001", "ADMIN", 10, "", "", null, "人工赠送"), "admin-1"));
+
+        assertEquals(409, error.getStatusCode().value());
+        assertTrue(error.getReason().contains("不可用"));
+        assertEquals(0, jdbc.queryForObject(
+                "select count(*) from turn_credit_grant where user_id='user-disabled'", Integer.class));
+    }
+
+    @Test
+    void projectsDueGrantAsExpiredBeforeCleanupJobRuns() {
+        service.grant("user-1", new TurnCreditAdminService.GrantRequest(
+                "expiring-001", "ACTIVITY", 5, "", "", Instant.now().plusSeconds(3600), "限时活动"),
+                "admin-1");
+        jdbc.update("update turn_credit_grant set expires_at=? where grant_type='ACTIVITY'",
+                Timestamp.from(Instant.now().minusSeconds(60)));
+
+        Map<String, Object> detail = service.detail("user-1");
+        @SuppressWarnings("unchecked")
+        var grants = (java.util.List<Map<String, Object>>) detail.get("grants");
+        Map<String, Object> activity = grants.stream()
+                .filter(item -> "ACTIVITY".equals(item.get("grantType"))).findFirst().orElseThrow();
+
+        assertEquals("EXPIRED", activity.get("status"));
+        assertEquals(0, activity.get("available"));
+        assertEquals(5, activity.get("expired"));
+    }
+
+    @Test
+    void pagesAndFiltersFullPointHistoryInsteadOfFixedRecentLimits() {
+        service.grant("user-1", new TurnCreditAdminService.GrantRequest(
+                "history-001", "ACTIVITY", 5, "", "", null, "活动奖励"), "admin-1");
+
+        Map<String, Object> first = service.detail("user-1", new TurnCreditAdminService.DetailQuery(
+                0, 1, "ACTIVE", 0, 1, "GRANT", null, null));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> grantsPage = (Map<String, Object>) first.get("grantsPage");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> ledgerPage = (Map<String, Object>) first.get("ledgerPage");
+        assertEquals(2L, grantsPage.get("total"));
+        assertEquals(1, ((java.util.List<?>) grantsPage.get("rows")).size());
+        assertEquals(2L, ledgerPage.get("total"));
+        assertEquals(1, ((java.util.List<?>) ledgerPage.get("rows")).size());
+        assertEquals(grantsPage.get("rows"), first.get("grants"), "旧响应字段应指向当前页，避免迁移期断裂");
+
+        Map<String, Object> second = service.detail("user-1", new TurnCreditAdminService.DetailQuery(
+                1, 1, "active", 1, 1, "grant", null, null));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> secondGrantPage = (Map<String, Object>) second.get("grantsPage");
+        assertEquals(1, secondGrantPage.get("page"));
+        assertEquals(1, ((java.util.List<?>) secondGrantPage.get("rows")).size());
+
+        Map<String, Object> future = service.detail("user-1", new TurnCreditAdminService.DetailQuery(
+                0, 20, "", 0, 20, "", Instant.now().plusSeconds(3600), null));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> futureLedgerPage = (Map<String, Object>) future.get("ledgerPage");
+        assertEquals(0L, futureLedgerPage.get("total"));
+    }
+
+    @Test
+    void rejectsInvertedLedgerHistoryRange() {
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.detail("user-1", new TurnCreditAdminService.DetailQuery(
+                        0, 20, "", 0, 20, "", Instant.now(), Instant.now().minusSeconds(1))));
+
+        assertEquals(400, error.getStatusCode().value());
+        assertTrue(error.getReason().contains("开始时间"));
+    }
+}

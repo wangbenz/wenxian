@@ -1,0 +1,356 @@
+{
+    "ability_scores": {
+        "charisma": 23,
+        "constitution": 29,
+        "dexterity": 10,
+        "intelligence": 18,
+        "strength": 30,
+        "wisdom": 15
+    },
+    "actions": [
+        {
+            "action_type": "ACTION",
+            "attacks": [
+                {
+                    "attack_type": "WEAPON",
+                    "damage_bonus": null,
+                    "damage_die_count": 2,
+                    "damage_die_type": "D10",
+                    "damage_type": {
+                        "key": "thunder",
+                        "name": "Thunder"
+                    },
+                    "distance_unit": "feet",
+                    "extra_damage_bonus": null,
+                    "extra_damage_die_count": null,
+                    "extra_damage_die_type": null,
+                    "extra_damage_type": {
+                        "key": "thunder",
+                        "name": "Thunder"
+                    },
+                    "long_range": null,
+                    "name": "Bite attack",
+                    "range": null,
+                    "reach": 15,
+                    "target_creature_only": false,
+                    "to_hit_mod": 17
+                }
+            ],
+            "crossreferences": {
+                "to": []
+            },
+            "desc": "Melee Weapon Attack: +17 to hit, reach 15 ft., one target. Hit: 21 (2d10 + 10) piercing damage plus 14 (4d6) fire damage.",
+            "legendary_action_cost": 1,
+            "limited_to_form": null,
+            "name": "Bite",
+            "order_in_statblock": 1,
+            "usage_limits": null
+        },
+        {
+            "action_type": "ACTION",
+            "attacks": [
+                {
+                    "attack_type": "WEAPON",
+                    "damage_bonus": null,
+                    "damage_die_count": 2,
+                    "damage_die_type": "D6",
+                    "damage_type": {
+                        "key": "thunder",
+                        "name": "Thunder"
+                    },
+                    "distance_unit": "feet",
+                    "extra_damage_bonus": null,
+                    "extra_damage_die_count": null,
+                    "extra_damage_die_type": null,
+                    "extra_damage_type": null,
+                    "long_range": null,
+                    "name": "Claw attack",
+                    "range": null,
+                    "reach": 10,
+                    "target_creature_only": false,
+                    "to_hit_mod": 17
+                }
+            ],
+            "crossreferences": {
+                "to": []
+            },
+            "desc": "Melee Weapon Attack: +17 to hit, reach 10 ft., one target. Hit: 17 (2d6 + 10) slashing damage.",
+            "legendary_action_cost": 1,
+            "limited_to_form": null,
+            "name": "Claw",
+            "order_in_statblock": 2,
+            "usage_limits": null
+        },
+        {
+            "action_type": "LEGENDARY_ACTION",
+            "attacks": [],
+            "crossreferences": {
+                "to": []
+            },
+            "desc": "The dragon makes a Wisdom (Perception) check.",
+            "legendary_action_cost": 1,
+            "limited_to_form": null,
+            "name": "Detect",
+            "order_in_statblock": 0,
+            "usage_limits": null
+        },
+        {
+            "action_type": "ACTION",
+            "attacks": [],
+            "crossreferences": {
+                "to": []
+            },
+            "desc": "The dragon exhales fire in a 90-foot cone. Each creature in that area must make a DC 24 Dexterity saving throw, taking 91 (26d6) fire damage on a failed save, or half as much damage on a successful one.",
+            "legendary_action_cost": null,
+            "limited_to_form": null,
+            "name": "Fire Breath",
+            "order_in_statblock": 5,
+            "usage_limits": {
+                "param": 5,
+                "type": "RECHARGE_ON_ROLL"
+            }
+        },
+        {
+            "action_type": "ACTION",
+            "attacks": [],
+            "crossreferences": {
+                "to": []
+            },
+            "desc": "Each creature of the dragon's choice that is within 120 feet of the dragon and aware of it must succeed on a DC 21 Wisdom saving throw or become frightened for 1 minute. A creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success. If a creature's saving throw is successful or the effect ends for it, the creature is immune to the dragon's Frightful Presence for the next 24 hours.",
+            "legendary_action_cost": 1,
+            "limited_to_form": null,
+            "name": "Frightful Presence",
+            "order_in_statblock": 4,
+            "usage_limits": null
+        },
+        {
+            "action_type": "ACTION",
+            "attacks": [],
+            "crossreferences": {
+                "to": []
+            },
+            "desc": "The dragon can use its Frightful Presence. It then makes three attacks: one with its bite and two with its claws.",
+            "legendary_action_cost": 1,
+            "limited_to_form": null,
+            "name": "Multiattack",
+            "order_in_statblock": 0,
+            "usage_limits": null
+        },
+        {
+            "action_type": "ACTION",
+            "attacks": [
+                {
+                    "attack_type": "WEAPON",
+                    "damage_bonus": null,
+                    "damage_die_count": 2,
+                    "damage_die_type": "D8",
+                    "damage_type": {
+                        "key": "thunder",
+                        "name": "Thunder"
+                    },
+                    "distance_unit": "feet",
+                    "extra_damage_bonus": null,
+                    "extra_damage_die_count": null,
+                    "extra_damage_die_type": null,
+                    "extra_damage_type": null,
+                    "long_range": null,
+                    "name": "Tail attack",
+                    "range": null,
+                    "reach": 20,
+                    "target_creature_only": false,
+                    "to_hit_mod": 17
+                }
+            ],
+            "crossreferences": {
+                "to": []
+            },
+            "desc": "Melee Weapon Attack: +17 to hit, reach 20 ft., one target. Hit: 19 (2d8 + 10) bludgeoning damage.",
+            "legendary_action_cost": 1,
+            "limited_to_form": null,
+            "name": "Tail",
+            "order_in_statblock": 3,
+            "usage_limits": null
+        },
+        {
+            "action_type": "LEGENDARY_ACTION",
+            "attacks": [],
+            "crossreferences": {
+                "to": []
+            },
+            "desc": "The dragon makes a tail attack.",
+            "legendary_action_cost": 1,
+            "limited_to_form": null,
+            "name": "Tail Attack",
+            "order_in_statblock": 1,
+            "usage_limits": null
+        },
+        {
+            "action_type": "LEGENDARY_ACTION",
+            "attacks": [],
+            "crossreferences": {
+                "to": []
+            },
+            "desc": "The dragon beats its wings. Each creature within 15 ft. of the dragon must succeed on a DC 25 Dexterity saving throw or take 17 (2d6 + 10) bludgeoning damage and be knocked prone. The dragon can then fly up to half its flying speed.",
+            "legendary_action_cost": 2,
+            "limited_to_form": null,
+            "name": "Wing Attack",
+            "order_in_statblock": 2,
+            "usage_limits": null
+        }
+    ],
+    "alignment": "chaotic evil",
+    "armor_class": 22,
+    "armor_detail": "natural armor",
+    "blindsight_range": 60,
+    "category": "Monsters",
+    "challenge_rating": 24.0,
+    "creaturesets": [],
+    "crossreferences": {
+        "to": []
+    },
+    "darkvision_range": 120,
+    "document": {
+        "display_name": "5e 2014 Rules",
+        "gamesystem": {
+            "key": "5e-2014",
+            "name": "5th Edition 2014"
+        },
+        "key": "srd-2014",
+        "name": "System Reference Document 5.1",
+        "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+        "publisher": {
+            "key": "wizards-of-the-coast",
+            "name": "Wizards of the Coast"
+        },
+        "type": "SOURCE"
+    },
+    "environments": [
+        {
+            "key": "hills",
+            "name": "Hills"
+        },
+        {
+            "key": "mountain",
+            "name": "Mountain"
+        }
+    ],
+    "experience_points": 62000,
+    "hit_dice": "28d20+252",
+    "hit_points": 546,
+    "illustration": null,
+    "initiative_bonus": 0,
+    "key": "srd_ancient-red-dragon",
+    "languages": {
+        "as_string": "Common, Draconic",
+        "data": [
+            {
+                "desc": "Typical speakers are Humans.",
+                "key": "common",
+                "name": "Common"
+            },
+            {
+                "desc": "Typical speakers include dragons and dragonborn.",
+                "key": "draconic",
+                "name": "Draconic"
+            }
+        ]
+    },
+    "modifiers": {
+        "charisma": 6,
+        "constitution": 9,
+        "dexterity": 0,
+        "intelligence": 4,
+        "strength": 10,
+        "wisdom": 2
+    },
+    "name": "Ancient Red Dragon",
+    "normal_sight_range": 10560,
+    "passive_perception": 26,
+    "proficiency_bonus": null,
+    "resistances_and_immunities": {
+        "condition_immunities": [],
+        "condition_immunities_display": "",
+        "damage_immunities": [
+            {
+                "key": "fire",
+                "name": "Fire"
+            }
+        ],
+        "damage_immunities_display": "fire",
+        "damage_resistances": [],
+        "damage_resistances_display": "",
+        "damage_vulnerabilities": [],
+        "damage_vulnerabilities_display": ""
+    },
+    "saving_throws": {
+        "charisma": 13,
+        "constitution": 16,
+        "dexterity": 7,
+        "wisdom": 9
+    },
+    "saving_throws_all": {
+        "charisma": 13,
+        "constitution": 16,
+        "dexterity": 7,
+        "intelligence": 4,
+        "strength": 10,
+        "wisdom": 9
+    },
+    "size": {
+        "key": "gargantuan",
+        "name": "Gargantuan"
+    },
+    "skill_bonuses": {
+        "perception": 16,
+        "stealth": 7
+    },
+    "skill_bonuses_all": {
+        "acrobatics": 0,
+        "animal_handling": 2,
+        "arcana": 4,
+        "athletics": 10,
+        "deception": 6,
+        "history": 4,
+        "insight": 2,
+        "intimidation": 6,
+        "investigation": 4,
+        "medicine": 2,
+        "nature": 4,
+        "perception": 16,
+        "performance": 6,
+        "persuasion": 6,
+        "religion": 4,
+        "sleight_of_hand": 0,
+        "stealth": 7,
+        "survival": 2
+    },
+    "speed": {
+        "climb": 40,
+        "fly": 80,
+        "unit": "feet",
+        "walk": 40
+    },
+    "speed_all": {
+        "burrow": 0,
+        "climb": 40,
+        "crawl": 20,
+        "fly": 80,
+        "hover": false,
+        "swim": 20,
+        "unit": "feet",
+        "walk": 40
+    },
+    "subcategory": "Dragons, Chromatic",
+    "traits": [
+        {
+            "desc": "If the dragon fails a saving throw, it can choose to succeed instead.",
+            "name": "Legendary Resistance (3/Day)"
+        }
+    ],
+    "tremorsense_range": null,
+    "truesight_range": null,
+    "type": {
+        "key": "dragon",
+        "name": "Dragon"
+    }
+}

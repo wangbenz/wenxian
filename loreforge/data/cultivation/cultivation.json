@@ -1,0 +1,168 @@
+[
+  {
+    "model": "api_v2.publisher",
+    "pk": "loreforge",
+    "fields": {
+      "name": "开物"
+    }
+  },
+  {
+    "model": "api_v2.gamesystem",
+    "pk": "cultivation",
+    "fields": {
+      "name": "修仙示范设定",
+      "content_prefix": "lf",
+      "desc": "供开物首批资料查阅与选材使用的修仙示范设定。仅包含本次已明确的条目规则，不代表所有修仙世界的通则；未定义人物境界、学习资格、通用灵力、战斗或经济规则。"
+    }
+  },
+  {
+    "model": "api_v2.document",
+    "pk": "loreforge-pilot",
+    "fields": {
+      "name": "开物修仙试录",
+      "display_name": "开物修仙试录",
+      "type": "MISC",
+      "publisher": "loreforge",
+      "gamesystem": "cultivation",
+      "author": "开物修仙试录改编；原资料：Wizards of the Coast（SRD 5.2）；资料整理：Open5e",
+      "licenses": [],
+      "publication_date": null,
+      "permalink": null,
+      "distance_unit": null,
+      "weight_unit": null,
+      "desc": "本来源收录隐身、隐身术、探灵术、探灵杖四项修仙示范设定，依据2026-09-27《首批修仙资料改编草案》试录。它们仅供本地查阅与选材，未接入游戏、未验证战斗平衡，也不是所有修仙世界的通则。人物境界、法术学习、通用灵力消耗、战斗结算和物品价格尚未设计；未定义不等于零消耗、无限能力或人人可用。\n\n### 原资料与署名\n\n本批改编包含来自 Wizards of the Coast 所作 System Reference Document 5.2 的材料。原 SRD 内容采用 [Creative Commons Attribution 4.0 International（CC BY 4.0）](https://creativecommons.org/licenses/by/4.0/)，[许可全文](https://creativecommons.org/licenses/by/4.0/legalcode)及[原 SRD 入口](https://dnd.wizards.com/resources/systems-reference-document)可供查阅。\n\n使用的资料整理版本为 [Open5e API 提交 0acbf263c74caf8ad080af7a16d86d3700a1ac8f](https://github.com/open5e/open5e-api/tree/0acbf263c74caf8ad080af7a16d86d3700a1ac8f/data/v2/wizards-of-the-coast/srd-2024)，不声称代表线上最新资料。借鉴的原条目为 Invisible、Invisibility、Detect Magic 与 Wand of Magic Detection。中文试录名和导读此前已添加于开物的 SRD 试录资料；本批另建独立身份，保留原试录记录及英文正文。\n\nThis local pilot includes adapted material from the System Reference Document 5.2 by Wizards of the Coast, provided under the Creative Commons Attribution 4.0 International License, using source records curated by Open5e. Loreforge's Chinese cultivation adaptations and their changes are identified below.\n\n### 本次改编\n\n- 隐身：保留不可见用途，去掉优势、劣势等战斗收益，明确非视觉线索与携带物品的边界；结束条件留给施加者。\n- 隐身术：收窄为自身单目标，最长1小时，攻击或施法在实际开始动作时结束；保留造成伤害后结束，未移植材料、法术位、职业、升环或D&D专注检定，维持代价待定。\n- 探灵术：范围扫描改为接触单件非生物物品，只判断正在生效的术法有无；移除学派识别、仪式施法与持续专注，不识别潜在器物能力。\n- 探灵杖：保留3次容量、每次消耗1次及每日黎明恢复1至3次；调用本批探灵术，明确杖端接触、诵咒手势、启动失败与阴性结果的消耗区别。\n\n本来源为本地改编试录，尚未公开发布，也未公布本次改编贡献的许可；上面列出的 CC BY 4.0 是原 SRD 材料的许可。这里不把改编说明冒充 Wizards of the Coast 原文，不新增许可承诺。"
+    }
+  },
+  {
+    "model": "api_v2.itemcategory",
+    "pk": "loreforge_wand",
+    "fields": {
+      "name": "杖",
+      "document": "loreforge-pilot"
+    }
+  },
+  {
+    "model": "api_v2.condition",
+    "pk": "loreforge_invisible",
+    "fields": {
+      "name": "隐身",
+      "document": "loreforge-pilot",
+      "icon": null
+    }
+  },
+  {
+    "model": "api_v2.conditiondescription",
+    "pk": "loreforge-pilot_invisible",
+    "fields": {
+      "describes": "loreforge_invisible",
+      "document": "loreforge-pilot",
+      "desc": "目标的外形，以及效果开始时穿戴和携带的非生物物品，不再被普通视线看见。效果不消除声音、气味、足迹和触碰，也不使目标穿透物体。\n\n物品离开目标的穿戴或携带范围后恢复可见；效果开始后拿取的物品不会自动隐去，包括原先隐身、离手显形后又重新拿回的物品。其他生物不因被抱起而获得隐身。能以其他方式发现目标的能力，需要在各自条目中明确，不能仅凭“神识”等名称认定能够破解。\n\n本状态只定义表现。持续多久、什么行为使效果结束，由施加状态的法术或物品决定；状态本身不统一规定“攻击破隐”。\n\n### 与来源的差异\n\n未沿用原 Invisible 状态的优势、劣势等战斗收益；本次改编明确了声音等非视觉线索、物品离手与重新拿取、携带其他生物的边界。\n\n### 来源与改编\n\n本条属于[开物修仙试录](/sources/loreforge-pilot)。原资料来自 Wizards of the Coast 的 System Reference Document 5.2（CC BY 4.0），经 Open5e 固定版本整理；本条是修仙示范设定的改编，不是原文翻译。原始来源、许可链接与本次修改范围见来源页。仅供本地试录，尚未公开发布或公布本次改编的许可。"
+    }
+  },
+  {
+    "model": "api_v2.spell",
+    "pk": "loreforge_invisibility",
+    "fields": {
+      "document": "loreforge-pilot",
+      "level": null,
+      "school": null,
+      "higher_level": null,
+      "range": null,
+      "range_unit": null,
+      "casting_time": null,
+      "reaction_condition": null,
+      "verbal": true,
+      "somatic": true,
+      "material": false,
+      "material_specified": "",
+      "material_cost": null,
+      "material_consumed": false,
+      "target_count": 1,
+      "saving_throw_ability": null,
+      "attack_roll": null,
+      "damage_roll": null,
+      "damage_types": [],
+      "shape_type": null,
+      "shape_size": null,
+      "shape_size_unit": null,
+      "classes": [],
+      "name": "隐身术",
+      "desc": "已掌握此术者，以诵咒、手势对自身施展，获得[隐身](/conditions/loreforge_invisible)状态，最长持续1小时。状态表现与限制全部采用该状态的同一份定义。\n\n主动解除、失去意识、实际开始攻击动作或施展另一个法术时，效果结束；通过其他方式造成伤害，也会在造成伤害后立即结束。攻击或施法即使没有成功，也不会恢复已结束的隐身。\n\n此候选不提供对他人施展、同时隐藏多个目标、消除声响或改变形体的能力。是否需要持续占用一种施法能力、如何计算灵力消耗，尚未确定；不能默认删去原专注机制后就没有维持代价。\n\n### 与来源的差异\n\n1小时上限、言语/动作要求与造成伤害后结束沿用原记录；目标由“接触生物”收窄为自身；攻击或施法的结束时点前移到实际开始动作时。未沿用原材料要求、法术位、职业和升环规则，也未移植D&D专注检定；维持代价仍待定。这些变化是候选设计，不是翻译纠错。\n\n### 来源与改编\n\n本条属于[开物修仙试录](/sources/loreforge-pilot)。原资料来自 Wizards of the Coast 的 System Reference Document 5.2（CC BY 4.0），经 Open5e 固定版本整理；本条是修仙示范设定的改编，不是原文翻译。原始来源、许可链接与本次修改范围见来源页。仅供本地试录，尚未公开发布或公布本次改编的许可。",
+      "target_type": "creature",
+      "range_text": "Self",
+      "ritual": null,
+      "concentration": null,
+      "duration": "up to 1 hour",
+      "applies_conditions": [
+        "loreforge_invisible"
+      ]
+    }
+  },
+  {
+    "model": "api_v2.spell",
+    "pk": "loreforge_detect-spiritual-effects",
+    "fields": {
+      "document": "loreforge-pilot",
+      "level": null,
+      "school": null,
+      "higher_level": null,
+      "range": null,
+      "range_unit": null,
+      "casting_time": null,
+      "reaction_condition": null,
+      "verbal": true,
+      "somatic": true,
+      "material": false,
+      "material_specified": "",
+      "material_cost": null,
+      "material_consumed": false,
+      "target_count": 1,
+      "saving_throw_ability": null,
+      "attack_roll": null,
+      "damage_roll": null,
+      "damage_types": [],
+      "shape_type": null,
+      "shape_size": null,
+      "shape_size_unit": null,
+      "classes": [],
+      "name": "探灵术",
+      "desc": "已掌握此术者，以诵咒、手势施展并触碰一件非生物物品，判断该物品上是否附着正在生效的术法。一次施展检查一件物品；得到结果后，本次探查结束，不持续监测。\n\n它只回答有无上述术法作用，不直接给出术法名称、用途、施术者或解除方法。它不能查探人的修为、判断一件材料能否炼器，也不把“未探得术法作用”解释为凡物、无价值或绝对安全。仅有尚未激发的器物能力，不在这项探查范围内。\n\n### 与来源的差异\n\n借鉴“察觉正在作用的魔法”这一用途；将周围范围扫描改为接触单件物品，因此无需先定义灵气分布、穿墙厚度或远距离探测。移除学派识别、仪式施法与持续专注。范围收窄是首批示范设定的选择，不代表所有探灵术都只能如此。\n\n### 来源与改编\n\n本条属于[开物修仙试录](/sources/loreforge-pilot)。原资料来自 Wizards of the Coast 的 System Reference Document 5.2（CC BY 4.0），经 Open5e 固定版本整理；本条是修仙示范设定的改编，不是原文翻译。原始来源、许可链接与本次修改范围见来源页。仅供本地试录，尚未公开发布或公布本次改编的许可。",
+      "target_type": "object",
+      "range_text": "Touch",
+      "ritual": false,
+      "concentration": false,
+      "duration": "instantaneous",
+      "applies_conditions": []
+    }
+  },
+  {
+    "model": "api_v2.magicitem",
+    "pk": "loreforge_detection-wand",
+    "fields": {
+      "name": "探灵杖",
+      "document": "loreforge-pilot",
+      "category": "loreforge_wand",
+      "desc": "此杖最多储存3次探灵能力。持杖者将杖端接触一件物品，每消耗1次储存能力，可以发动[探灵术](/spells/loreforge_detect-spiritual-effects)；无需事先学会该法术。目标范围、得到的信息和不能得出的结论，全部采用探灵术的同一份定义。\n\n杖端接触代替施术者直接触碰；使用者仍须诵咒、做出施法手势。通过此杖发动探灵术也属于施展法术，会触发[隐身术](/spells/loreforge_invisibility)的结束条件。\n\n每天黎明，等概率随机恢复1、2、3次已消耗次数，总数不超过3次。没有剩余次数时不能发动。得到“未探得术法作用”的结果也消耗1次；未满足接触物品等启动条件时不发动、不消耗。此候选由器物提供施展能力，不额外要求使用者支付灵力；它不授予永久掌握法术。\n\n### 与来源的差异\n\n容量、消耗和每日恢复范围沿用原记录，将1d3写成等概率随机1、2、3次；法术替换为本稿收窄后的探灵术，另明确手势/诵咒、启动失败与阴性结果的消耗区别。该恢复机制仅适用于此杖。售价、品阶、炼制材料均未设计。\n\n### 来源与改编\n\n本条属于[开物修仙试录](/sources/loreforge-pilot)。原资料来自 Wizards of the Coast 的 System Reference Document 5.2（CC BY 4.0），经 Open5e 固定版本整理；本条是修仙示范设定的改编，不是原文翻译。原始来源、许可链接与本次修改范围见来源页。仅供本地试录，尚未公开发布或公布本次改编的许可。",
+      "size": null,
+      "weight": null,
+      "armor_class": null,
+      "armor_detail": null,
+      "hit_points": null,
+      "hit_dice": null,
+      "nonmagical_attack_immunity": null,
+      "nonmagical_attack_resistance": null,
+      "cost": null,
+      "weapon": null,
+      "armor": null,
+      "rarity": null,
+      "requires_attunement": null,
+      "attunement_detail": null,
+      "damage_vulnerabilities": [],
+      "damage_resistances": [],
+      "damage_immunities": [],
+      "spells": [
+        "loreforge_detect-spiritual-effects"
+      ]
+    }
+  }
+]

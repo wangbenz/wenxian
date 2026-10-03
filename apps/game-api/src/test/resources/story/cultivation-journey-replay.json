@@ -1,0 +1,31 @@
+{
+  "source": "SYNTHETIC_CONTROLLED_PLAYTHROUGH",
+  "purpose": "验证求取传承、学习与运用、成长及消息连续性；阶段是测试目标，不是玩家强制主线，也不预设成功结果。",
+  "createSave": {
+    "worldPackageId": "XUANXU",
+    "worldRevision": 2,
+    "identity": {"name": "陆青禾", "genderCode": "UNSPECIFIED", "raceId": "race:xuanxu:human"},
+    "origin": {
+      "summary": "初入炼气的人族散修，只懂粗浅吐纳，没有师承和成体系的功法，来到青岐州求取适合自己的入门传承。",
+      "establishedFacts": [
+        {"localRef": "origin:fact:identity", "type": "IDENTITY", "statement": "人族散修，未加入宗门，也未向任何人拜师。"},
+        {"localRef": "origin:fact:breathing", "type": "PAST_EVENT", "statement": "依靠粗浅吐纳初入炼气，尚未学过成体系的功法。"}
+      ],
+      "openHooks": [{"localRef": "origin:hook:inheritance", "summary": "想找到可以实际学习和练习的入门传承，愿以劳动或合理交换争取机会。"}],
+      "startingEntities": []
+    },
+    "opening": {"regionId": "region:xuanxu:qingqi", "situation": "身在青岐州城中，准备寻找面向散修的讲习或传承交流机会。"},
+    "playPreference": {"focus": ["CULTIVATION", "EXPLORATION", "RELATIONSHIP"], "combatFrequency": "BALANCED", "pace": "BALANCED", "guidance": "BALANCED", "additionalNote": "希望行动有实际过程与结果，体验求取传承、学习与运用，以及付出代价后的成长。"}
+  },
+  "firstAction": "我去城中公开的散修讲习或传承交流处，向主事者说明我想学一门能实际练习的入门功法，询问具体获得方式，并阅读现场告示。",
+  "stages": [
+    {"id": "SEEK", "check": "获得至少一种可尝试的传承途径及其已知条件，公告与他人说法可区分。"},
+    {"id": "CHOOSE", "check": "玩家明确选择后实际参加考核、劳动或交换；收益、代价与下一选择清楚。"},
+    {"id": "LEARN", "check": "获得秘籍、得到讲解、正在学习和已经掌握分别表达；需要长期保留的功法有稳定身份。"},
+    {"id": "APPLY", "check": "尝试修炼或在场景中运用已有所学，检查是否影响结果；允许合理受阻，不预设成功。"},
+    {"id": "GROW", "check": "有依据的修行进展、状态代价或明确障碍与正文及角色状态一致；无依据的闲谈不自动升级。"},
+    {"id": "RETURN", "check": "重新读取或重启后保留功法、进度与关系；再次提到旧消息时不改变来源和条件。"}
+  ],
+  "limits": {"maxTurns": 12, "maxModelCalls": 32, "environment": "ISOLATED_LOCAL_ONLY"},
+  "method": "每轮读完结果后人工确定下一行动并留存原输入，不按关键词自动推进、不为通过测试篡改模型结果。结构一致性与语义体验分别报告；真实模型单次样本不证明全部玩法稳定。"
+}

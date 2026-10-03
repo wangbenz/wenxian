@@ -1,0 +1,27 @@
+{
+  "format": "wenxian.world-package",
+  "formatVersion": 1,
+  "publisherNamespace": "wenxian.official",
+  "packageId": "XUANXU",
+  "revision": 2,
+  "defaultLocale": "zh-CN",
+  "name": "玄墟界",
+  "summary": "仙路真假难辨，宗门、世族、妖庭与散修仍为长生争夺资源。",
+  "authors": ["问仙录制作组"],
+  "license": "ALL-RIGHTS-RESERVED",
+  "contentRating": "TEEN",
+  "runtimeContract": "narrative-world-v1",
+  "requiredCapabilities": [
+    "creation-catalog-v1",
+    "linear-progression-v1",
+    "triggered-lore-v1",
+    "player-confirmed-ending-v1"
+  ],
+  "entrypoints": {
+    "world": "world.json",
+    "creation": "creation.json",
+    "progression": "progression.json",
+    "loreIndex": "lore/index.json"
+  },
+  "assets": []
+}

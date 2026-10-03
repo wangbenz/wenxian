@@ -1,0 +1,33 @@
+{
+    "descriptions": [
+        {
+            "desc": "Chaotic good (CG) creatures act as their conscience directs, with little regard for what others expect.  Copper dragons, many elves, and unicorns are chaotic good.",
+            "document": "srd-2014",
+            "gamesystem": "5e-2014"
+        },
+        {
+            "desc": "Chaotic Good creatures act as their conscience directs with little regard for what others expect. A rebel who waylays a cruel baron's tax collectors and uses the stolen money to help the poor is probably Chaotic Good.",
+            "document": "srd-2024",
+            "gamesystem": "5e-2024"
+        }
+    ],
+    "document": {
+        "display_name": "5e Core",
+        "gamesystem": {
+            "key": "5e-2014",
+            "name": "5th Edition 2014"
+        },
+        "key": "core",
+        "name": "5e Core Concepts",
+        "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+        "publisher": {
+            "key": "open5e",
+            "name": "Open5e"
+        },
+        "type": "MISC"
+    },
+    "key": "chaotic-good",
+    "morality": "good",
+    "short_name": "CG",
+    "societal_attitude": "chaotic"
+}

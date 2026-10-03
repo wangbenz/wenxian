@@ -1,0 +1,10 @@
+{
+  "sha256": {
+    "creation.json": "dd62bdc00cf3bf07c493883e7c6de5febe2abf22dc435d43ca6f5e124fb04249",
+    "lore/core.json": "aadd962f4ede0698bcf46dbeaeb182d36c110355fafdb422e203759fd0d1fa1b",
+    "lore/index.json": "42373d2a22abf0720173d7019c4274b2f46287ad2dfaacade6a0895fb364514a",
+    "manifest.json": "5d2038d365cddbfeda128e7462c273710df19b9cee110f340fb332a59d3b7bdf",
+    "progression.json": "ad36d7bf00d231d98585555fa4ebbb373762db655fa0e82e535b13c5371e135c",
+    "world.json": "6f7884f82edb144890d000143ac7a230da3d10ad8fc1cf3c06fd675352fc1bad"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "format": "wenxian.world-package",
+  "formatVersion": 1,
+  "publisherNamespace": "test.fixture",
+  "packageId": "DREAMSEA",
+  "revision": 1,
+  "defaultLocale": "zh-CN",
+  "name": "梦海",
+  "summary": "潮汐记忆凝成岛屿的契约测试世界。",
+  "authors": ["契约测试"],
+  "license": "TEST-ONLY",
+  "contentRating": "GENERAL",
+  "runtimeContract": "narrative-world-v1",
+  "requiredCapabilities": [
+    "creation-catalog-v1",
+    "linear-progression-v1",
+    "triggered-lore-v1",
+    "player-confirmed-ending-v1"
+  ],
+  "entrypoints": {
+    "world": "world.json",
+    "creation": "creation.json",
+    "progression": "progression.json",
+    "loreIndex": "lore/index.json"
+  },
+  "assets": []
+}

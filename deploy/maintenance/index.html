@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#101714" />
+    <title>问仙录 · 新版本仍在准备中</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: #101714;
+        color: #e9e1d1;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body { min-height: 100%; }
+
+      body {
+        margin: 0;
+        min-height: 100svh;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 50% 24%, rgba(112, 137, 117, 0.16), transparent 34rem),
+          linear-gradient(155deg, #101714 0%, #17201c 48%, #0d1311 100%);
+      }
+
+      body::before,
+      body::after {
+        position: fixed;
+        inset: auto -12vw -20vh;
+        height: 62vh;
+        content: "";
+        pointer-events: none;
+        border-radius: 50% 50% 0 0;
+        filter: blur(2px);
+        transform: rotate(-4deg);
+      }
+
+      body::before {
+        background: rgba(83, 105, 89, 0.13);
+        clip-path: polygon(0 100%, 0 72%, 18% 54%, 29% 66%, 46% 34%, 61% 65%, 77% 43%, 100% 71%, 100% 100%);
+      }
+
+      body::after {
+        bottom: -27vh;
+        background: rgba(7, 11, 9, 0.5);
+        clip-path: polygon(0 100%, 0 63%, 17% 79%, 39% 48%, 55% 76%, 73% 57%, 100% 78%, 100% 100%);
+      }
+
+      main {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        min-height: 100svh;
+        place-items: center;
+        padding: max(28px, env(safe-area-inset-top)) 24px max(28px, env(safe-area-inset-bottom));
+      }
+
+      .notice {
+        width: min(100%, 560px);
+        text-align: center;
+      }
+
+      .sigil {
+        display: grid;
+        width: 76px;
+        height: 76px;
+        margin: 0 auto 34px;
+        place-items: center;
+        border: 1px solid rgba(199, 184, 154, 0.44);
+        border-radius: 50%;
+        box-shadow: inset 0 0 0 7px rgba(199, 184, 154, 0.035);
+        color: #d8c9ad;
+        font-family: "STKaiti", "KaiTi", "FangSong", serif;
+        font-size: 32px;
+      }
+
+      .brand {
+        margin: 0 0 14px;
+        color: #aeb9ae;
+        font-size: 13px;
+        letter-spacing: 0.42em;
+        text-indent: 0.42em;
+      }
+
+      h1 {
+        margin: 0;
+        font-family: "STKaiti", "KaiTi", "FangSong", serif;
+        font-size: clamp(34px, 8vw, 54px);
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        line-height: 1.24;
+      }
+
+      .rule {
+        width: 48px;
+        height: 1px;
+        margin: 28px auto 24px;
+        background: #9e4b3e;
+      }
+
+      .message {
+        margin: 0 auto;
+        max-width: 440px;
+        color: #b9b7ad;
+        font-size: 16px;
+        line-height: 1.9;
+      }
+
+      .closing {
+        margin: 28px 0 0;
+        color: #7f8d83;
+        font-family: "STKaiti", "KaiTi", "FangSong", serif;
+        font-size: 15px;
+        letter-spacing: 0.08em;
+      }
+
+      @media (max-width: 420px) {
+        .sigil { margin-bottom: 28px; }
+        .message { font-size: 15px; }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .notice {
+          animation: reveal 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        @keyframes reveal {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="notice" aria-labelledby="notice-title">
+        <div class="sigil" aria-hidden="true">问</div>
+        <p class="brand">问仙录</p>
+        <h1 id="notice-title">新版本仍在准备中</h1>
+        <div class="rule" aria-hidden="true"></div>
+        <p class="message">原定于 9 月 1 日恢复开放的新版本仍在开发和验证中，当前暂不开放。开放时间确认后，会在本页更新。</p>
+        <p class="closing">公告更新于 2026 年 9 月 1 日</p>
+      </section>
+    </main>
+  </body>
+</html>

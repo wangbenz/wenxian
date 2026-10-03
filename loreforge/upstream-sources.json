@@ -1,0 +1,1917 @@
+{
+  "imported_on": "2026-09-26",
+  "sources": [
+    {
+      "repository": "https://github.com/open5e/open5e-api",
+      "commit": "0acbf263c74caf8ad080af7a16d86d3700a1ac8f",
+      "destination": "loreforge/api",
+      "archive_sha256": "6762c7f88ec60953aa3e213099d888e681f0e17684998995faac58af8e699c6b",
+      "copied_files": [
+        {
+          "path": "api/search_indexes.py",
+          "sha256": "f437b63cafa7cbe1126a6c43510c85a96579c90fe5bd46a6e32ab713c3cba95d"
+        },
+        {
+          "path": "api/validators.py",
+          "sha256": "2aa7b461a7fa0edafea73cf362aa960c806a3de014b9185f166e09546436569d"
+        },
+        {
+          "path": "api/serializers.py",
+          "sha256": "8586ba97699600ec10df2ccc1409301c387e07d1fb0ecaa1c913bd374a016d1b"
+        },
+        {
+          "path": "api/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "api/apps.py",
+          "sha256": "433608593ff40de93da8cf273834b2b70ac6d105742d6b780d6d43ebb293beca"
+        },
+        {
+          "path": "api/admin.py",
+          "sha256": "b2e328e31f08dc907100505521d13ee6a9ea67a240655d051120011ce49cfaf8"
+        },
+        {
+          "path": "api/utils.py",
+          "sha256": "18be272f18709be26291b1511ecc4f07d24354a23a978aaae06f7bcde1edba83"
+        },
+        {
+          "path": "api/schema_generator.py",
+          "sha256": "8a6766b3f1ee940df9a4e3869e1e200a198c22be7179b5e3900b6114a81439f8"
+        },
+        {
+          "path": "api/urls.py",
+          "sha256": "675a1a126f42aca7611b9c38221cea93babdef82ddda1f724235e56b48e17591"
+        },
+        {
+          "path": "api/filters.py",
+          "sha256": "9ca1e80e17da7ef42026cc57b8a2697f0d384c68d230baa3dab6ed94775ef050"
+        },
+        {
+          "path": "api/views.py",
+          "sha256": "05f2f2a961371e53ed8a4974457595df8c2e7fb0c623c326ed24f65130d26874"
+        },
+        {
+          "path": "api/migrations/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "api/migrations/0003_delete_manifest.py",
+          "sha256": "035fea34d4565b064f8dc57a07d159fc987c94096f448db0bd3c179d5cd2c1ac"
+        },
+        {
+          "path": "api/migrations/0001_initial.py",
+          "sha256": "2f9bb41e36cd813e1ca63ac28217bf376dc79874cc8a61a618275b9b10afd5e8"
+        },
+        {
+          "path": "api/migrations/0002_document_v2_related_key.py",
+          "sha256": "333975b316f13947bb948cdcc7d8be9db5fa63934ec773ae6f442854dac49b34"
+        },
+        {
+          "path": "api/tests/approvaltests_config.json",
+          "sha256": "47b421769d2388328bb69bc03f9c12b8e727c0d22ac49f47c9b404ebd139ef11"
+        },
+        {
+          "path": "api/tests/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "api/tests/test_api.py",
+          "sha256": "26bb58fc5aeebfbe0c43a1419d58266ca7a4d6d1ebf4c37358ae8d926bdec5fe"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_armor.approved.json",
+          "sha256": "5f5ba3df072d89ae2fe9ac2928e9bf8de92fc7e412e97b9b78b972afbdcaf146"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_backgrounds.approved.json",
+          "sha256": "5a8c7f791ad6f75e4575215bb91e62acb00bbdc028cfd00be92a1fa557c465f7"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_spells.approved.json",
+          "sha256": "38ae993a0783fc170fbca22b76f8770940bc5f08051c6e39e677cd6582f72402"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_feats.approved.json",
+          "sha256": "e41867319357ac41626871d099cb5fdfadf5d8f0d0a4dbac986768499eb0975d"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_documents.approved.json",
+          "sha256": "a83bee5718ba19360c91871208f57a3a0992f962d5bc0aab58aaa886587a67c3"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_sections.approved.json",
+          "sha256": "721c7a27123e6673dd1fa33097a45acf6d99daec1e8c986d467fd74a09c16dde"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_root.approved.json",
+          "sha256": "b19b63dc1543ae55f856b41eb3dec3e4cc5f9340b47228a17deb8b49a26c0afe"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_classes.approved.json",
+          "sha256": "97e8cf3a110275fe43b2eb5b0f239d9289258b3f1b1130a1756dfdf13f58ca4e"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_planes.approved.json",
+          "sha256": "8a445e9c8d81ae1829352e35a3ffd60866fa13f811e3eb7bc28db90f2db91f7e"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_conditions.approved.json",
+          "sha256": "d35c82d86cc0b1dc1eee38c314bd5c510fdbe17de7cc8e3ff6f80838cff0714d"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_magicitems.approved.json",
+          "sha256": "5e3335c984b98efc4adb7cf6f989241e5d577bf008a8c1a4ced7468f24501229"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_races.approved.json",
+          "sha256": "9dad3d477f40f8254afb5f15a7ca5fe8c622f7404ca41e66e2c54c6431e531e9"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_weapons.approved.json",
+          "sha256": "18fc2676848ca80ccb40439daab723f9b628f0cb0ff899ced6c1733271cde479"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_monsters.approved.json",
+          "sha256": "35b9cae56f36d0f70fdb16ccffa1200392035464f132aac078b145b4c5f18c5c"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_spelllist.approved.json",
+          "sha256": "1f788cc7c2bc8808e376d42a246f3959b5305f14eaf08fde915555e863368c6f"
+        },
+        {
+          "path": "api/tests/approved_files/TestAPIRoot.test_magic_missile.approved.json",
+          "sha256": "749b34b67e39f36d2393ab79f0263c0470fddcabea545034c79d7bed72b131c0"
+        },
+        {
+          "path": "api/management/commands/quicksetup.py",
+          "sha256": "882bd5bb9ba0d47c3653b291a8861687cf715aac397cc7a49f488266ccf21648"
+        },
+        {
+          "path": "api/management/commands/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "api/management/commands/test.py",
+          "sha256": "862ca871ac01542e43d6d746fd78b878a07d85d797a401d17ce2acbb542249de"
+        },
+        {
+          "path": "api/models/spell.py",
+          "sha256": "2117b8511293c9670ff68cd4255674fb2f7a4c065348d028fec36a1862c979d6"
+        },
+        {
+          "path": "api/models/models.py",
+          "sha256": "d1aa8a049f2b99b96783f374107c54c86d8f206cd92c3cf9db60772dabc12e88"
+        },
+        {
+          "path": "api/models/__init__.py",
+          "sha256": "c26552341f3b6c9f9c6204304a5de827a1fd701d0bcc06daceafbfe4607a75b1"
+        },
+        {
+          "path": "api/models/monster.py",
+          "sha256": "dbfff5e36fce275b2c4d5221e193ae2aa51ea64c8fb8c7999f49d4f935d84833"
+        },
+        {
+          "path": "api_v2/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "api_v2/apps.py",
+          "sha256": "85ce868d02386c2aac92e1b3cfe786a61267a5ea13da4591739f88722bdbe8f4"
+        },
+        {
+          "path": "api_v2/admin.py",
+          "sha256": "7f4f7e79087f95cca4e222ed1ec047e2c8927c051d8991d3a512fbeb39c3ca04"
+        },
+        {
+          "path": "api_v2/crossreference_utils.py",
+          "sha256": "5781f357436031befdcf019b9b9f3bc5c6198197e119e8ac48b7ce0633cdde9d"
+        },
+        {
+          "path": "api_v2/url_utils.py",
+          "sha256": "daa3de197e76ad606beea0b16bd0f14b0856c5101db9a7bf40480c5873930fe7"
+        },
+        {
+          "path": "api_v2/urls.py",
+          "sha256": "adde9995d6764721b6874ba31e6a528858709a014c5438e1ce096a7e77b03b85"
+        },
+        {
+          "path": "api_v2/migrations/0029_merge_20250407_1910.py",
+          "sha256": "f2e46e10705de1be37c17d093fbcc502d82bf2e6ac7ea2d06d2ec3b4fc887848"
+        },
+        {
+          "path": "api_v2/migrations/0016_alter_creaturetrait_parent.py",
+          "sha256": "c9eaf8095de069aa3de648fd2d2556632b0d27663ed39c69f7d87b81bf1475aa"
+        },
+        {
+          "path": "api_v2/migrations/0047_service.py",
+          "sha256": "7cfa6f2eb858f6d62082be743f8e6ebd8486a0a24abd668427326aaeffe9601b"
+        },
+        {
+          "path": "api_v2/migrations/0067_document_type.py",
+          "sha256": "02110a19321fbd4c9c2aa2aed297baba261679e04e63dedb27de1d8b64cbad68"
+        },
+        {
+          "path": "api_v2/migrations/0037_alter_image_alt_text.py",
+          "sha256": "07c51796ecd3fa6603cbbe6fb70f6de954a17f8af1ba7430842f0b7b4a5e5a73"
+        },
+        {
+          "path": "api_v2/migrations/0035_document_weight_unit.py",
+          "sha256": "72a693a08e0d04df4ebb6b34ea64b1ad356eb9403f745a9293f7b6f859453380"
+        },
+        {
+          "path": "api_v2/migrations/0012_alter_creature_subcategory.py",
+          "sha256": "a205f3d35f1cda174ac5d27dd0d5ccf7da9542f3ef1b165ddde5b2f7c2823e11"
+        },
+        {
+          "path": "api_v2/migrations/0066_alter_classfeature_feature_type.py",
+          "sha256": "0bd831e51868c9abba6826eb50c900e64e6efb517f1ddba5f7cd8fcfcd899e03"
+        },
+        {
+          "path": "api_v2/migrations/0068_merge_0067_alter_rule_options_0067_document_type.py",
+          "sha256": "0b5056031288c4a6f783bd6cd58881103a9c428b520267403562681be2b03a2f"
+        },
+        {
+          "path": "api_v2/migrations/0036_creature_damage_vulnerabilities_display.py",
+          "sha256": "61b4d5b9b47fd24ac2de2578b2a7a7a52593a0f3649d2a8c610a28b214654e9e"
+        },
+        {
+          "path": "api_v2/migrations/0009_merge_20241010_0144.py",
+          "sha256": "ce9fbb5b3c46946af7de1151689ffc562ccd78c1a4d7c84253391e71bc613dcc"
+        },
+        {
+          "path": "api_v2/migrations/0050_spellcastingoption_desc.py",
+          "sha256": "f3945a537dcd99ca3e0ab7b972f01d8a50f36bb3764dc004ec0f7f783da5f06e"
+        },
+        {
+          "path": "api_v2/migrations/0064_alter_speciestrait_options.py",
+          "sha256": "cb9a4d62cf482d5a931de48adfd793bc3692032be887cf794abfe6b27cebdc42"
+        },
+        {
+          "path": "api_v2/migrations/0007_rename_range_long_weapon_long_range_and_more.py",
+          "sha256": "887e98eabb49b883cb9bf6bb0cabfb7e09115593e1b2775b71e1f74608db4653"
+        },
+        {
+          "path": "api_v2/migrations/0082_align_choice_fields_with_data.py",
+          "sha256": "9547b80325437e86b65735001cc96e6fac7a2f96db536df44426774c35a5c6e7"
+        },
+        {
+          "path": "api_v2/migrations/0067_alter_backgroundbenefit_type_and_more.py",
+          "sha256": "2fc15776404fc5ee1f1e64930fbdc08c81a60e144afffe4035c0ccb997b16c95"
+        },
+        {
+          "path": "api_v2/migrations/0072_crossreference.py",
+          "sha256": "bd7253c4e1e82648f365c644ad09df812ff682ec3b038be74796ee82cd0894e7"
+        },
+        {
+          "path": "api_v2/migrations/0009_merge_20241010_0919.py",
+          "sha256": "dc2d1a84a59e1eb2adc0616719bf01bf24835b730d97bf99eeff6ff9c2697b5d"
+        },
+        {
+          "path": "api_v2/migrations/0004_alter_rule_index_alter_rule_initialheaderlevel_and_more.py",
+          "sha256": "1b61b784eec4e840ab7102b1926cdd8767ae6ed7a739dc72be0b839be80b14bd"
+        },
+        {
+          "path": "api_v2/migrations/0043_alter_image_options_alter_rule_options_and_more.py",
+          "sha256": "578f1fcab659421025475f55f8dda0db94225c757e81cc827d3e9f98b9e0705c"
+        },
+        {
+          "path": "api_v2/migrations/0003_rename_rulegroup_ruleset.py",
+          "sha256": "2e7b40665ec1111f23ff71e1e58a4e7bb96859dcad46b3d7e0d7afbaefbb361f"
+        },
+        {
+          "path": "api_v2/migrations/0010_merge_20241016_1952.py",
+          "sha256": "92571aa91fabab1c8425354cadea7a271fd1b549b3d60a7b05283d2ed812ffaa"
+        },
+        {
+          "path": "api_v2/migrations/0021_remove_document_stats_expected.py",
+          "sha256": "949ce718514a076b62993c6e922a37a7941ca4a7fe439699cb1b3a09c34b74c2"
+        },
+        {
+          "path": "api_v2/migrations/0074_rename_api_v2_cros_documen_idx_api_v2_cros_documen_7cb8b8_idx.py",
+          "sha256": "fba784a011a0edd62583d8af4ad53ce1f5eb876de9881c22dca14c9fd0f0109d"
+        },
+        {
+          "path": "api_v2/migrations/0052_merge_20250615_2121.py",
+          "sha256": "55fac4a466024287e18e5023409daab2563ad125b175ca87cb08ee4e8044061c"
+        },
+        {
+          "path": "api_v2/migrations/0010_spellcastingoption_concentration_and_more.py",
+          "sha256": "4827b9bffe305993fbec5c46652900dba3037ed2a7afdab6f211cf2539e1eb00"
+        },
+        {
+          "path": "api_v2/migrations/0041_merge_20250509_0736.py",
+          "sha256": "bf5361fb6278007719a35e0cb7b8f194fdae598a67da44aae902becf80ebdc6b"
+        },
+        {
+          "path": "api_v2/migrations/0004_alter_size_space_diameter.py",
+          "sha256": "7e77e4262634ef9baf243d9bdecdd71efc98dd65c820fdd03f5c7f585bc7aab5"
+        },
+        {
+          "path": "api_v2/migrations/0013_size_suggested_hit_dice.py",
+          "sha256": "2c5b27cd9e419c4c6ca343620d2ceada63cf29a9427d78e409aef8bbf558e15a"
+        },
+        {
+          "path": "api_v2/migrations/0017_characterclass_saving_throws.py",
+          "sha256": "912ddc0549609db43575bbd4859b387c6882aff7ba073622e1ad201c083c1fcf"
+        },
+        {
+          "path": "api_v2/migrations/0027_alter_classfeatureitem_parent.py",
+          "sha256": "871255cbcfd1cb4f8498c48b5798bf86fe9638a64dbe5b2707ae3699af4e9bdf"
+        },
+        {
+          "path": "api_v2/migrations/0011_merge_20241022_1426.py",
+          "sha256": "b8426fc8aaa22307ece3d32ce9ed9e05894b43ef8116b39d4eeff3c588d960e3"
+        },
+        {
+          "path": "api_v2/migrations/0053_remove_damagetype_desc_damagetypedescription.py",
+          "sha256": "7970e1d88202bdac22c41114d3f998a5d106643acebf654129a2abe69b4e0111"
+        },
+        {
+          "path": "api_v2/migrations/0080_alter_spell_target_type_nullable.py",
+          "sha256": "d0eb2e30e844a37fa05cb95e3fda60b04dde22e60acda2382ae8e6d73870f24f"
+        },
+        {
+          "path": "api_v2/migrations/0028_alter_creature_armor_detail_alter_item_armor_detail.py",
+          "sha256": "eddd7fee9987725b42ff47c0d429f933319899d77bb0ae5e872ff57af7ef02ef"
+        },
+        {
+          "path": "api_v2/migrations/0027_alter_creatureaction_parent_and_more.py",
+          "sha256": "192008b7a161bc5f4b336945716e0bb578cbaea39c7f703112132af5b3b72875"
+        },
+        {
+          "path": "api_v2/migrations/0063_speciestrait_order_alter_speciestrait_type.py",
+          "sha256": "da7747792e13cda99cbf59f022b41af17f901545fe0f06345ad4e6940aafc6cb"
+        },
+        {
+          "path": "api_v2/migrations/0031_merge_20250414_0553.py",
+          "sha256": "f5ad0b836170ad8ea66623cf25cbf8e9bd5bfab32b68e2ab3829cf7c27879720"
+        },
+        {
+          "path": "api_v2/migrations/0015_creature_environments.py",
+          "sha256": "2695b572045bd0693a8344dcf370cc84d67f0f27dc58bb8d586f81e6fd1bc492"
+        },
+        {
+          "path": "api_v2/migrations/0019_classfeatureitem_column.py",
+          "sha256": "7f548f7e3f215af799a7347db6e06e2cdbe93faf9553afbd489aab43bba671dd"
+        },
+        {
+          "path": "api_v2/migrations/0050_creature_illustration.py",
+          "sha256": "38f84ecec29930dbceee1522a06367264e162a118d157df8a5e7c2b2e786fbc6"
+        },
+        {
+          "path": "api_v2/migrations/0002_creatureactionattack_distance_unit_and_more.py",
+          "sha256": "6173bbf1a0069276418e046cb944ccb7754ccfe9c8d0c05d859aa8b5f75c5312"
+        },
+        {
+          "path": "api_v2/migrations/0062_classfeature_feature_type.py",
+          "sha256": "76e50376601153c62b2335f36aa4a4f8483a65903869ff546e588d18b3208916"
+        },
+        {
+          "path": "api_v2/migrations/0050_merge_20250608_0235.py",
+          "sha256": "1ade095534c165dc85ab4bbf411ae8d068a987aba07c4b196a332943830909cf"
+        },
+        {
+          "path": "api_v2/migrations/0020_remove_classfeatureitem_column_and_more.py",
+          "sha256": "0bbfcba89784f2bb6a7f18b2822018c34cba9257e305faa6decba5f3814be0bc"
+        },
+        {
+          "path": "api_v2/migrations/0040_rename_condition_immunity_display_creature_condition_immunities_display.py",
+          "sha256": "eb3fe88b31d7913540922347c85990a1506d2d293291f2d895575878c1dc2d21"
+        },
+        {
+          "path": "api_v2/migrations/0002_rulegroup_rule.py",
+          "sha256": "d00dc89c08abe6f1fc4baaebdcf8b3c25ed8af1534d6dc5757dbd08bc6db20c4"
+        },
+        {
+          "path": "api_v2/migrations/0005_size_distance_unit.py",
+          "sha256": "e4cbd62735cbdad9e1cc947f075e1c04737889207e947da776ebb524e673b254"
+        },
+        {
+          "path": "api_v2/migrations/0033_rename_race_species_alter_species_options.py",
+          "sha256": "875be4862d18eb2c91c9f45d33bb4e4e1e437420af76f6c2dcdfa94848f2555e"
+        },
+        {
+          "path": "api_v2/migrations/0075_alter_crossreference_reference_content_type_and_more.py",
+          "sha256": "71f8d46b96b00ce3279af2843618744ae8f07c0af461c7b679c28ded1306c17f"
+        },
+        {
+          "path": "api_v2/migrations/0081_creature_desc.py",
+          "sha256": "05635ea2d02cc482016edb07d6a74eafcffe1ea1039ae35fb6371765c4d1e0bb"
+        },
+        {
+          "path": "api_v2/migrations/0026_delete_searchresult.py",
+          "sha256": "0211843fe052dd5840a26a71deb17291abe6ac33c82428f74baebb430554a56a"
+        },
+        {
+          "path": "api_v2/migrations/0069_merge_20251130_1921.py",
+          "sha256": "71644ce279d8b807046d8aefe68beb3e4c0fb606e47f96ebc750282acccdba67"
+        },
+        {
+          "path": "api_v2/migrations/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "api_v2/migrations/0039_creature_condition_immunity_display.py",
+          "sha256": "e09f1152276a4d8586aaf99fae2411c3a215a1e2565145120b3a5fbc3e740da3"
+        },
+        {
+          "path": "api_v2/migrations/0056_remove_alignment_desc_alignmenttypedescription.py",
+          "sha256": "3746efcbc3179559d7a3e2c665b2a93f988f59396d25d89f0e4b17a00281a695"
+        },
+        {
+          "path": "api_v2/migrations/0003_rename_long_range_ft_creatureactionattack_long_range_and_more.py",
+          "sha256": "c907832d25dc29963aaace990e6ac163c98792e078d0d5a83622d833d1102281"
+        },
+        {
+          "path": "api_v2/migrations/0065_merge_20251006_2033.py",
+          "sha256": "641a49eb48e2e97cddb6def745ead7374c8186c578f7edb43b83aa84bc103ab9"
+        },
+        {
+          "path": "api_v2/migrations/0062_alter_featbenefit_options_remove_featbenefit_id_and_more.py",
+          "sha256": "8f06dd91007be2b825b0f54e57fcf546bf6f45e34ec48d6ae7bcb67c4e047f72"
+        },
+        {
+          "path": "api_v2/migrations/0042_add_condition_concept.py",
+          "sha256": "5aca792b6f4bbc7c0431219e0093d117de82db2e5ef232e8a26f9e8e3ebcbf68"
+        },
+        {
+          "path": "api_v2/migrations/0028_alter_classfeature_parent.py",
+          "sha256": "e323cc8143b0d991fd564798ccc19986cb4a5384273cbc0553dfc4e86b13fffe"
+        },
+        {
+          "path": "api_v2/migrations/0073_rename_challenge_rating_decimal_creature_challenge_rating.py",
+          "sha256": "78b7d79fc776fddcf1d60a33339a0f2b39f83156a24f75464eacd7c1f15af1cb"
+        },
+        {
+          "path": "api_v2/migrations/0073_crossreference_document.py",
+          "sha256": "8e7b7f4e6f92ba59bac78c7d8100b7db5f88de97e41ccbed3868c46b899ef535"
+        },
+        {
+          "path": "api_v2/migrations/0042_weaponproperty.py",
+          "sha256": "f08161d0b3bc056314c1c46de2220dbd2fde818440fdaf74b228444c1d1badb8"
+        },
+        {
+          "path": "api_v2/migrations/0006_alter_weapon_range_long_alter_weapon_range_normal_and_more.py",
+          "sha256": "b446c94c8fd48e8bb941a4afb63fb33850c79f90b5e44ee29c3c864ece513fb1"
+        },
+        {
+          "path": "api_v2/migrations/0008_weapon_distance_unit.py",
+          "sha256": "6a5a45c933ddcd74de73cad4b85ec2ab7cec5d84d10b8ff44d33781c7b3c36ad"
+        },
+        {
+          "path": "api_v2/migrations/0064_alter_classfeature_feature_type.py",
+          "sha256": "810f3fbcb3d887edc9801d0bdea304cee067eb5bfc4120ac362b0fc54c06613f"
+        },
+        {
+          "path": "api_v2/migrations/0024_alter_classfeatureitem_detail.py",
+          "sha256": "2593cfc347198ab058d05f825af6125b0a98661918a615951b2c67951f2b4f60"
+        },
+        {
+          "path": "api_v2/migrations/0048_service_name.py",
+          "sha256": "eaeb2d7504586c201cfd33d03ad9f32982df1f0dc27b8b07a285d8fd2c5678d6"
+        },
+        {
+          "path": "api_v2/migrations/0042_alter_image_options_alter_rule_options_and_more.py",
+          "sha256": "7bb4b80f9f237f525d58a332df8859be7b7797262c56e666fe0dea3a8a8d0132"
+        },
+        {
+          "path": "api_v2/migrations/0071_convert_distance_fields_to_integer.py",
+          "sha256": "a3b10ba4cd8e1d1c84192433948a75f0abcd64b8689d4f5aa1a00a42e9f8f53f"
+        },
+        {
+          "path": "api_v2/migrations/0076_crossreference_key_pk.py",
+          "sha256": "926e0ed7d30f549c6a8a25a8ed006cb0393949664c288461119d1eba1f27dfa8"
+        },
+        {
+          "path": "api_v2/migrations/0059_conditiondescription.py",
+          "sha256": "0e476bca0384ffb252de5976383c9cca804dfba6ddbaec37d8b07c7f700c68ff"
+        },
+        {
+          "path": "api_v2/migrations/0060_remove_condition_desc.py",
+          "sha256": "05ef9c30f1057f56b2addc2a50a971c43093509a60aed5638ad01e60725095e3"
+        },
+        {
+          "path": "api_v2/migrations/0039_alter_image_attribution.py",
+          "sha256": "da74ade32bda10db03621407cf30167e35e0659856800df93a7c670ccb320061"
+        },
+        {
+          "path": "api_v2/migrations/0044_remove_weapon_is_finesse_remove_weapon_is_heavy_and_more.py",
+          "sha256": "e23cbb55c67c5f477697cb56590d5ee36b8013ea19e1031e177dce3c52c62eea"
+        },
+        {
+          "path": "api_v2/migrations/0057_rename_alignmenttypedescription_alignmentdescription.py",
+          "sha256": "0d3505e5d44fe7abe3d22e1b48a705d0ec528ec5ebcd9ba2789d1cd67b4676c4"
+        },
+        {
+          "path": "api_v2/migrations/0046_characterclass_primary_abilities_and_more.py",
+          "sha256": "e5f1d5f66da3f6ea8b10d3592151318cdfb121cb51325897bc9dc92b6668e159"
+        },
+        {
+          "path": "api_v2/migrations/0049_add_document_display_name.py",
+          "sha256": "74a34f7da1eb03b703397f5bd28c9fd1b739af03336ff47c40818290ceb6a870"
+        },
+        {
+          "path": "api_v2/migrations/0079_rename_creatureaction_fields.py",
+          "sha256": "9afe505fd2aa2ff3f14c92b99ed9989e57a50945ec358809ee55a6ecb8a3b08f"
+        },
+        {
+          "path": "api_v2/migrations/0037_alter_creature_damage_vulnerabilities_display.py",
+          "sha256": "8c6fe16b469fc849bb0a8e7f723cd91789857367f050d036d97b213ce386a662"
+        },
+        {
+          "path": "api_v2/migrations/0067_item_attunement_detail.py",
+          "sha256": "428c891dc81d4f5f03738dbd1ca7c2c78dc34a827d54fbd3b726eef3cb2c8c01"
+        },
+        {
+          "path": "api_v2/migrations/0018_characterclass_caster_type.py",
+          "sha256": "043421e9f7bf12719331263758bfbda89a6795e34e0b381f9bfb2c7289cd44cd"
+        },
+        {
+          "path": "api_v2/migrations/0027_image.py",
+          "sha256": "a524f0e1203618b0a12e5ea61af71a737f6b62849f1949848240e25661bad344"
+        },
+        {
+          "path": "api_v2/migrations/0027_creature_armor_detail_item_armor_detail.py",
+          "sha256": "9cd92782d2e3c8b9ad0214a666d5e2469b557130f90e5c4c62e172a6c50eebfd"
+        },
+        {
+          "path": "api_v2/migrations/0028_condition_icon.py",
+          "sha256": "2ef4fbcd40881f226782361586b418a195d4b11e741dc1f42f97c25bc748637d"
+        },
+        {
+          "path": "api_v2/migrations/0074_alter_creature_challenge_rating.py",
+          "sha256": "4c49874b185e8f93495f61d5b08dfa43f76be9a31cdcf36634333e1e48205a42"
+        },
+        {
+          "path": "api_v2/migrations/0067_alter_rule_options.py",
+          "sha256": "b9810db85369e01b8b9d704d81e7072ea4b92059a2c195268ef4adb8bbf55e3f"
+        },
+        {
+          "path": "api_v2/migrations/0062_remove_speciestrait_id_speciestrait_key.py",
+          "sha256": "aee0fac2b29448169ecfb61cb53f1565385cb8c6c94b1c0ec0717caa6e800ffd"
+        },
+        {
+          "path": "api_v2/migrations/0077_alter_crossreference_options.py",
+          "sha256": "9220a032c30c3e8c24dec8be8ff30346340dac005115b73673dce47fca9eb94d"
+        },
+        {
+          "path": "api_v2/migrations/0014_environment_interior.py",
+          "sha256": "aa09edb81da2e21937f7b1d779a5f5b265db48a83a383ecdd88b298c0f822aee"
+        },
+        {
+          "path": "api_v2/migrations/0061_characterclass_desc_alter_abilitydescription_desc_and_more.py",
+          "sha256": "66a682e4ae0dc1a86dae4f134460a8367e31a6861f4fcf35f3ffa1f034589b06"
+        },
+        {
+          "path": "api_v2/migrations/0032_rename_published_at_document_publication_date.py",
+          "sha256": "25c745b0da6cfb229b1d89afd56b95b819176fa6873c18b5a1777ecc96572ac4"
+        },
+        {
+          "path": "api_v2/migrations/0001_initial.py",
+          "sha256": "eb76ebd237baab8f5c79fedbf70eae05416561f119a6be14243389eb1a55c890"
+        },
+        {
+          "path": "api_v2/migrations/0030_creatureaction_order.py",
+          "sha256": "12629e631f9b26273886a754aa2a0934865445d2ca63b01da50048a3e1df5afb"
+        },
+        {
+          "path": "api_v2/migrations/0036_image_alt_text.py",
+          "sha256": "2c2beea01903b3e2ad0355e0c0c8b744473a63b8a279ea835c426268b58e4a4f"
+        },
+        {
+          "path": "api_v2/migrations/0043_alter_weaponproperty_options_and_more.py",
+          "sha256": "dd30c15312af33a098eb9ff66fe7bd8b6faa33b9ebd2a9ae8aef91841ee65d2e"
+        },
+        {
+          "path": "api_v2/migrations/0038_creature_damage_immunities_display_and_more.py",
+          "sha256": "a04fdf8513bacab736791e2da18735d4b1f753b4855956fe445fb5cacd7c1ad6"
+        },
+        {
+          "path": "api_v2/migrations/0022_classfeatureitem_detail.py",
+          "sha256": "f89dfe163f1e651f0a548ad8141b4af50ae99e7a328e68e1ce43080568310486"
+        },
+        {
+          "path": "api_v2/migrations/0045_merge_20250520_0729.py",
+          "sha256": "9682a46103503a351c1075987f22206bdbc02bd176cda1c470f18986278dce7e"
+        },
+        {
+          "path": "api_v2/migrations/0055_remove_ability_desc_remove_skill_desc_and_more.py",
+          "sha256": "a42573a5e6ef1e1b0bc36e5186be82e8ba997a5bb535009f37589fc9e71cd6ea"
+        },
+        {
+          "path": "api_v2/migrations/0034_rename_racetrait_speciestrait_and_more.py",
+          "sha256": "5b9c574ca915ee210a73fced444ccf8bc40de6c7ef23a1d5e4756dd7b9b72fa0"
+        },
+        {
+          "path": "api_v2/migrations/0070_merge_20251130_2152.py",
+          "sha256": "9c1ec1827357c651027db3e7b9d6ec812ad7ac32df85ec7dff46b30aa89d932e"
+        },
+        {
+          "path": "api_v2/migrations/0054_remove_creaturetype_desc_creaturetypedescription.py",
+          "sha256": "c1e81845cd5c152adfa24c606ac779984a513f39675b57343788f45c66ed4309"
+        },
+        {
+          "path": "api_v2/migrations/0078_merge_staging_and_crossreference_chains.py",
+          "sha256": "4be0ffacb7a7e423a4d843f7f81428a6c72702bbe935ffebc2d0d0bf3ef1e836"
+        },
+        {
+          "path": "api_v2/migrations/0023_alter_classfeatureitem_detail.py",
+          "sha256": "d1860fdf52b4ce978b953d6c79572dcfdf50b998b6afe61499302eb4da5c3d9e"
+        },
+        {
+          "path": "api_v2/migrations/0038_image_attribution.py",
+          "sha256": "8f622d93670b5386590fc67b1ef4d15d6953307d2132771afeeafc591b2e80b3"
+        },
+        {
+          "path": "api_v2/migrations/0063_alter_classfeature_feature_type.py",
+          "sha256": "69d181741b8c8f07252595a0827d5b97cc72b01f16e4a7eeb490b88021ffb724"
+        },
+        {
+          "path": "api_v2/migrations/0058_delete_conditionconcept.py",
+          "sha256": "ee6f0acdad84a58277905d47aa5acd92597fd76cdbb1973dda8ef23603a5c444"
+        },
+        {
+          "path": "api_v2/migrations/0072_alter_item_options_remove_item_attunement_detail_and_more.py",
+          "sha256": "fdea8d3fb5faa65b88ffbffb83013feb105fa3668369c591623af9770f69a209"
+        },
+        {
+          "path": "api_v2/migrations/0030_merge_0028_condition_icon_0029_merge_20250407_1910.py",
+          "sha256": "f9ce117a8eda414443d9708df4a6f410c7b989a3c9f57dcab112a7d2d791e100"
+        },
+        {
+          "path": "api_v2/migrations/0025_creature_initiative_bonus.py",
+          "sha256": "2331066b8335dab6021d0a4f58556c7e9a7e94654dadf6a3c13978139ebf2cba"
+        },
+        {
+          "path": "api_v2/migrations/0051_merge_20250615_2056.py",
+          "sha256": "09e601a2381fda3c00ea8418f927e8300641657b8dc9525f8f0f7646e63aa498"
+        },
+        {
+          "path": "api_v2/tests/test_router.py",
+          "sha256": "686d00da8ed72af16e8fbfa82637a7ebfca7876d1f30c6b3e36a91d3b740324d"
+        },
+        {
+          "path": "api_v2/tests/approvaltests_config.json",
+          "sha256": "775f95424d57c80deca98265d353aa5dd65b8c54a1b0e62bb2afa45796fc1d4f"
+        },
+        {
+          "path": "api_v2/tests/test_objects.py",
+          "sha256": "26f757b508ca78ee16862e4ab0158f3a1ae8bd6d316a8ce47a045cd5adcb3d6d"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_environment_example.approved.json",
+          "sha256": "bd9a264728fbd76634b77bd60abaca201cc618c050a1d2acc957091c3a74e6f4"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_item_example.approved.json",
+          "sha256": "5cd9be4d375888e4c5355a0ce72e5125d8f516168315c84bd61bd24c5d07a805"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_skill_example.approved.json",
+          "sha256": "ecd76f9e7c2b02f2fa1169014bac43d14ce2970bbe32860f7e65f0f252a9b2a1"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_weapon_example.approved.json",
+          "sha256": "ab70d84f6646297200bb7794c5e074de77e46347f22cef83515bf7153bb18135"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_spell_cantrip_example.approved.json",
+          "sha256": "ffe13117f882701a282cca1bb84c296f6beee0dcc3859c8089ade0c6d2079f47"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_itemrarity_example.approved.json",
+          "sha256": "84fd6646630d4948721a1c67cd8ba5b45541c5f68438963e4236eab4179327a6"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_background_example.approved.json",
+          "sha256": "a011ab8a9c9e6792473c290693e20648370a0d751094f62ac0a8f5b08cc15bbd"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_subclass_example.approved.json",
+          "sha256": "d2b97dd44ef70c16f81d6d13874bafd43c2cf86c32b43d0cd3b70c3181e49e0c"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_creaturetype_example.approved.json",
+          "sha256": "65e64cfb15d14d4c91ee731bd483e9732579155e1fe7c686113aafe35ee0e03d"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_publisher_example.approved.json",
+          "sha256": "1b02a345f88de85d411ac0d3d8dd19ed3c20cd6c2c759b7b0d9b2f74ef4bc6c4"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_weaponproperties_mastery_filter.approved.json",
+          "sha256": "5c78d2008da8c432c84759e4b623e2662897fcd04a9d983fd30c681237598848"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_spell_wish.approved.json",
+          "sha256": "a2f913f8a3633731da69f08ead0e8b587dee5a876a1eeadc41118af9c27576ff"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_weaponproperties_standard_filter.approved.json",
+          "sha256": "4a041f7dcf1843da46f1e12283f153f29bbb0dab9ffaded27bbb5add0bf91d22"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_creature_guard_example.approved.json",
+          "sha256": "fb1ec112eb297841cb946822a830f36d27dc8d08d384cd866ae9c099c2818a21"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_item_category_example.approved.json",
+          "sha256": "67b0f7301dc3ac5ac795eddc94067f2c10d648a01f362739e5c3cb0b79d9c6de"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_size_example.approved.json",
+          "sha256": "7f8ff58eea7e1f6ac4e41a92987c10ceafea9f5899941cd89934712fa32b9b8c"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_damagetype_example.approved.json",
+          "sha256": "440bd56ea34455b0e59012521ac429a05fced63eb058f5e15c6a1aee0e390b6b"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_item_set_example.approved.json",
+          "sha256": "e49b1d86e21af8bee501202d84db5e5b61f30895c3d248ee52b458afe8b09578"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_armor_example.approved.json",
+          "sha256": "5239b1d4a048b762420a0b862527c7feeaa8eac899f01c5e7667f94f2e32554b"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_weaponproperty_mastery_example.approved.json",
+          "sha256": "d316f97ab477f4425e8febf7d96a2be716ce5e775086f2ff1be14faee00fc5f4"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_language_example.approved.json",
+          "sha256": "dd9963eab37575c14d94c450355932387e04041b8896d6faaa034daefa5f83b8"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_wish_example.approved.json",
+          "sha256": "d21cee79a073a3df3f0acf87caab99cf88e11367fa80641771c9e199778a7861"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_item_ranged_weapon_example.approved.json",
+          "sha256": "613727555aa24e9400ed23f70c4403ea755122309de69089694a14da77cb9beb"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_creature_ancient_example.approved.json",
+          "sha256": "bfdf2b1628ae09a0041ff37c555bebe973fe33d2b755f67fe5899eeb02fb4956"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_creatureset_example.approved.json",
+          "sha256": "69be48b5f2e9934bd25564d281c819c247a307c8c36509e74b3be97d2c043fb2"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_alignment_example.approved.json",
+          "sha256": "1a3fc820b9a2ae7d6b96ff8249bd499d2de2afbb3fc878795fa556ba7d485cc3"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_weaponproperty_standard_example.approved.json",
+          "sha256": "31e929641c04042fbf7fb7d6b72595a9f1a77f29ebf85fa3e9b996bf1c9fa010"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_species_example.approved.json",
+          "sha256": "e73ab752bf7348f2c0c04ea98bbb2840b9c75c9f9297bd832370084ee3480113"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_document_example.approved.json",
+          "sha256": "a904383700b0163b9c4fb6fd14d22331454fb7d7e502e3cdd0da756a6a725d17"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_item_armor_example.approved.json",
+          "sha256": "b8b7464259da4584e2a0f4765850dcf2734773222ed84c06862eb33c16ba6ad2"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_license_example.approved.json",
+          "sha256": "830e24f51a99713efb01c80e8b1664232fb87704bcdfcbe85742fe65391a32f8"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_ability_example.approved.json",
+          "sha256": "f557eb9dce1f9893050ee2f9e7eb137be587b468e6ebcfb104f1dced202285b4"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_feats_example.approved.json",
+          "sha256": "1bfd37f40f5bd40b063c1011ac29f902819f0d3d3b6f6335e8f284eaffd9ee32"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_races_example.approved.json",
+          "sha256": "53808769ff72b8eb7f406e27cdf853ddb21b96876f536444dcdb6303e967e38a"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_creature_goblin_example.approved.json",
+          "sha256": "984f0a6606c19c6f1ee1c05ed5455899dfe69fb096db4a66e21e68deed4819e3"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_spell_fireball.approved.json",
+          "sha256": "c14dde3eb30493f8b90d204624fc7b278711f271bd98ab66f5a712e6763c152b"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_condition_example.approved.json",
+          "sha256": "a8e5a8d0b0c8e6cf37b0219199a4305224b73dbc405502fe6e0cdd14c27c1cd1"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_gamesystem_example.approved.json",
+          "sha256": "85ee02a061c2260f290ae346144612a90d0cd7417c86991dba065a426f9d77b2"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_class_example.approved.json",
+          "sha256": "9e913755843269e06db18a2ad11cf36ac4e987b4fcb46d5d69779014b73d2906"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_item_melee_weapon_example.approved.json",
+          "sha256": "5c5098430b1426e58720c1f7d08dbca6a0431c4d883736ef0d2fb945eb51a59b"
+        },
+        {
+          "path": "api_v2/tests/responses/TestObjects.test_weapon_with_mastery_example.approved.json",
+          "sha256": "9886517d6d44bc77cfc93ad2e1eeac5deaeb605eada353854d483282e7ca4c96"
+        },
+        {
+          "path": "api_v2/management/commands/import.py",
+          "sha256": "7920403184efc6b19c7c378dbf414814759c90ef379bd23f69fbdc5afa26210f"
+        },
+        {
+          "path": "api_v2/management/commands/find_crossreference_candidates.py",
+          "sha256": "55fd09b75ed47a05152bcfb7724056814d12ad2261328cba6e45f25703c612ae"
+        },
+        {
+          "path": "api_v2/management/commands/export.py",
+          "sha256": "7f6f0062f457d33c22c2eb600326ed64eb615ea8d72a5c1d7fd475fb6a40d0c2"
+        },
+        {
+          "path": "api_v2/management/commands/delete_crossreferences.py",
+          "sha256": "491b715f70b9ea8dd1d0be99b1c0597736e771090f269fd6b28a9c95f0b56143"
+        },
+        {
+          "path": "api_v2/management/commands/apply_crossreferences.py",
+          "sha256": "f0148b4f4d97a40cc4043ccacd5ce8c47d2d14e32f6c933d2d67ed3f30d9648f"
+        },
+        {
+          "path": "api_v2/models/armor.py",
+          "sha256": "d2c4841fc220c4cd03214bee1efcc8dc034b8e63656dbb9ebd4a324ffd6a5639"
+        },
+        {
+          "path": "api_v2/models/service.py",
+          "sha256": "08e57ca4806a1f1faef29240b99c596b16f208a69800356bbebbf85c38a1bc1f"
+        },
+        {
+          "path": "api_v2/models/spell.py",
+          "sha256": "ef32af5a7b06959e201aed343ca39a883cc58dde84faf2a030e373100a73e6bb"
+        },
+        {
+          "path": "api_v2/models/enums.py",
+          "sha256": "5ed282aec65b6bcb5dad5cda71266c0028356277e02e62455a90cf25b1917229"
+        },
+        {
+          "path": "api_v2/models/species.py",
+          "sha256": "9ed1d599980c14d8a2ca498d274f52f991b50f24a890749e9b274372b3f8d7ea"
+        },
+        {
+          "path": "api_v2/models/creature.py",
+          "sha256": "b8552166da2b9d93e2c442356c89b06f411dbc4a8f2a277d14eb46d1e76a6900"
+        },
+        {
+          "path": "api_v2/models/object.py",
+          "sha256": "8aaaec0031cb89d674d05c7aa5c263841f8d22927140c51cb9e6575ca598e76a"
+        },
+        {
+          "path": "api_v2/models/alignment.py",
+          "sha256": "2c99589d24bfa535845540bcd6205d0b3eea67be6223ee1f32828955c00c2ca5"
+        },
+        {
+          "path": "api_v2/models/speed.py",
+          "sha256": "0bf5b5f5d7fad4f680e4ffff7ec88632117bb492b0b848501348eb084d1641b0"
+        },
+        {
+          "path": "api_v2/models/abstracts.py",
+          "sha256": "63355137f50d45435cae88866e64c6a13c80c60ca9e2fb118c36fd2cd0a2bd0e"
+        },
+        {
+          "path": "api_v2/models/background.py",
+          "sha256": "5d5b3dc47177c08be21ef011b0dc6d3f7f84712250493812e51e4436a30c5977"
+        },
+        {
+          "path": "api_v2/models/__init__.py",
+          "sha256": "70344ca8984ab508145176ee1522fe126fca43a3a1ab53b32d53326601c63607"
+        },
+        {
+          "path": "api_v2/models/characterclass.py",
+          "sha256": "cd801345448fb9e2e8c9f2ce2f3a4777b0cee085ca435b92d1f818a59398c63d"
+        },
+        {
+          "path": "api_v2/models/abilities.py",
+          "sha256": "94fc776226b11cb917d17b01fa5cc18975c48bfb876e097f28575af06dfcb6fe"
+        },
+        {
+          "path": "api_v2/models/size.py",
+          "sha256": "9363506c93a03e4599212d4eac9874b1ea7614ee140d06dc409666d9adb77ab9"
+        },
+        {
+          "path": "api_v2/models/weapon.py",
+          "sha256": "3b63f86c90f393874611bb7a6294e7c0c63aa9a6f660866321a743a229d9194b"
+        },
+        {
+          "path": "api_v2/models/condition.py",
+          "sha256": "c65561190bc0a62994c603ede2c19c784a57a1c2e4f28f6a76896fb31bd65bda"
+        },
+        {
+          "path": "api_v2/models/rule.py",
+          "sha256": "46eef136c7d2bbab7f85ae802daea5817b67ba34096b439ecc6722a792eb5bb6"
+        },
+        {
+          "path": "api_v2/models/crossreference.py",
+          "sha256": "8e818da2c8fe3c5d557fb650a796f654acf90b3c34d56a58a0f99e88d42d07a2"
+        },
+        {
+          "path": "api_v2/models/damagetype.py",
+          "sha256": "6529cc1408f80f9bc8e7da2567fae28e694c7870dbaa136da95886adda34fc75"
+        },
+        {
+          "path": "api_v2/models/document.py",
+          "sha256": "e8e7c4ef3fb710421146fe51eb7a90063168ffedd698d262f036740beec13c00"
+        },
+        {
+          "path": "api_v2/models/language.py",
+          "sha256": "ac68052ad8a5e8ed5908da361504296a4b3bca486c5162847bef544583efd057"
+        },
+        {
+          "path": "api_v2/models/environment.py",
+          "sha256": "c6a5e39a356ae9740cce021a62704c7a8e0c3e6f0300d126565106c5fac51960"
+        },
+        {
+          "path": "api_v2/models/feat.py",
+          "sha256": "63bf4f22662d7b7ad7f8451da2fdbe651f59aaa1a0509bdf0084a4b9fa660d91"
+        },
+        {
+          "path": "api_v2/models/image.py",
+          "sha256": "88b1462279ba8b6ad26000b65522e29c214694c9a9574e5a0c61175ad7066720"
+        },
+        {
+          "path": "api_v2/models/item.py",
+          "sha256": "5e1309b35c567520ff9ce4501aa1aa37d874d52e7a027416209f9d7fffe6a5da"
+        },
+        {
+          "path": "api_v2/serializers/service.py",
+          "sha256": "a7b5a479c8e16e4a83de5ff44ea1b9cf3e5d4c8d32626a003ee3de3a46636699"
+        },
+        {
+          "path": "api_v2/serializers/spell.py",
+          "sha256": "486d767b1d8d24ce0c19b97bd13d31f3574ce16abf5132514cc69ab07d12ab44"
+        },
+        {
+          "path": "api_v2/serializers/species.py",
+          "sha256": "096d9e85e1d4872ca8a0ea1c35dabbeb68f65f29621c44c325aa837ff9be9a9b"
+        },
+        {
+          "path": "api_v2/serializers/ability.py",
+          "sha256": "70a07f523a9b493bda64cb10ec9d4d6ca0f7b5b632a3c7dec2b67200bd3fca13"
+        },
+        {
+          "path": "api_v2/serializers/creature.py",
+          "sha256": "28e49062996001eaec76a51d1a0c0e09f5c16512f3df6307eda07d066c288e0e"
+        },
+        {
+          "path": "api_v2/serializers/alignment.py",
+          "sha256": "25b976ea62d6716b6b724143a48f5a7752fd1ee4aad0bc9d685c8641008d5448"
+        },
+        {
+          "path": "api_v2/serializers/abstracts.py",
+          "sha256": "f9d1f798eb1d85d6b35dcbe81b335383051a6fb917419c0951438a078b508d55"
+        },
+        {
+          "path": "api_v2/serializers/background.py",
+          "sha256": "05a1eaa0e382f66ced14c235776658808477a5dc905c6707ad93a1c9dd168098"
+        },
+        {
+          "path": "api_v2/serializers/__init__.py",
+          "sha256": "b73d3e30fdd85835b653a5e1cd8ded270a02ffad5ac6abe2288b4a4de82fb25a"
+        },
+        {
+          "path": "api_v2/serializers/characterclass.py",
+          "sha256": "69612a23db9eb47b741c953d3b09afa26d251041e692fec5b7e19f5aab47d403"
+        },
+        {
+          "path": "api_v2/serializers/size.py",
+          "sha256": "c1ca4ebf2687fad06a2afd265634c990c6795343f0c3ed33dd39e32a6fd6b4e1"
+        },
+        {
+          "path": "api_v2/serializers/condition.py",
+          "sha256": "b7260eaf3e83255c5d3489b761be723c3f5e00684a7edf31bae4e1c5386dbbfe"
+        },
+        {
+          "path": "api_v2/serializers/rule.py",
+          "sha256": "218ede09f233d9ead95fb50059b87f2520fdae77699be0d7ad530ce1e215198a"
+        },
+        {
+          "path": "api_v2/serializers/damagetype.py",
+          "sha256": "7e7053c369a0301a5239216da79aa066158077c0d34e4921ab1573dbc5db3747"
+        },
+        {
+          "path": "api_v2/serializers/document.py",
+          "sha256": "04a4a1298f0bb989b2be60afcbfa91d0b8de35aead3f8f86d135b3f676273fb3"
+        },
+        {
+          "path": "api_v2/serializers/language.py",
+          "sha256": "229f1c5da756dead6d09101327c5f94f48305ffd2e80fa24ac78336de9d934b0"
+        },
+        {
+          "path": "api_v2/serializers/environment.py",
+          "sha256": "0b964d403b89f8624245a2f03268b8eb90b5631a1e76071c3772f7b573557ad4"
+        },
+        {
+          "path": "api_v2/serializers/feat.py",
+          "sha256": "a1eade18b937b51bb6cdc10493d61db73330675a8c2564e2e70529c10eb2e6d7"
+        },
+        {
+          "path": "api_v2/serializers/image.py",
+          "sha256": "f9d10a647157c49513ac7e3ab65fb8939ce48e5f4b4cc22a17b1907ba487ccf8"
+        },
+        {
+          "path": "api_v2/serializers/item.py",
+          "sha256": "b4aeb068abb12f1f3fa28960e35931670f0a67fe4b141cd16ab716dc8e9995f0"
+        },
+        {
+          "path": "api_v2/views/weaponproperty.py",
+          "sha256": "c2ccf061db16a300764144b5ceaadfe3b75ed03eec61dd87be524ac422176e24"
+        },
+        {
+          "path": "api_v2/views/service.py",
+          "sha256": "9e6c64b5b0e2dbfbc49605de678cb8ab5e3f0e4404883b46b9569e0cd1363348"
+        },
+        {
+          "path": "api_v2/views/spell.py",
+          "sha256": "8cbb5e2663190c3fcd194bde5f3b3eff6f4f433071d8001e3da9e42405545cf8"
+        },
+        {
+          "path": "api_v2/views/species.py",
+          "sha256": "b3ef2d28f8a15b11c199dc8cccfcb33625a531fb196e4d922f7fad14676c050b"
+        },
+        {
+          "path": "api_v2/views/ability.py",
+          "sha256": "f4d1563e414f9f3ea469c2e81fbb2465eb720e8728ccb7689b99557fcaf3c24e"
+        },
+        {
+          "path": "api_v2/views/creature.py",
+          "sha256": "ffba59dec0307ecfa0f163f420b1442e9bf9f7bcf8eeaa03737a378ac90e92c6"
+        },
+        {
+          "path": "api_v2/views/alignment.py",
+          "sha256": "423e56c870d8473cd32472c4726f48904d8bd8f600d98c4aab681c5470935326"
+        },
+        {
+          "path": "api_v2/views/background.py",
+          "sha256": "5e055692e8d9ac7e9332ff9b1c26586c5caa5522fdc61b2c8c4b17b468edbbb7"
+        },
+        {
+          "path": "api_v2/views/__init__.py",
+          "sha256": "eb40c795ec05ba24b3bf77ef79f2747940ab5249960263d1aa306af09138394c"
+        },
+        {
+          "path": "api_v2/views/characterclass.py",
+          "sha256": "7613ef0d3f35b0965b7b76d9c3cd26fab3e1b74f850a524163b0e44e652a09ef"
+        },
+        {
+          "path": "api_v2/views/size.py",
+          "sha256": "11ee562fec5c63ed8a3fece5cbf1841d4df11022b81f4707209df278bb326ad7"
+        },
+        {
+          "path": "api_v2/views/condition.py",
+          "sha256": "fe42de7cdc0f299289112019362709ff4724df74b567a1c8dcd47fef4731d71c"
+        },
+        {
+          "path": "api_v2/views/rule.py",
+          "sha256": "c8fa034390bb81a4d672bb74dc7375274913a9b4903f2f2978cc41ede78aa7eb"
+        },
+        {
+          "path": "api_v2/views/damagetype.py",
+          "sha256": "4fd41cff8b4b56c929cb8f54de5873a9d40179919edf00af2c6381f3c693f7f6"
+        },
+        {
+          "path": "api_v2/views/document.py",
+          "sha256": "7a99f560a17c3f54e776b7e0c6b8eda32cb9e5cb85820939c41ef36b7cedb797"
+        },
+        {
+          "path": "api_v2/views/language.py",
+          "sha256": "d7d5e5fd764b693469018460658d86f621a80de2b1061211d5ec219382514c2e"
+        },
+        {
+          "path": "api_v2/views/environment.py",
+          "sha256": "032f09a72131f49e5540091023173b85d23b39301c965b11c0c7f40e64427822"
+        },
+        {
+          "path": "api_v2/views/enum.py",
+          "sha256": "5c0226705132306601aa68827ee99dd51bdec19b22a823cd3420fcad5d67af19"
+        },
+        {
+          "path": "api_v2/views/feat.py",
+          "sha256": "09eeba2c8bdd7a77cacfa9f381ad91af8ad52968333c1a10a31d40ed1d49fead"
+        },
+        {
+          "path": "api_v2/views/image.py",
+          "sha256": "0cdee2dba0d3937e38687b5bdf363e909c68e6819a2222dc8fbe297bded2f7b0"
+        },
+        {
+          "path": "api_v2/views/item.py",
+          "sha256": "447b40d5a979e97adc8689a33356a307c86cacda95b84caf2e232692ad8ed7eb"
+        },
+        {
+          "path": "api_v2/views/mixins/exclude_fields_mixin.py",
+          "sha256": "97eea36799fa945d20e343630443a2490e47810ec31617198f422ebabdf5bf9a"
+        },
+        {
+          "path": "api_v2/views/mixins/__init__.py",
+          "sha256": "77037069d727b7d5c998f36a0c48e13a34219915a3f37b78706905906861debd"
+        },
+        {
+          "path": "api_v2/views/mixins/eager_loading_mixin.py",
+          "sha256": "69c13a6f8f921ece964b1d10e17445d308993ffcf38a881f3f4f7e3b9cb543aa"
+        },
+        {
+          "path": "search/models.py",
+          "sha256": "04532e8b4b714ec517b7a529e523b07fa849e73097b5243253a92fc3eb32b598"
+        },
+        {
+          "path": "search/viewsets.py",
+          "sha256": "26ef75e1ebe0c8dd47844c00ef76357efb00c28d48a01b24c526e52666b300c3"
+        },
+        {
+          "path": "search/serializers.py",
+          "sha256": "b20c6cf3c0fdc4455b5bc422b79fecdf7bb05b7ba80b39c15beec683d8a2690d"
+        },
+        {
+          "path": "search/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "search/apps.py",
+          "sha256": "a21879333a488e1e5812a4885019e37f406ee160bb75e94b27b26f5707417230"
+        },
+        {
+          "path": "search/admin.py",
+          "sha256": "b2e328e31f08dc907100505521d13ee6a9ea67a240655d051120011ce49cfaf8"
+        },
+        {
+          "path": "search/tests.py",
+          "sha256": "ae125be9deebbfde8deb67358ea2feac2083ef2682b69d64a35f6ee4c21ede5b"
+        },
+        {
+          "path": "search/urls.py",
+          "sha256": "0fe5ba6b5f4b91d3cc3b7b32d7f03f20c0d2cba1aae0bc93dd8c3d3424d65b5a"
+        },
+        {
+          "path": "search/migrations/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "search/migrations/0001_initial.py",
+          "sha256": "ecf1fe77c03d1a0c5130a3f620627d8ef7cd2fd2ce7feccbf01356744a3d1fe7"
+        },
+        {
+          "path": "search/management/commands/buildindex.py",
+          "sha256": "7f619fd128ba8d91bcf95d8546be6acea60882d71ac32dfefb47012d2fda445e"
+        },
+        {
+          "path": "server/__init__.py",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "server/oas.py",
+          "sha256": "faa47d43d4b6d7cc6846bc1a961b99320c2dfdf6a7e3040838713ad6a5648e28"
+        },
+        {
+          "path": "server/settings.py",
+          "sha256": "98558053652db1a8c74ea5a8e6253dc1447f338260227caf322967f6ebd6f0b2"
+        },
+        {
+          "path": "server/urls.py",
+          "sha256": "eaa83555f424d1bab35f99b6ed253c00f3c6181426ad286b6879c110919bb3ee"
+        },
+        {
+          "path": "server/routers.py",
+          "sha256": "bc5a9c63109583d43f88d4d6a7ea8ec8c75faf1f1826cc366cc63133a8ea43b2"
+        },
+        {
+          "path": "server/middleware.py",
+          "sha256": "4bd2beaa8c71ba6a5dccc95d0d26e5f63a6576041a49090725abd3dd6b5459b7"
+        },
+        {
+          "path": "server/wsgi.py",
+          "sha256": "f720383efff2ff22428ad90073cc03dcffd8a299b2809e5f01963a2380423e81"
+        },
+        {
+          "path": "templates/rest_framework/api.html",
+          "sha256": "52b30f681a6d18c181ffa514699f8761b65a87b2feb4cc621315ae5f08f0fab1"
+        },
+        {
+          "path": "manage.py",
+          "sha256": "6d67ca53c884c1ca75f43d585461ba2709026493d0152afccdd19bcd1734676a"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "7c20630cbc565f4280aac94d394a29a89663c241c2c1a7cfecc76f64699b1c23"
+        },
+        {
+          "path": "uv.lock",
+          "sha256": "9952bc9997549e9ff0196a62c82e9070d6b35ef3463bf0128aa47aad9a2b6fef"
+        },
+        {
+          "path": "LICENSE.md",
+          "sha256": "c6e984d4409db4472b29fedf1afe712f91d2ba3693fc3f2fcddccab1f95631f0"
+        },
+        {
+          "path": "README.md",
+          "sha256": "7e2ac6817d93b34354eac6be3d93f7134785e13c73f257d68ef165fe9859dfb0"
+        },
+        {
+          "path": ".gitignore",
+          "sha256": "8b99ec92f04f52abf590f4a2b41a4fcfdef2761babfa00ffeeff7202ec06b68e"
+        },
+        {
+          "path": ".env.example",
+          "sha256": "79060b9b1d6cd2fcec263348cdf7a77b975481035394e48c4d464bc0d3e39208"
+        },
+        {
+          "path": ".dockerignore",
+          "sha256": "5b5b7b5bdef7fc95b7dac0922fec1127e24fbf7f81d1b82bfe3769e47222e46f"
+        }
+      ],
+      "excluded": [
+        ".git",
+        "AGENTS.md",
+        ".github",
+        "data (full corpus)",
+        "public/static artistic assets",
+        "upstream deployment and editor settings"
+      ]
+    },
+    {
+      "repository": "https://github.com/open5e/open5e",
+      "commit": "c75e81100f575c4f8d8615128f21c354ba3c9ce4",
+      "destination": "loreforge/web",
+      "archive_sha256": "f244ec2ded01150e4c310e108fa3c793f724a014dfa931af4db050876959f741",
+      "copied_files": [
+        {
+          "path": "app/app.vue",
+          "sha256": "73ca8fb39854daae4fa6273ebc3a5a51597ba666e857f041928d1ab720b4328f"
+        },
+        {
+          "path": "app/error.vue",
+          "sha256": "a239dc1b321148621a1e81cb1c2479f3e521e789a20d60289fa06db57a525361"
+        },
+        {
+          "path": "app/middleware/redirects.global.js",
+          "sha256": "62908596135f472155b20f413507783e95fb9e9c66e9816eac7d46af2872e11e"
+        },
+        {
+          "path": "app/middleware/legacy-slug.global.ts",
+          "sha256": "81e2e1abba67a4a55605087e0d43211cf92bd873a501ea1952f3110074f413d4"
+        },
+        {
+          "path": "app/middleware/set-sources-via-query-params.global.ts",
+          "sha256": "51b17a18f55fac9ababfab1fdacaacc1fb11f2935a93874b5277abd3cfcff9ae"
+        },
+        {
+          "path": "app/types/open5e-api.ts",
+          "sha256": "4d7435ad7d23b0c869fd5ce55d4c1f7058102a89e16071630cd4c700f60f164c"
+        },
+        {
+          "path": "app/types/filters.ts",
+          "sha256": "d62247df05ba3d34bc7e16d602fb4ccfde546c9ae3af6d09d67fb5fe9e5506e6"
+        },
+        {
+          "path": "app/types/monster.ts",
+          "sha256": "4d99f7ca8e76c71aba82521d3c0b99157acce3fd89e44769d89c354f229c2acc"
+        },
+        {
+          "path": "app/types/index.ts",
+          "sha256": "d6c93c57066167c4fbf62ee11c324a8e0c36c2c84715fbb0e279b9b5dbd6a1ec"
+        },
+        {
+          "path": "app/composables/useSourcesList.ts",
+          "sha256": "bd607da68d1357c079fab150d4861235f3dcd8a9ed92b03b4fd6ef5bb8f783e1"
+        },
+        {
+          "path": "app/composables/usePageMetadata.ts",
+          "sha256": "49be0d44ad58d9899767d4de901cfac1ac23fea96599e2279e407c4af5823ebd"
+        },
+        {
+          "path": "app/composables/useSortState.ts",
+          "sha256": "aecfa34e16c6994f0272e81ed668082180e4ca925db97307f25c26d4227c6ede"
+        },
+        {
+          "path": "app/composables/useFilterState.ts",
+          "sha256": "8ee88eb065994bd1734d380562b0c3fa3d43f57e5f88354d66ed14333ecf1ce5"
+        },
+        {
+          "path": "app/composables/useEncounter.ts",
+          "sha256": "c9317f0f8ba253c4476c532336fcb4eaff5bae1128613eef7d5fa286753771e4"
+        },
+        {
+          "path": "app/composables/useThemeSwitcher.ts",
+          "sha256": "b0c5bdd5d6c388806023d61a86b676ec0a574319353aa8e50e620e870028723a"
+        },
+        {
+          "path": "app/composables/useParty.ts",
+          "sha256": "ea0d01e596915f4265b89c1e26f85f88ebdcada462199ebb9898df3d00efaf8c"
+        },
+        {
+          "path": "app/composables/useFindOne.ts",
+          "sha256": "9c962d661425bc66087f67d9588d7e2baab9c4073e02bd9682603312dc166883"
+        },
+        {
+          "path": "app/composables/useSeoEntry.ts",
+          "sha256": "66b8d7bb95e9b1b9e90d5a0477b92462f98a184e5a2a8b4f8b824d8c73aa49c7"
+        },
+        {
+          "path": "app/composables/api.ts",
+          "sha256": "b2233d7784671ced4dcf0ad7924ac5b09bb56d781611b972df108aa3a612efae"
+        },
+        {
+          "path": "app/composables/useXPCalculator.ts",
+          "sha256": "90282d59765c0b594dc59dc99ab52986f9f1fa23b763ad158c3f05c0c9c7512f"
+        },
+        {
+          "path": "app/composables/useLinkPreview.ts",
+          "sha256": "d18a106e32ed1ebb8f4481d9bbb3973e4b358372f7d6a16afb8080e5155c6da3"
+        },
+        {
+          "path": "app/composables/useNotifications.ts",
+          "sha256": "01b70a6d7faa4198df4f2d185cd410a533e3a0f8fed1c7936d52406dc7b2b209"
+        },
+        {
+          "path": "app/composables/useFindPaginated.ts",
+          "sha256": "fcf55ba57572744632de5d8e252aeeb84098fada1a3cc6fb02c5b935bd998732"
+        },
+        {
+          "path": "app/composables/useBreakpoints.ts",
+          "sha256": "e0b72b0fc9037ed346ccd96339f0b264bc2da1c86189ccd7065a37bc2f2cf274"
+        },
+        {
+          "path": "app/composables/useBreadcrumbs.ts",
+          "sha256": "c168b90acc5862f87b25b239fa480e854bd9011ceca68f80e596ab88e80d7eab"
+        },
+        {
+          "path": "app/composables/useCatalog.ts",
+          "sha256": "df9c1b192018c1b83a273e9a200ff42aebef2fe184595b0dbc5a596091aab0df"
+        },
+        {
+          "path": "app/composables/useQueryParameter.ts",
+          "sha256": "f87823f19358d4956fb3a32fec04d240c5a92f5800ccb71134b8aa7c9edb3099"
+        },
+        {
+          "path": "app/composables/useSeoIndex.ts",
+          "sha256": "871b66846781fc3a14d9e7e490542210f4b87d5c19c892ff86e2599c27fe824e"
+        },
+        {
+          "path": "app/composables/useDiceRoller.ts",
+          "sha256": "2de9eddff763a4f697efaa4e6964e25e08bd2c9caa33f8c7d4f208fabca5801d"
+        },
+        {
+          "path": "app/plugins/vue-query.ts",
+          "sha256": "c36ff41392e923de1fd098fb3a67a8ecfa6684dd84228e45762a257240ac3623"
+        },
+        {
+          "path": "app/plugins/vue-gtm.client.ts",
+          "sha256": "61d5c899c71efe760b944731a378078b8d37eb836bad73a862a62a80b95165b2"
+        },
+        {
+          "path": "app/constants/monsters.ts",
+          "sha256": "14d5dfe4b1c9ec522e4ea2ffb06da533c01476b500b80e6cbdf6bb3edfaba6e7"
+        },
+        {
+          "path": "app/constants/magic-items.ts",
+          "sha256": "aeaf7736c14117fe00d3a22c1c298450bc2585acb2d9d09def81b8fa29cb5531"
+        },
+        {
+          "path": "app/constants/spells.ts",
+          "sha256": "940f8c9426babdb62f2ac86de9ec0120f023d57ccddacccd1b5e7f32d242b56e"
+        },
+        {
+          "path": "app/constants/index.ts",
+          "sha256": "7041a16d13cc86f6ffc6efbe060b0b84f33085c6eb061219efefa5500087b73a"
+        },
+        {
+          "path": "app/constants/equipment.ts",
+          "sha256": "041270ae5c8795c67d96d5b139f2df643f305ed5721ae5b06f05c51ac9184be7"
+        },
+        {
+          "path": "app/styles/typography.css",
+          "sha256": "615cd4ebac325003d2e7aa784ba57e3647cc90c46a9fa1b1ae1804c9d42a5154"
+        },
+        {
+          "path": "app/styles/tailwind.css",
+          "sha256": "6884293b016aa940c33ac7adf7f0a4bf88437b33f86b81bbc8af4410077e8413"
+        },
+        {
+          "path": "app/styles/forms.css",
+          "sha256": "cfb939184bb6849609ebc16547370dfd244c1c78e432d7d8326ac109b9120c64"
+        },
+        {
+          "path": "app/styles/base.css",
+          "sha256": "5382516ed917cf1b8d4424db39c9881f53246da98d970b38f92ba402d8805cd8"
+        },
+        {
+          "path": "app/components/MdViewer.vue",
+          "sha256": "b89f362ee04dc26173277291008b4dfbead4e1fed8dfb47e59d8fdc7297db32e"
+        },
+        {
+          "path": "app/components/EncounterBuilderMonsterSearch.vue",
+          "sha256": "491ceba16471d85c1e538f777dcc21d1f2400ed21c7589f03bebef87436f9163"
+        },
+        {
+          "path": "app/components/ThemeSwitcher.vue",
+          "sha256": "077b15d71df99915c37f72857576416143db3a4c4b4b3dca302433aec53f7b84"
+        },
+        {
+          "path": "app/components/ToolButtonReportIssue.vue",
+          "sha256": "31fa2a9796c32d5d63f0006c38668071a56997a2241f92f80c9e6663b4faef3b"
+        },
+        {
+          "path": "app/components/PageNotifications.vue",
+          "sha256": "87f7881cf5cfd403e789d6366549de0f62b524be97e85fd4ce0de6c5a845b886"
+        },
+        {
+          "path": "app/components/ResultsTableRow.vue",
+          "sha256": "73eb54b74c81c553d5281b1c2c672b6fc54eae227d88a8e04a41f1d70d968d8b"
+        },
+        {
+          "path": "app/components/ClassTable.vue",
+          "sha256": "495bdf134e440f3ce193e44df03e589a9bba5bf9b67bca23126cd789a12a451d"
+        },
+        {
+          "path": "app/components/ToolBar.vue",
+          "sha256": "494340cdbb86b8cd64504e26767ac6040027e5cf5196d9a771639cc343923c94"
+        },
+        {
+          "path": "app/components/EncounterBuilderPartyBuilder.vue",
+          "sha256": "fd092b81cf1092f81385b7e9db31891f307b6eb89e8093f884aff060bc184e67"
+        },
+        {
+          "path": "app/components/InlineRoller.global.vue",
+          "sha256": "65fba94340e7e62ecb20b7235ffbcd4e892977380ee96a8975f4a1647320747d"
+        },
+        {
+          "path": "app/components/SearchResult.vue",
+          "sha256": "8004e4cc5b375a17695d73254555cd828eb46bbaad3093aabc7ba6b8fdfb6016"
+        },
+        {
+          "path": "app/components/ResultsTable.vue",
+          "sha256": "e7d06366b03e5c56cb3514b44eb43c626fbcf14e91e0a204ea3ec086b5e6dbc5"
+        },
+        {
+          "path": "app/components/ToolButtonEncounterBuilder.vue",
+          "sha256": "c7cae7ffa3cfab5d83ff2b18deef1a801fd062312896c59aac786c6d887e3a62"
+        },
+        {
+          "path": "app/components/SearchBar.vue",
+          "sha256": "0c2b06454604487327939fd16aa3ae314a81173abbc84714bd997d813ddcd884"
+        },
+        {
+          "path": "app/components/SourceTag.vue",
+          "sha256": "984533d930bdfcfcbb895928b5e75852c3ca3cdf43bdd86f711c9b4eb76d43e0"
+        },
+        {
+          "path": "app/components/MonsterAbilities.vue",
+          "sha256": "deec5b8ba5b72a20ef806cb6413c4f13291f53ad5102b19f3b06f56c0fd483ca"
+        },
+        {
+          "path": "app/components/EncounterBuilderAddButton.vue",
+          "sha256": "5de0fd17ccd3864c37be790a0db9e02a42f70630692a6f1fcbbc23f071aafa7f"
+        },
+        {
+          "path": "app/components/CrossLink.global.vue",
+          "sha256": "dc8f3737fb5857654fc2d6a91302f42039ad4eadb3a7a2d8673e63a18eb42d2b"
+        },
+        {
+          "path": "app/components/ToolBarToggle.vue",
+          "sha256": "b5a461160a6cb2a6aa3d2bbe97d6dfcfa63799157c7e0a3158cccd81f96d21a6"
+        },
+        {
+          "path": "app/components/ResultsTableFilter.vue",
+          "sha256": "e87ed144668e9f2b3c80998edb82480413b258b235df2019602169579efcca72"
+        },
+        {
+          "path": "app/components/ToolButton.vue",
+          "sha256": "82fbf028756ba559cd42c3585e32b59009b3ef657d754e217dde6f6ffbe698c1"
+        },
+        {
+          "path": "app/components/AppFooter.vue",
+          "sha256": "286172565522a32dbd3f1aa2b97db152e9f6e3dc4d47a5c37f77fee22e16626d"
+        },
+        {
+          "path": "app/components/ResultsTableHeader.vue",
+          "sha256": "c3f6e7c548ae760e13035e00971a5c68414f60938926fae340c008f47b50bb56"
+        },
+        {
+          "path": "app/components/ModalReportIssue.vue",
+          "sha256": "8ea29df74580c647fa69a540a8b70a9cece7f5ee3d55f9283fedc852550e22c3"
+        },
+        {
+          "path": "app/components/CrossLinkPreview.vue",
+          "sha256": "1982e4d56de4e01ab9b05ed0b0a8ed07b2cd9ff41e53c1d2bc0ccbd176e44d29"
+        },
+        {
+          "path": "app/components/SidebarToggle.vue",
+          "sha256": "eccd25abc3168f1c9227516c002c283e2608e4fd437e2f648d6a812d8c6397a0"
+        },
+        {
+          "path": "app/components/BreadcrumbLinks.vue",
+          "sha256": "88855072d575d457c2cc5830aba6a433dd0724bb0be7fe7a30d9261480da3b6a"
+        },
+        {
+          "path": "app/components/ToolButtonSourceSelector.vue",
+          "sha256": "2519bfa6ea3ef383865f98ab4d762d5cad889fc91aa5079660df94c1de90cda0"
+        },
+        {
+          "path": "app/components/ResultsTablePaginatorButton.vue",
+          "sha256": "ef01ab1f2a4914984e3e0e3398c18f60f3e6753f8f9d81645044ee174428b998"
+        },
+        {
+          "path": "app/components/EncounterBuilder.vue",
+          "sha256": "9bcaa6d1a7babd4c78856c3bc0d89343bc0282fd97eb07e42a5f9635cf0cab9b"
+        },
+        {
+          "path": "app/components/Navigation.vue",
+          "sha256": "735ca5ff835cf292474302907a1ca9e3fba4b753b23b405364506b213291476b"
+        },
+        {
+          "path": "app/components/Modal.vue",
+          "sha256": "776cc7d4ee38ee687301a2db8f77b2cd52b6a56db9b03cd93eabdc1154f3f97c"
+        },
+        {
+          "path": "app/components/ResultsTablePaginator.vue",
+          "sha256": "43b8bc11e93c3cbc9ecdb761ae31c5db627d61f8d5a5081b4b89d4e632dc7dc4"
+        },
+        {
+          "path": "app/components/ModalSourceSelector.vue",
+          "sha256": "ca2d26056cc7b24309a93a04c2fe78c81a04756ae7ccced6ecfd36f999262751"
+        },
+        {
+          "path": "app/components/TabBar.vue",
+          "sha256": "66437214646f8a97094f668aa1d74347b9c21c682420bc38b4f037f6195a429c"
+        },
+        {
+          "path": "app/components/EncounterBuilderSummary.vue",
+          "sha256": "dcb93dcfd13e33e7d6822d9f5d48d95555c4bb5f311b429f76566c3fb96d9fce"
+        },
+        {
+          "path": "app/layouts/default.vue",
+          "sha256": "f15f8c5bd4346e11a6197bb28a12ceb9c1534a7b8d35f7d3be91bb9f8f94e8d4"
+        },
+        {
+          "path": "app/pages/index.vue",
+          "sha256": "e973e796331bb3a46ee94ae679e66e80434d065bf95c040b5346e5bde49224dd"
+        },
+        {
+          "path": "app/pages/sections/[...catchall].vue",
+          "sha256": "ff4212c449ad16a25a927d47bce1213d9cd69f54870082265d9a4e1c73095dc4"
+        },
+        {
+          "path": "app/pages/classes/index.vue",
+          "sha256": "34f43082a606fc487046b36f840dc4fb614f013fb05892e0c402f7dc4f034d43"
+        },
+        {
+          "path": "app/pages/classes/[className]/index.vue",
+          "sha256": "2aec0ff5eb7240387e63ae1ca503be861490bf4f13210dc827b82765d63034f2"
+        },
+        {
+          "path": "app/pages/classes/[className]/[subclass].vue",
+          "sha256": "278dcc3e341c80a144ba3b4dacdfa5967c4e01ab33b01b9fee71466e30b5eb9c"
+        },
+        {
+          "path": "app/pages/feats/index.vue",
+          "sha256": "5d99c7995ed926e93129ca8d394c459b699abf27bd003feea2c6d8c096b26624"
+        },
+        {
+          "path": "app/pages/feats/[id].vue",
+          "sha256": "81d02f3654ebd0940afe976b68ccc22943a4b1355b40f42d95d95ca63c0b3721"
+        },
+        {
+          "path": "app/pages/species/index.vue",
+          "sha256": "fb38388c1e36ee092e5050078410356755b226f7b1ce0b2dd46bbb81e66c3518"
+        },
+        {
+          "path": "app/pages/species/[id].vue",
+          "sha256": "c8dfc054d2471986d088ca092e78effea8f905dd3525f00324a1158fdb3a6c28"
+        },
+        {
+          "path": "app/pages/magic-items/index.vue",
+          "sha256": "ed906b1e5f7bb62f6f4ffefd4f28ce6fd5a16c7a8881854f9a79b620cf2bce48"
+        },
+        {
+          "path": "app/pages/magic-items/[id].vue",
+          "sha256": "1e404ba6bae20d5b140b9ff6ec631feeb0e1259abbae4050573c6cba2302a989"
+        },
+        {
+          "path": "app/pages/search/index.vue",
+          "sha256": "fca422ed4dc0722970bb8e6ecb4734f4575e9d6a155ca91f29fe26f9a32718c2"
+        },
+        {
+          "path": "app/pages/backgrounds/index.vue",
+          "sha256": "bfa61daaad38833bb759e5d41a23bf50aff0492fb1de44b8a974881af8d54498"
+        },
+        {
+          "path": "app/pages/backgrounds/[id].vue",
+          "sha256": "dcd2a252be0b80fca104d681d1f823376d181a489de762d243b22199e839ef34"
+        },
+        {
+          "path": "app/pages/[contentType]/[slug]/choose.vue",
+          "sha256": "d473f2bd1e88b13e8e1762fb86aba0175abe0d781098475e2eb71817c607de91"
+        },
+        {
+          "path": "app/pages/conditions/index.vue",
+          "sha256": "2364aa1456466a46b73d2cb555c0fb5fdc7e2e5d340abb14151f7a95270d4807"
+        },
+        {
+          "path": "app/pages/conditions/[id].vue",
+          "sha256": "62daf5efec4dc7486a6e37c4c053454c3c315f6a760643fa3563364c2bd756d3"
+        },
+        {
+          "path": "app/pages/spells/index.vue",
+          "sha256": "d334a13c57678dc4632fd841a1f4334e77f4531f4794b2a41c4898a5ee6de1df"
+        },
+        {
+          "path": "app/pages/spells/[id].vue",
+          "sha256": "d5134503749a89f2793975e221ddd8ddd7a1386ea7dc780d4f024b7c4447d312"
+        },
+        {
+          "path": "app/pages/rules/index.vue",
+          "sha256": "4bce749fae64c721858afc9d318b60a19371ed10a3372fa3a9bef3ee288e792b"
+        },
+        {
+          "path": "app/pages/rules/[id].vue",
+          "sha256": "b8be757b24c250730f4fe1c4b1abf26af0e30c6dedd25d43d9ab163c499d434a"
+        },
+        {
+          "path": "app/pages/sources/index.vue",
+          "sha256": "f5ccc6691c1bde50b7b33b3961bdc711845282d0b6cef579c24698ff80c6fdad"
+        },
+        {
+          "path": "app/pages/sources/[id].vue",
+          "sha256": "f5214dc9a7b9bbec67febf422738009b233875a4a4a9cdd7a11a0facdafd70ae"
+        },
+        {
+          "path": "app/pages/legal/index.vue",
+          "sha256": "d222fe2ca229210817213d3f987032629dac3b49f7979229c0cc0ae4dbf0d1ce"
+        },
+        {
+          "path": "app/pages/legal/[id].vue",
+          "sha256": "46a48327dcf631b55291d52afc245186b4fc9b3f0997b2a3ac5ccd31fe0f797b"
+        },
+        {
+          "path": "app/pages/api-docs/index.vue",
+          "sha256": "8655f8e7357559c1ea00a085d29f37098bf930eb415a8698faba0509591e8d65"
+        },
+        {
+          "path": "app/pages/equipment/index.vue",
+          "sha256": "31be1d310349179d67f0a0184fc3e03c812fdf3a790a317c081207f62da3eece"
+        },
+        {
+          "path": "app/pages/equipment/[id].vue",
+          "sha256": "789c908637efe61280b8939033cf234511ea361b3e6c69a86c5521a21a1ecd29"
+        },
+        {
+          "path": "app/pages/monsters/index.vue",
+          "sha256": "a45e782f2d276d68cfd1161eeb3403047fe9ce433c1c4c999636e2687a589d57"
+        },
+        {
+          "path": "app/pages/monsters/[id].vue",
+          "sha256": "a0cb5023a12fd994004d2190b7700d4433d188feb22092ccb22d3771f596e87d"
+        },
+        {
+          "path": "app/helpers/titleCaseToKebabCase.ts",
+          "sha256": "aebca6db07a98626e85b5b49da11ff2c4f429f5d836e2026a49207e79c62c88a"
+        },
+        {
+          "path": "app/helpers/sortDocumentsByPublisher.ts",
+          "sha256": "e27d66e751703a197f849bcbbfe52ac3db5f498dc839e1ac54a1dcce55d64a63"
+        },
+        {
+          "path": "app/helpers/buildSearchResultUrl.ts",
+          "sha256": "77ae57f9bab754214be9d5a4c19d3fe1dd469dadc070a94aea7dfe66d928997f"
+        },
+        {
+          "path": "app/helpers/formatModifier.ts",
+          "sha256": "9edc49fc7eb61d92054c3d39759e9079b07c0e6ff7b9e5e262d50fc272f39064"
+        },
+        {
+          "path": "app/helpers/snakeToTitleCase.ts",
+          "sha256": "e68d9b50eb83e7a5f1dc5ab6365123173b728803a4ce45484398813af507f65e"
+        },
+        {
+          "path": "app/helpers/formatAbilityName.ts",
+          "sha256": "238bd8efc58a621154996e1175164f7635fd36776718664f6ee6bda2c69dd8da"
+        },
+        {
+          "path": "app/helpers/legacyContentRoutes.ts",
+          "sha256": "948f46edec42f28abbbff9891544b2dc4c7e870ca517f1748e9d7523fad9a1be"
+        },
+        {
+          "path": "app/helpers/formatSearchResultSubtitle.ts",
+          "sha256": "c4216d3dfe3424764f231162873aaf90ff5d1332b76fe471fd3696ddaf23f66f"
+        },
+        {
+          "path": "app/helpers/sortGameSystems.ts",
+          "sha256": "1b2c2595f9bb44bd52fb0f46449a7c95233f7876c9a4b86331b571eb2771ec2b"
+        },
+        {
+          "path": "app/helpers/parseChallengeRating.ts",
+          "sha256": "ff1a23ab7d8ab97586e40628786271daa79411c4707f1f17f8175babaf85d3f3"
+        },
+        {
+          "path": "app/helpers/formatSpellSubtitle.ts",
+          "sha256": "153d9244c77907a4e88355358f0599599cc2b7e5f3199963f182305cd0e45d6b"
+        },
+        {
+          "path": "app/helpers/index.ts",
+          "sha256": "8a8e52caa2a22721662640be0670ce5dcaf863dc4899b1fea5c5fe3a591a01cf"
+        },
+        {
+          "path": "app/helpers/resultsTableConfig/feats.ts",
+          "sha256": "d628c69dc6e62f5d6b4364e18e31d7c8c1a5e5e9eef65a36762b51c4b20073fb"
+        },
+        {
+          "path": "app/helpers/resultsTableConfig/classes.ts",
+          "sha256": "2c23e5c9b7f5dac19053f2684ff1c3a66878eec3ec6bbabd980616f4e3593946"
+        },
+        {
+          "path": "app/helpers/resultsTableConfig/monsters.ts",
+          "sha256": "70e5cb5b3da1a47bf0c63bd5c8f6869623a07b58d604fd46f17de4d5ba71ed77"
+        },
+        {
+          "path": "app/helpers/resultsTableConfig/magicItems.ts",
+          "sha256": "ea3335961abc8c240ecf5ff8de8804cc5ae8164c31042a104126b24bf8052611"
+        },
+        {
+          "path": "app/helpers/resultsTableConfig/conditions.ts",
+          "sha256": "4630b6bac10d881b57cd568f01eb657decedf81c4ab9e9ac2693aa745cbf8549"
+        },
+        {
+          "path": "app/helpers/resultsTableConfig/rules.ts",
+          "sha256": "69761b52676c3b13d38dba580af2c1478c522d892d5f44c59712b3d8d368a083"
+        },
+        {
+          "path": "app/helpers/resultsTableConfig/spells.ts",
+          "sha256": "360e46f7a220e2eba7366144e9fc8754794eb97e55a382f0736ef678b1aae9db"
+        },
+        {
+          "path": "app/helpers/resultsTableConfig/index.ts",
+          "sha256": "2d44eff899490f6bee0e51f10e754c940867b158a9c07e42bbbe6339b9bd9325"
+        },
+        {
+          "path": "app/helpers/resultsTableConfig/species.ts",
+          "sha256": "2ed480c0c3ecb502d4b717b0e8dcefcf9d909357de1355f8753eda7cf8e3542f"
+        },
+        {
+          "path": "app/helpers/resultsTableConfig/backgrounds.ts",
+          "sha256": "927b16dc1f11c8ecb3d49efc0307a79fed9d0927969f7be756d3653a9aca2a42"
+        },
+        {
+          "path": "app/helpers/resultsTableConfig/equipment.ts",
+          "sha256": "7877d7a4cd84abdb747fe67b20c3cf9848e43255ce6dedcbe4694a388118d228"
+        },
+        {
+          "path": "server/tsconfig.json",
+          "sha256": "148ee843731cf4d4f538a2b5b0a470a4a2759db95f85dec7b45e67d662d1e815"
+        },
+        {
+          "path": "tests/unit/components/TabBar.test.tsx",
+          "sha256": "1e2619f8fe1547481e455c5590facd43c0a02680baa1393277e29609376520cd"
+        },
+        {
+          "path": "tests/unit/components/EncounterSummary.test.tsx",
+          "sha256": "3022628021d1d5327abe65bbb875257ffec1d566facc1ebe925d76826ba23678"
+        },
+        {
+          "path": "tests/unit/components/EncounterBuilder.test.tsx",
+          "sha256": "9cba517e7dd51498ca254573ad0fc29ff53f28612e6160dc173d9f1ab56eb28a"
+        },
+        {
+          "path": "tests/unit/pages/magic-items.test.tsx",
+          "sha256": "d94ffb1142b253a93d4940f08a933e4417ad3c5980307811528e8078516df792"
+        },
+        {
+          "path": "tests/unit/pages/feat.test.tsx",
+          "sha256": "64ac0adbda7e777d2d6db382906e19a873b67f061d515353b721f1b8b69a6ac1"
+        },
+        {
+          "path": "tests/unit/pages/monsters.test.tsx",
+          "sha256": "6b5a088817fe9f764e72551e3848edc79f12352bfc079662c10930cc868b1e02"
+        },
+        {
+          "path": "tests/unit/pages/classes.test.tsx",
+          "sha256": "557bb56a40233faefb0688a06b97f9ee458bae371bf39f5ff02c355417c37739"
+        },
+        {
+          "path": "tests/unit/pages/feats.test.tsx",
+          "sha256": "aef7d536eee69b41e71bc5640984766699ecdbf481e5c8a5da1b9404b4fff1c4"
+        },
+        {
+          "path": "tests/unit/pages/background.test.tsx",
+          "sha256": "5d63c71f0a20d527d92b21fb5c3a98ab049e7785f1a5dcd2d689fd13c8cdb8e9"
+        },
+        {
+          "path": "tests/unit/pages/spells.test.tsx",
+          "sha256": "488cbf4ef2e83112866d7df2472838449262aa8cc7e345f382c8c4e4e4bc52c6"
+        },
+        {
+          "path": "tests/unit/pages/magic-item.test.tsx",
+          "sha256": "5bff0df753d8b9aa4113233814a64988a8d5ceae60e650b82db975d9478734e9"
+        },
+        {
+          "path": "tests/unit/pages/species.test.tsx",
+          "sha256": "fdb5175ce71d74f3a3bd12027aed03107a92143fb3a3c36db29a37426a7219bb"
+        },
+        {
+          "path": "tests/unit/pages/monster.test.tsx",
+          "sha256": "2eb4b710d15f3283adb80c27b9f4cbb2f7abef60eb4b27a63d8e56c604ffc682"
+        },
+        {
+          "path": "tests/unit/pages/species-plural.test.tsx",
+          "sha256": "1235f058439e1358387828fc53e939a3a0106694f4eb78709d78d819bb8dd61f"
+        },
+        {
+          "path": "tests/unit/pages/backgrounds.test.tsx",
+          "sha256": "341109e565414b354c28a2e729cde89e7488f25428f91e8a3d98f41d293f05c9"
+        },
+        {
+          "path": "tests/unit/pages/condition.test.tsx",
+          "sha256": "d4f6b772eef8a6f093d8337a9b60bbe5ba557a1f654b0cfdeb13b547f196eb13"
+        },
+        {
+          "path": "tests/unit/pages/spell.test.tsx",
+          "sha256": "6f08ce2d934ee7d0f6cb38d45c2fb23abc66acbe556747f8708e7327c47dde48"
+        },
+        {
+          "path": "tests/unit/pages/conditions.test.tsx",
+          "sha256": "dc895b1a4eb48faa9e7395ef7c619e30f39db8e81f26ecec162ff8ec12d7d02e"
+        },
+        {
+          "path": "tests/unit/pages/class.test.tsx",
+          "sha256": "63a91a6b24b7aa1d1cb544ab10d2b97cb7c9437aa4f104c15218c7fbc4fed58e"
+        },
+        {
+          "path": "tests/unit/helpers/sortGameSystems.test.ts",
+          "sha256": "45d88c080b4b20ad2f1902ad658dac7f16c149b45243c1a24ec3befeffacbcb7"
+        },
+        {
+          "path": "tests/unit/helpers/legacyContentRoutes.test.ts",
+          "sha256": "ef5911cd267638d7ddc8d7eff5abec92b5d387bce4e1062187381b76b278efcc"
+        },
+        {
+          "path": "nuxt.config.ts",
+          "sha256": "034a348804bbdb97e914ffe11b38abffbfe71cfbc6360a4ea85d266bc22ea9a2"
+        },
+        {
+          "path": "package.json",
+          "sha256": "e0847f555c11b9ecf592c8f8176aeaecf8d41c2e9319814219bfb79f142cdca2"
+        },
+        {
+          "path": "package-lock.json",
+          "sha256": "dc319f13189d3f7abfdc3f9927b3a4abc5b524a78173a8c92049a87d613af5f0"
+        },
+        {
+          "path": "tsconfig.json",
+          "sha256": "e36a3f84bcfb848b343f84ef38962de222309245c234f6336ccf97598d2c9ce9"
+        },
+        {
+          "path": "vitest.config.ts",
+          "sha256": "8f36a004238cf6406cb30447223076dc1574fd8196fe0935be65468bf6598f51"
+        },
+        {
+          "path": "tailwind.config.ts",
+          "sha256": "1ea724a810a5f418c702c1ccdebe4ae36acb37ec26b0186e0a868eb4b01baf6d"
+        },
+        {
+          "path": "eslint.config.mjs",
+          "sha256": "2f5eed8a76c8b856b0ae3119d3f5dad2eaecdd2ba9c5f140929f75781115eab7"
+        },
+        {
+          "path": "LICENSE.md",
+          "sha256": "82ae245b7a5878bb8e136795f64db286868fa0e9baeb5ca4bca1f992cad22b7b"
+        },
+        {
+          "path": "README.md",
+          "sha256": "4d596d27fbc06f1b49be0eff674feaaa6782c8729525aa606ea31681786b0f35"
+        },
+        {
+          "path": ".gitignore",
+          "sha256": "cf01480d417f22f72f59dd4e171022b52f14f9cf9ed1fe5a217f7d3b06faf567"
+        },
+        {
+          "path": ".editorconfig",
+          "sha256": "8944c61f67d481cc963b92d0524b97225732dd8a8efcdd3d00190c5c63e1ed31"
+        },
+        {
+          "path": "example.env",
+          "sha256": "42b3fa220e804985229e4726f8425b293d31ee3dd16c7189a5038d88e7010e53"
+        }
+      ],
+      "excluded": [
+        ".git",
+        "AGENTS.md",
+        ".github",
+        "data (full corpus)",
+        "public/static artistic assets",
+        "upstream deployment and editor settings"
+      ]
+    }
+  ]
+}

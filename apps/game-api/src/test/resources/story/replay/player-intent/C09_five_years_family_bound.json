@@ -1,0 +1,317 @@
+{
+  "caseId": "C09_five_years_family_bound",
+  "sourceEvidence": {
+    "kind": "GENERALIZED_FROM_OBSERVED_SUBMITTED_ACTION",
+    "sourceSample": "S036/601",
+    "historicalInputMode": "UNKNOWN",
+    "simulationInputMode": "TEXT_NO_CHOICE_ID",
+    "prestateConfidence": "RECONSTRUCTED_FROM_NEIGHBOR_TURNS",
+    "transformations": "原 WANYAO 场景移植到官方玄墟界妖族轨道，保留通玄境、五年、五岁孩童、已迁居和分居关系；不验证旧世界专属规则。",
+    "notHistoricalReplay": true,
+    "variant": "official progression binding corrected before comparative rerun; intent and facts unchanged"
+  },
+  "initialState": {
+    "schemaVersion": 2,
+    "saveId": "reviewed-C09_five_years_family",
+    "turnNumber": 600,
+    "status": "ACTIVE",
+    "worldTime": {
+      "year": 20,
+      "day": 10,
+      "phase": "MORNING"
+    },
+    "coreState": {
+      "currentLocationRef": "region:xuanxu:qingqi",
+      "currentLocationName": "青岐州半山木屋",
+      "condition": "通玄境，能教授基础吐纳，已迁居",
+      "lifeGoal": "探索并积累修行本领"
+    },
+    "trustedProjection": {
+      "creationContract": {
+        "worldBinding": {
+          "packageId": "XUANXU",
+          "revision": 2,
+          "nameSnapshot": "玄墟界",
+          "premiseSnapshot": "仙路真假难辨，众生在未知中求取自己的道路。",
+          "openingRegionRef": "region:xuanxu:qingqi"
+        },
+        "identity": {
+          "protagonistName": "行舟",
+          "genderCode": "MALE",
+          "raceId": "race:xuanxu:yao",
+          "raceNameSnapshot": "妖族"
+        },
+        "origin": {
+          "summary": "妖族修行者，已有成年女儿及外孙女。",
+          "establishedFacts": [],
+          "openHooks": [],
+          "startingEntityRefs": []
+        },
+        "opening": {
+          "locationRef": "region:xuanxu:qingqi",
+          "situation": "妖族修行者，已有成年女儿及外孙女。"
+        },
+        "realmBinding": {
+          "scaleId": "realm-scale:xuanxu",
+          "scaleRevision": 1,
+          "startingRankKey": "L1",
+          "startingPhase": "EARLY"
+        }
+      },
+      "playPreference": {
+        "focus": [
+          "EXPLORATION",
+          "RELATIONSHIP"
+        ],
+        "combatFrequency": "BALANCED",
+        "pace": "BALANCED",
+        "guidance": "LIGHT",
+        "additionalNote": "",
+        "updatedAt": "2026-09-06T00:00:00Z"
+      },
+      "cultivationSystem": {
+        "systemId": "realm-scale:xuanxu",
+        "schemaVersion": 1,
+        "name": "玄墟界公共境界",
+        "summary": "世界包固定的三族八境公共标尺。",
+        "race": "妖族",
+        "recommendedStartStageId": "realm:xuanxu:yao:l1",
+        "stages": [
+          {
+            "stageId": "realm:xuanxu:yao:l1",
+            "order": 1,
+            "name": "开智",
+            "description": "灵智稳定，开始主动吐纳并认识自身本相。",
+            "aliases": [
+              "启智"
+            ],
+            "allowedNextStageIds": [
+              "realm:xuanxu:yao:l2"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:yao:l2",
+            "order": 2,
+            "name": "淬身",
+            "description": "以灵力反复淬炼本相肉身与血脉。",
+            "aliases": [
+              "炼体"
+            ],
+            "allowedNextStageIds": [
+              "realm:xuanxu:yao:l3"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:yao:l3",
+            "order": 3,
+            "name": "妖丹",
+            "description": "血脉与妖力凝成妖丹，建立稳定力量核心。",
+            "aliases": [],
+            "allowedNextStageIds": [
+              "realm:xuanxu:yao:l4"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:yao:l4",
+            "order": 4,
+            "name": "化形",
+            "description": "本相与人形能够稳定转换，灵智和妖力完成一次蜕变。",
+            "aliases": [],
+            "allowedNextStageIds": [
+              "realm:xuanxu:yao:l5"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:yao:l5",
+            "order": 5,
+            "name": "祖血",
+            "description": "追溯并唤醒血脉深处的远古印记。",
+            "aliases": [
+              "返祖"
+            ],
+            "allowedNextStageIds": [
+              "realm:xuanxu:yao:l6"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:yao:l6",
+            "order": 6,
+            "name": "真身",
+            "description": "本相蜕变为承载完整道行的真身。",
+            "aliases": [],
+            "allowedNextStageIds": [
+              "realm:xuanxu:yao:l7"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:yao:l7",
+            "order": 7,
+            "name": "通玄",
+            "description": "血脉、本相与天地法理贯通。",
+            "aliases": [],
+            "allowedNextStageIds": [
+              "realm:xuanxu:yao:l8"
+            ]
+          },
+          {
+            "stageId": "realm:xuanxu:yao:l8",
+            "order": 8,
+            "name": "归真",
+            "description": "本相、祖血与自身道路圆满归一。",
+            "aliases": [],
+            "allowedNextStageIds": []
+          }
+        ],
+        "confirmation": {
+          "source": "WORLD_PACKAGE_FIXED",
+          "confirmedAt": "2026-09-06T00:00:00Z"
+        }
+      },
+      "protagonistCultivation": {
+        "systemId": "realm-scale:xuanxu",
+        "currentStageId": "realm:xuanxu:yao:l7",
+        "phase": "EARLY",
+        "progressMarks": 0,
+        "requiredProgressMarks": 2,
+        "progressNote": "通玄境，能教授基础吐纳，已迁居"
+      },
+      "worldFacts": [],
+      "knowledge": []
+    },
+    "scene": {
+      "title": "当前处境",
+      "narrative": "行舟是已有通玄境修为的妖族祖辈，已教授成年女儿基础吐纳。女儿带五岁女儿一起随行舟迁到灵气山地，三人已实际住进修整好的半山木屋。成年女儿和五岁外孙女刚开始系统修炼。女婿仍在城中任职，没有随迁，女儿对此有顾虑。",
+      "situation": "行舟是已有通玄境修为的妖族祖辈，已教授成年女儿基础吐纳。女儿带五岁女儿一起随行舟迁到灵气山地，三人已实际住进修整好的半山木屋。成年女儿和五岁外孙女刚开始系统修炼。女婿仍在城中任职，没有随迁，女儿对此有顾虑。",
+      "pendingDecision": null,
+      "choices": []
+    }
+  },
+  "initialSummary": "行舟是已有通玄境修为的妖族祖辈，已教授成年女儿基础吐纳。女儿带五岁女儿一起随行舟迁到灵气山地，三人已实际住进修整好的半山木屋。成年女儿和五岁外孙女刚开始系统修炼。女婿仍在城中任职，没有随迁，女儿对此有顾虑。",
+  "entities": [
+    {
+      "id": "entity:case:daughter",
+      "type": "CHARACTER",
+      "name": "长女",
+      "status": "有明确近况",
+      "visible": true,
+      "summary": "成年女儿，初学吐纳，对留城丈夫有牵挂",
+      "attributes": {
+        "lastKnownLocation": "青岐州半山木屋",
+        "identity": "成年女儿，初学吐纳，对留城丈夫有牵挂",
+        "_trusted": {
+          "lifecycle": "ACTIVE",
+          "relationship": {
+            "label": "父女",
+            "changeReason": "模拟前态已确认关系"
+          }
+        }
+      },
+      "firstTurn": 0,
+      "lastChangedTurn": 1
+    },
+    {
+      "id": "entity:case:child",
+      "type": "CHARACTER",
+      "name": "外孙女",
+      "status": "有明确近况",
+      "visible": true,
+      "summary": "五岁的外孙女，刚学基础吐纳",
+      "attributes": {
+        "lastKnownLocation": "青岐州半山木屋",
+        "identity": "五岁的外孙女，刚学基础吐纳",
+        "_trusted": {
+          "lifecycle": "ACTIVE",
+          "relationship": {
+            "label": "祖孙",
+            "changeReason": "模拟前态已确认关系"
+          }
+        },
+        "ageYears": 5
+      },
+      "firstTurn": 0,
+      "lastChangedTurn": 1
+    },
+    {
+      "id": "entity:case:son",
+      "type": "CHARACTER",
+      "name": "女婿",
+      "status": "有明确近况",
+      "visible": true,
+      "summary": "成年女婿，留城任职，没有随迁",
+      "attributes": {
+        "lastKnownLocation": "青岐州城中",
+        "identity": "成年女婿，留城任职，没有随迁",
+        "_trusted": {
+          "lifecycle": "ACTIVE",
+          "relationship": {
+            "label": "姻亲",
+            "changeReason": "模拟前态已确认关系"
+          }
+        }
+      },
+      "firstTurn": 0,
+      "lastChangedTurn": 1
+    },
+    {
+      "id": "entity:case:teach",
+      "type": "ABILITY",
+      "name": "基础吐纳教习",
+      "status": "已知",
+      "visible": true,
+      "summary": "能亲自示范并教授初学者",
+      "attributes": {
+        "_trusted": {
+          "abilityState": "KNOWN"
+        }
+      },
+      "firstTurn": 0,
+      "lastChangedTurn": 1
+    },
+    {
+      "id": "entity:case:hut",
+      "type": "ITEM",
+      "name": "木屋使用权",
+      "status": "三人已入住",
+      "visible": true,
+      "summary": "已修整并入住的半山居处",
+      "attributes": {
+        "_trusted": {
+          "quantity": {
+            "known": true,
+            "value": 1
+          },
+          "custody": {
+            "holderType": "LOCATION",
+            "holderRef": "region:xuanxu:qingqi"
+          }
+        }
+      },
+      "firstTurn": 0,
+      "lastChangedTurn": 1
+    }
+  ],
+  "memories": [
+    {
+      "id": "memory:case:prior",
+      "memoryType": "KEY_EVENT",
+      "title": "已确认前情",
+      "summary": "行舟是已有通玄境修为的妖族祖辈，已教授成年女儿基础吐纳。女儿带五岁女儿一起随行舟迁到灵气山地，三人已实际住进修整好的半山木屋。成年女儿和五岁外孙女刚开始系统修炼。女婿仍在城中任职，没有随迁，女儿对此有顾虑。",
+      "occurredTurn": 600,
+      "worldTime": 47944,
+      "importance": "KEY"
+    }
+  ],
+  "history": [
+    {
+      "turnNumber": 600,
+      "playerAction": "完成此前已记录的行动。",
+      "narrative": "行舟是已有通玄境修为的妖族祖辈，已教授成年女儿基础吐纳。女儿带五岁女儿一起随行舟迁到灵气山地，三人已实际住进修整好的半山木屋。成年女儿和五岁外孙女刚开始系统修炼。女婿仍在城中任职，没有随迁，女儿对此有顾虑。",
+      "choices": [],
+      "statePatch": {},
+      "worldTimeBefore": 47944,
+      "worldTimeAfter": 47944
+    }
+  ],
+  "action": "就按照现在的安排这样一起修炼五年。",
+  "choiceId": null
+}

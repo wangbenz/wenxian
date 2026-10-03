@@ -1,0 +1,10 @@
+{
+  "replayId": "C11_journey_then_inventory",
+  "initialCaseId": "C11_multi_step_journey_bound",
+  "followupActions": [
+    {
+      "action": "停下整理药囊，清点补益丹、疗伤丹、药膏和药材，不再炼制或用药。",
+      "choiceId": null
+    }
+  ]
+}

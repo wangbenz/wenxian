@@ -1,0 +1,644 @@
+{
+  "format": "adventure-1",
+  "id": "paper-journey",
+  "title": "一束草的去处",
+  "goal": "取到旧驿亭的路引，决定赶船或留宿。70分钟后渡船离开；如何准备与取舍，由你决定。",
+  "opening": "你站在药圃栅门外，带着小剪和纸坊便条，知道自己的路引封存在旧驿亭里。渡船还会等70分钟。\n\n程叔照料着三株成熟七星草，水槽正在漏水。三步外地上有一枚松脱木塞，缺口距你四步；药畦在六步外。怎样取得纸料需要与他商量。\n\n纸坊距此12分钟，沈师傅愿替持便条者加工这批材料：仔细制纸30分钟得两张，赶制10分钟得一张；每张护身符另需10分钟。他只有两份符墨。纸坊再走8分钟到驿亭，前廊有单发普通弩箭机关，后坡绕行要18分钟。你会控物术、天眼术、火弹术，学过护身符的激发短诀，但尚未学过制符。",
+  "authorNotes": "这是原创连续试玩。分钟数、产量和服务承诺只用于本局，不宣称来自原著。程叔愿合理商量取一株，修槽是可讨论的人情，不强制所有行动同一解法。沈师傅确会制纸及制作护身符，角色协助不等于自动学会制符。术法物品的效果以开物定义为准。其他合理尝试可讨论；未声明的资产产出不能假装入账。不得把未来计划当成已经赶路、加工或用符。",
+  "startPlace": "garden",
+  "suggestions": [
+    "向程叔说明取料来意，商量只剪一株",
+    "询问 DM：仔细制纸和赶制会怎样影响后面的准备？",
+    "查看木塞、水槽和药畦，想想自己的本领能做什么"
+  ],
+  "items": {
+    "shears": {
+      "name": "剪草小剪",
+      "unit": "件",
+      "reference": ""
+    },
+    "note": {
+      "name": "纸坊便条",
+      "unit": "张",
+      "reference": ""
+    },
+    "living-grass": {
+      "name": "成熟七星草",
+      "unit": "株",
+      "reference": "xianxia_plant-seven-star-grass"
+    },
+    "grass": {
+      "name": "七星草纸料",
+      "unit": "束",
+      "reference": "xianxia_plant-seven-star-grass"
+    },
+    "paper": {
+      "name": "空白符纸",
+      "unit": "张",
+      "reference": "xianxia_material-blank-talisman-paper"
+    },
+    "ink": {
+      "name": "合用符墨",
+      "unit": "份",
+      "reference": ""
+    },
+    "brush": {
+      "name": "符师的符笔",
+      "unit": "支",
+      "reference": "xianxia_tool-talisman-brush"
+    },
+    "protection": {
+      "name": "护身符",
+      "unit": "张",
+      "reference": "xianxia_talisman-protection"
+    },
+    "pass": {
+      "name": "封存路引",
+      "unit": "枚",
+      "reference": ""
+    }
+  },
+  "places": {
+    "garden": {
+      "name": "药圃栅门",
+      "description": "程叔、三株成熟草、漏水木槽。木塞距主角三步，槽口四步，草畦六步，均为直接距离。门未锁，采收许可尚待交谈。",
+      "exits": {
+        "workshop": 12
+      }
+    },
+    "workshop": {
+      "name": "溪口纸坊",
+      "description": "沈师傅会制纸、制护身符。两份符墨、一支完好符笔，出产归玩家；工艺时间和产量见约定。玩家自由选数量与是否继续。",
+      "exits": {
+        "garden": 12,
+        "station": 8
+      }
+    },
+    "station": {
+      "name": "旧驿亭",
+      "description": "路引在亭内封匣中。前廊几步即过，踏板触发一支普通弩箭，没有第二发。后坡路牌标明绕行18分钟，可安全入亭。渡口距亭3分钟，船夫等到开场起第70分钟。",
+      "exits": {
+        "workshop": 8
+      }
+    },
+    "ferry": {
+      "name": "渡船上",
+      "description": "已交验路引登船，渡船启程；本段旅程在此收束，不自动替玩家选择下一段行程。",
+      "exits": {}
+    }
+  },
+  "flags": {
+    "permission": {
+      "name": "采收约定",
+      "values": [
+        "尚未谈妥",
+        "获准取一株"
+      ],
+      "initial": "尚未谈妥"
+    },
+    "inlet": {
+      "name": "水槽",
+      "values": [
+        "漏水",
+        "已修好"
+      ],
+      "initial": "漏水"
+    },
+    "workshop": {
+      "name": "加工约定",
+      "values": [
+        "尚未说明",
+        "符师已同意"
+      ],
+      "initial": "尚未说明"
+    },
+    "ward": {
+      "name": "本轮护光",
+      "values": [
+        "未激发",
+        "已激发"
+      ],
+      "initial": "未激发"
+    },
+    "entrance": {
+      "name": "驿亭入口",
+      "values": [
+        "尚未通过",
+        "已通过"
+      ],
+      "initial": "尚未通过"
+    },
+    "ending": {
+      "name": "此行结果",
+      "values": [
+        "尚未决定",
+        "赶上渡船",
+        "留宿驿亭",
+        "放下此行"
+      ],
+      "initial": "尚未决定"
+    }
+  },
+  "stock": {
+    "PLAYER": {
+      "shears": 1,
+      "note": 1,
+      "living-grass": 0,
+      "grass": 0,
+      "paper": 0,
+      "ink": 0,
+      "brush": 0,
+      "protection": 0,
+      "pass": 0
+    },
+    "GARDEN": {
+      "shears": 0,
+      "note": 0,
+      "living-grass": 3,
+      "grass": 0,
+      "paper": 0,
+      "ink": 0,
+      "brush": 0,
+      "protection": 0,
+      "pass": 0
+    },
+    "WORKSHOP": {
+      "shears": 0,
+      "note": 0,
+      "living-grass": 0,
+      "grass": 0,
+      "paper": 0,
+      "ink": 2,
+      "brush": 1,
+      "protection": 0,
+      "pass": 0
+    },
+    "STATION": {
+      "shears": 0,
+      "note": 0,
+      "living-grass": 0,
+      "grass": 0,
+      "paper": 0,
+      "ink": 0,
+      "brush": 0,
+      "protection": 0,
+      "pass": 1
+    },
+    "BOAT": {
+      "shears": 0,
+      "note": 0,
+      "living-grass": 0,
+      "grass": 0,
+      "paper": 0,
+      "ink": 0,
+      "brush": 0,
+      "protection": 0,
+      "pass": 0
+    },
+    "USED": {
+      "shears": 0,
+      "note": 0,
+      "living-grass": 0,
+      "grass": 0,
+      "paper": 0,
+      "ink": 0,
+      "brush": 0,
+      "protection": 0,
+      "pass": 0
+    }
+  },
+  "abilities": [
+    "xianxia_spell-object-control",
+    "xianxia_spell-heaven-eye",
+    "xianxia_spell-fire-bolt"
+  ],
+  "references": [
+    {
+      "resource": "rules",
+      "key": "xianxia_place-herb-garden"
+    },
+    {
+      "resource": "items",
+      "key": "xianxia_plant-seven-star-grass"
+    },
+    {
+      "resource": "spells",
+      "key": "xianxia_spell-object-control"
+    },
+    {
+      "resource": "spells",
+      "key": "xianxia_spell-heaven-eye"
+    },
+    {
+      "resource": "spells",
+      "key": "xianxia_spell-fire-bolt"
+    },
+    {
+      "resource": "magicitems",
+      "key": "xianxia_talisman-protection"
+    },
+    {
+      "resource": "items",
+      "key": "xianxia_material-blank-talisman-paper"
+    },
+    {
+      "resource": "rules",
+      "key": "xianxia_item-class-spiritual-talisman"
+    },
+    {
+      "resource": "magicitems",
+      "key": "xianxia_tool-talisman-brush"
+    }
+  ],
+  "operations": {
+    "permission": {
+      "name": "谈妥采收",
+      "description": "仅在程叔实际同意取一株时记录；便条本身不等于许可。",
+      "place": "garden",
+      "minutes": 0,
+      "inputs": [],
+      "outputs": [],
+      "requires": {},
+      "changes": {
+        "permission": "获准取一株"
+      },
+      "references": [],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "repair": {
+      "name": "修好引水槽",
+      "description": "仅在实际完成修补后记录。手工或术法由玩家选择；术法条件需查开物。",
+      "place": "garden",
+      "minutes": 2,
+      "inputs": [],
+      "outputs": [],
+      "requires": {},
+      "changes": {
+        "inlet": "已修好"
+      },
+      "references": [],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "harvest": {
+      "name": "采得一束纸料",
+      "description": "实际剪下一株可用部分并随身带走。产量是一株一束的本场景约定。",
+      "place": "garden",
+      "minutes": 3,
+      "inputs": [
+        {
+          "holder": "GARDEN",
+          "item": "living-grass",
+          "amount": 1
+        }
+      ],
+      "outputs": [
+        {
+          "holder": "PLAYER",
+          "item": "grass",
+          "amount": 1
+        }
+      ],
+      "requires": {
+        "permission": "获准取一株"
+      },
+      "changes": {},
+      "references": [
+        "xianxia_plant-seven-star-grass",
+        "xianxia_place-herb-garden"
+      ],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "commission": {
+      "name": "谈妥加工",
+      "description": "沈师傅愿按便条教这一回，代为制纸和制符，用自己两份符墨；不额外加任务。仅在实际谈妥后记录。",
+      "place": "workshop",
+      "minutes": 1,
+      "inputs": [],
+      "outputs": [],
+      "requires": {},
+      "changes": {
+        "workshop": "符师已同意"
+      },
+      "references": [],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "paper-careful": {
+      "name": "仔细制纸",
+      "description": "沈师傅用本坊工艺加工一束，30分钟得两张纸；这是本批次约定，不是通用公式。须玩家选择。 这是符师已承诺的服务，玩家明确选定且符师实际开始履行即可；不要求额外重复一遍口头确认。",
+      "place": "workshop",
+      "minutes": 30,
+      "inputs": [
+        {
+          "holder": "PLAYER",
+          "item": "grass",
+          "amount": 1
+        }
+      ],
+      "outputs": [
+        {
+          "holder": "PLAYER",
+          "item": "paper",
+          "amount": 2
+        }
+      ],
+      "requires": {},
+      "changes": {
+        "workshop": "符师已同意"
+      },
+      "references": [
+        "xianxia_plant-seven-star-grass",
+        "xianxia_material-blank-talisman-paper"
+      ],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "paper-quick": {
+      "name": "赶制符纸",
+      "description": "沈师傅加工一束，10分钟得一张完好纸；减少产量节省时间。须玩家选择。 这是符师已承诺的服务，玩家明确选定且符师实际开始履行即可；不要求额外重复一遍口头确认。",
+      "place": "workshop",
+      "minutes": 10,
+      "inputs": [
+        {
+          "holder": "PLAYER",
+          "item": "grass",
+          "amount": 1
+        }
+      ],
+      "outputs": [
+        {
+          "holder": "PLAYER",
+          "item": "paper",
+          "amount": 1
+        }
+      ],
+      "requires": {},
+      "changes": {
+        "workshop": "符师已同意"
+      },
+      "references": [
+        "xianxia_plant-seven-star-grass",
+        "xianxia_material-blank-talisman-paper"
+      ],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "craft-protection": {
+      "name": "请符师制一张护身符",
+      "description": "沈师傅已掌握制法并持有完好符笔，消耗玩家一张纸和坊中一份符墨，花10分钟，成品交玩家。仅在完成后记录；玩家未因此学会制符。 这是符师已承诺的服务，玩家明确选定且符师实际开始履行即可；不要求额外重复一遍口头确认。",
+      "place": "workshop",
+      "minutes": 10,
+      "inputs": [
+        {
+          "holder": "PLAYER",
+          "item": "paper",
+          "amount": 1
+        },
+        {
+          "holder": "WORKSHOP",
+          "item": "ink",
+          "amount": 1
+        }
+      ],
+      "outputs": [
+        {
+          "holder": "PLAYER",
+          "item": "protection",
+          "amount": 1
+        }
+      ],
+      "requires": {},
+      "changes": {
+        "workshop": "符师已同意"
+      },
+      "references": [
+        "xianxia_material-blank-talisman-paper",
+        "xianxia_item-class-spiritual-talisman",
+        "xianxia_tool-talisman-brush",
+        "xianxia_talisman-protection"
+      ],
+      "maxUses": 2,
+      "beforeMinute": 0
+    },
+    "activate-protection": {
+      "name": "激发一张护身符",
+      "description": "须玩家明确施用并由DM查开物确认发动成立。有效时段按实际定义判断；提问不流逝游戏时间，不把短效留成跨长时段永久效果。",
+      "place": "station",
+      "minutes": 0,
+      "inputs": [
+        {
+          "holder": "PLAYER",
+          "item": "protection",
+          "amount": 1
+        }
+      ],
+      "outputs": [
+        {
+          "holder": "USED",
+          "item": "protection",
+          "amount": 1
+        }
+      ],
+      "requires": {},
+      "changes": {
+        "ward": "已激发"
+      },
+      "references": [
+        "xianxia_talisman-protection"
+      ],
+      "maxUses": 2,
+      "beforeMinute": 0
+    },
+    "short-passage": {
+      "name": "穿过前廊",
+      "description": "前廊几步即过，机关射出一支普通弩箭。仅记录本轮已激发护光且确实挡住后的通过，不自动替主角用符。",
+      "place": "station",
+      "minutes": 1,
+      "inputs": [],
+      "outputs": [],
+      "requires": {
+        "ward": "已激发",
+        "entrance": "尚未通过"
+      },
+      "changes": {
+        "ward": "未激发",
+        "entrance": "已通过"
+      },
+      "references": [
+        "xianxia_talisman-protection"
+      ],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "detour": {
+      "name": "绕后坡入亭",
+      "description": "沿路牌走后坡，18分钟，无弩箭，保留现有成符。",
+      "place": "station",
+      "minutes": 18,
+      "inputs": [],
+      "outputs": [],
+      "requires": {
+        "entrance": "尚未通过"
+      },
+      "changes": {
+        "entrance": "已通过"
+      },
+      "references": [],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "retrieve": {
+      "name": "取得封存路引",
+      "description": "实际进入后取出属于主角的路引，无重复一份。",
+      "place": "station",
+      "minutes": 1,
+      "inputs": [
+        {
+          "holder": "STATION",
+          "item": "pass",
+          "amount": 1
+        }
+      ],
+      "outputs": [
+        {
+          "holder": "PLAYER",
+          "item": "pass",
+          "amount": 1
+        }
+      ],
+      "requires": {
+        "entrance": "已通过"
+      },
+      "changes": {},
+      "references": [],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "depart": {
+      "name": "交验路引登船",
+      "description": "从驿亭到渡口并交验路引，3分钟；船夫只等到开场起第70分钟，须玩家明确选择离开。",
+      "place": "station",
+      "minutes": 3,
+      "inputs": [
+        {
+          "holder": "PLAYER",
+          "item": "pass",
+          "amount": 1
+        }
+      ],
+      "outputs": [
+        {
+          "holder": "BOAT",
+          "item": "pass",
+          "amount": 1
+        }
+      ],
+      "requires": {
+        "entrance": "已通过"
+      },
+      "changes": {
+        "ending": "赶上渡船"
+      },
+      "references": [],
+      "maxUses": 1,
+      "beforeMinute": 70,
+      "arrival": "ferry"
+    },
+    "stay": {
+      "name": "持路引留宿",
+      "description": "主角实际持有路引后决定留宿；保留现有材料成品，不凭空发奖励。",
+      "place": "station",
+      "minutes": 0,
+      "inputs": [
+        {
+          "holder": "PLAYER",
+          "item": "pass",
+          "amount": 1
+        }
+      ],
+      "outputs": [
+        {
+          "holder": "PLAYER",
+          "item": "pass",
+          "amount": 1
+        }
+      ],
+      "requires": {},
+      "changes": {
+        "ending": "留宿驿亭"
+      },
+      "references": [],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "abandon-garden": {
+      "name": "放下此行",
+      "description": "仅在玩家明确决定结束时记录，不删除物品或历史。",
+      "place": "garden",
+      "minutes": 0,
+      "inputs": [],
+      "outputs": [],
+      "requires": {},
+      "changes": {
+        "ending": "放下此行"
+      },
+      "references": [],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "abandon-workshop": {
+      "name": "放下此行",
+      "description": "仅在玩家明确决定结束时记录，不删除物品或历史。",
+      "place": "workshop",
+      "minutes": 0,
+      "inputs": [],
+      "outputs": [],
+      "requires": {},
+      "changes": {
+        "ending": "放下此行"
+      },
+      "references": [],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "abandon-station": {
+      "name": "放下此行",
+      "description": "仅在玩家明确决定结束时记录，不删除物品或历史。",
+      "place": "station",
+      "minutes": 0,
+      "inputs": [],
+      "outputs": [],
+      "requires": {},
+      "changes": {
+        "ending": "放下此行"
+      },
+      "references": [],
+      "maxUses": 1,
+      "beforeMinute": 0
+    },
+    "other-entry": {
+      "name": "以另一种办法进入驿亭",
+      "description": "只有玩家提出的另一种办法确实绕过、解除机关或形成可行路径并已实际进入时记录。尝试、打算或猜测不等于成功。若用术法须查开物并列实际施法，不能为了省材料无条件宣布通过。",
+      "place": "station",
+      "minutes": 1,
+      "inputs": [],
+      "outputs": [],
+      "requires": {
+        "entrance": "尚未通过"
+      },
+      "changes": {
+        "entrance": "已通过"
+      },
+      "references": [],
+      "maxUses": 1,
+      "beforeMinute": 0
+    }
+  },
+  "endingFlag": "ending",
+  "ephemeralFlags": [
+    "ward"
+  ]
+}

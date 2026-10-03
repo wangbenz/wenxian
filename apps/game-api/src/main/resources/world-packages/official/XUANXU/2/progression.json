@@ -1,0 +1,67 @@
+{
+  "systems": [
+    {
+      "systemId": "realm-scale:xuanxu",
+      "revision": 1,
+      "kind": "LINEAR_TIERED",
+      "displayName": "玄墟界主修境界",
+      "completion": {
+        "position": "TRACK_END",
+        "unlocks": "player-confirmed-ending-v1"
+      },
+      "steps": [
+        {"stepId": "phase:xuanxu:early", "order": 1, "name": "初期"},
+        {"stepId": "phase:xuanxu:middle", "order": 2, "name": "中期"},
+        {"stepId": "phase:xuanxu:late", "order": 3, "name": "后期"},
+        {"stepId": "phase:xuanxu:perfect", "order": 4, "name": "圆满"}
+      ],
+      "tracks": [
+        {
+          "trackId": "track:xuanxu:human",
+          "identityRefs": ["race:xuanxu:human"],
+          "start": {"stageRef": "realm:xuanxu:human:l1", "stepRef": "phase:xuanxu:early"},
+          "stages": [
+            {"stageId": "realm:xuanxu:human:l1", "order": 1, "comparisonTier": 1, "name": "炼气", "description": "引气入体，建立最初的灵力循环。", "capabilityBoundary": "能够感知并有限运用灵气，仍惧凡俗兵刃与环境危险。", "aliases": ["练气"]},
+            {"stageId": "realm:xuanxu:human:l2", "order": 2, "comparisonTier": 2, "name": "筑基", "description": "稳固道基，使灵力运行脱离短暂吐纳。", "capabilityBoundary": "可持续施展基础术法并明显超越凡俗体能，但仍不能长期御空。", "aliases": []},
+            {"stageId": "realm:xuanxu:human:l3", "order": 3, "comparisonTier": 3, "name": "金丹", "description": "精气神凝为金丹，修行进入稳定内循环。", "capabilityBoundary": "灵力储备与术法强度跃升，可短时御器远行，仍受肉身重创威胁。", "aliases": []},
+            {"stageId": "realm:xuanxu:human:l4", "order": 4, "comparisonTier": 4, "name": "元婴", "description": "金丹蜕变为元婴，神识与生命形态进一步稳固。", "capabilityBoundary": "神识可远探并承受更强术法反噬，但元婴出窍并非无风险。", "aliases": []},
+            {"stageId": "realm:xuanxu:human:l5", "order": 5, "comparisonTier": 5, "name": "化神", "description": "元婴与神识相融，能够更直接感应天地法理。", "capabilityBoundary": "可大范围御使灵力并形成个人术法领域雏形，仍不能随意改写天地规则。", "aliases": []},
+            {"stageId": "realm:xuanxu:human:l6", "order": 6, "comparisonTier": 6, "name": "炼虚", "description": "以自身之道触及虚空与天地灵机的深层联系。", "capabilityBoundary": "可进行远距离挪移与高阶法理对抗，但需要条件、准备或代价。", "aliases": []},
+            {"stageId": "realm:xuanxu:human:l7", "order": 7, "comparisonTier": 7, "name": "合体", "description": "形神与自身之道高度统一。", "capabilityBoundary": "可稳定承载高阶法理并跨越广域，但仍会受到同阶力量与世界边界约束。", "aliases": []},
+            {"stageId": "realm:xuanxu:human:l8", "order": 8, "comparisonTier": 8, "name": "大乘", "description": "此界人族修行道路的圆熟顶点。", "capabilityBoundary": "具备触发终局考验的资格，但是否渡劫、如何结束命卷必须由玩家决定。", "aliases": []}
+          ]
+        },
+        {
+          "trackId": "track:xuanxu:yao",
+          "identityRefs": ["race:xuanxu:yao"],
+          "start": {"stageRef": "realm:xuanxu:yao:l1", "stepRef": "phase:xuanxu:early"},
+          "stages": [
+            {"stageId": "realm:xuanxu:yao:l1", "order": 1, "comparisonTier": 1, "name": "开智", "description": "灵智稳定，开始主动吐纳并认识自身本相。", "capabilityBoundary": "能够主动修行并运用有限本相能力，肉身仍未完成系统淬炼。", "aliases": ["启智"]},
+            {"stageId": "realm:xuanxu:yao:l2", "order": 2, "comparisonTier": 2, "name": "淬身", "description": "以灵力反复淬炼本相肉身与血脉。", "capabilityBoundary": "肉身和本相能力显著增强，但尚不能凝成稳定妖丹。", "aliases": ["炼体"]},
+            {"stageId": "realm:xuanxu:yao:l3", "order": 3, "comparisonTier": 3, "name": "妖丹", "description": "血脉与妖力凝成妖丹，建立稳定力量核心。", "capabilityBoundary": "可持续施展血脉术法并远胜普通猛兽，但妖丹受损会重创根基。", "aliases": []},
+            {"stageId": "realm:xuanxu:yao:l4", "order": 4, "comparisonTier": 4, "name": "化形", "description": "本相与人形能够稳定转换，灵智和妖力完成一次蜕变。", "capabilityBoundary": "可稳定化形并兼用两种形态优势，但不能无代价伪装所有血脉痕迹。", "aliases": []},
+            {"stageId": "realm:xuanxu:yao:l5", "order": 5, "comparisonTier": 5, "name": "祖血", "description": "追溯并唤醒血脉深处的远古印记。", "capabilityBoundary": "可显化强大血脉特征并压制低阶同源妖族，但祖血不等于无限力量。", "aliases": ["返祖"]},
+            {"stageId": "realm:xuanxu:yao:l6", "order": 6, "comparisonTier": 6, "name": "真身", "description": "本相蜕变为承载完整道行的真身。", "capabilityBoundary": "可显化庞大真身与完整血脉威能，但真身受创同样会伤及根本。", "aliases": []},
+            {"stageId": "realm:xuanxu:yao:l7", "order": 7, "comparisonTier": 7, "name": "通玄", "description": "血脉、本相与天地法理贯通。", "capabilityBoundary": "可令本相神通触及法理层面，但无法凭血脉身份自动号令其他妖族。", "aliases": []},
+            {"stageId": "realm:xuanxu:yao:l8", "order": 8, "comparisonTier": 8, "name": "归真", "description": "本相、祖血与自身道路圆满归一。", "capabilityBoundary": "具备触发终局考验的资格，但是否应劫、如何结束命卷必须由玩家决定。", "aliases": []}
+          ]
+        },
+        {
+          "trackId": "track:xuanxu:spirit",
+          "identityRefs": ["race:xuanxu:spirit"],
+          "start": {"stageRef": "realm:xuanxu:spirit:l1", "stepRef": "phase:xuanxu:early"},
+          "stages": [
+            {"stageId": "realm:xuanxu:spirit:l1", "order": 1, "comparisonTier": 1, "name": "启灵", "description": "本源苏醒，形成稳定自我与最初灵性循环。", "capabilityBoundary": "能够感知灵机并有限驱动本体特性，灵性仍容易受环境扰动。", "aliases": ["初灵"]},
+            {"stageId": "realm:xuanxu:spirit:l2", "order": 2, "comparisonTier": 2, "name": "聚元", "description": "聚拢散逸灵性，形成稳定本源核心。", "capabilityBoundary": "可持续调动本源力量，但离开适合环境后仍容易衰减。", "aliases": []},
+            {"stageId": "realm:xuanxu:spirit:l3", "order": 3, "comparisonTier": 3, "name": "灵魄", "description": "本源与灵识凝成灵魄，不再只是依附性的灵性。", "capabilityBoundary": "可离开诞生地较久并稳定施术，但本体与灵魄仍紧密相连。", "aliases": []},
+            {"stageId": "realm:xuanxu:spirit:l4", "order": 4, "comparisonTier": 4, "name": "化形", "description": "灵魄凝成可稳定行动的形体。", "capabilityBoundary": "可脱离原本形态活动并维持化身，但本源仍保留可被追溯的特征。", "aliases": []},
+            {"stageId": "realm:xuanxu:spirit:l5", "order": 5, "comparisonTier": 5, "name": "灵相", "description": "本源外显为稳定灵相，能够影响周围灵机。", "capabilityBoundary": "可展开灵相强化自身与环境互动，但灵相受损会反噬本源。", "aliases": []},
+            {"stageId": "realm:xuanxu:spirit:l6", "order": 6, "comparisonTier": 6, "name": "灵域", "description": "以自身本源构成稳定灵域。", "capabilityBoundary": "可在一定范围内塑造有利灵机环境，但不能永久覆盖更强世界规则。", "aliases": []},
+            {"stageId": "realm:xuanxu:spirit:l7", "order": 7, "comparisonTier": 7, "name": "归真", "description": "灵相、灵域与本源重新归于一体。", "capabilityBoundary": "可在形散后重聚并深度影响灵机，但本源被针对时仍可能消亡。", "aliases": []},
+            {"stageId": "realm:xuanxu:spirit:l8", "order": 8, "comparisonTier": 8, "name": "合道", "description": "本源与所行之道达到此界圆满。", "capabilityBoundary": "具备触发终局考验的资格，但是否合道越界、如何结束命卷必须由玩家决定。", "aliases": []}
+          ]
+        }
+      ]
+    }
+  ]
+}

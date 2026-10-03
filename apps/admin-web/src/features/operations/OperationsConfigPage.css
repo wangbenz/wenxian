@@ -1,0 +1,32 @@
+.operations-config-page { display: grid; gap: 16px; }
+.operations-config-intro { align-items: flex-start; background: #fff; border-left: 4px solid #d39b3b; border-radius: 8px; box-shadow: 0 4px 18px rgba(25, 37, 55, .05); display: flex; justify-content: space-between; padding: 24px 28px; }
+.operations-config-intro > div { max-width: 760px; }
+.operations-config-intro > div > span { color: #a87825; font-size: 11px; font-weight: 800; letter-spacing: .16em; }
+.operations-config-intro h2.ant-typography { margin: 6px 0; }
+.operations-config-intro .ant-typography { margin-bottom: 0; }
+.operations-config-metrics { background: #e7ebf1; border: 1px solid #e7ebf1; border-radius: 8px; display: grid; gap: 1px; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden; }
+.operations-config-metrics > div { background: #fff; display: grid; gap: 4px; padding: 18px 20px; }
+.operations-config-metrics span { color: #687385; font-size: 12px; }
+.operations-config-metrics strong { color: #1b2330; font-size: 25px; line-height: 1.1; }
+.operations-config-metrics small { color: #929baa; }
+.operations-config-grid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.operations-config-grid > .ant-card { box-shadow: 0 4px 18px rgba(25, 37, 55, .045); }
+.operations-config-form { display: grid; gap: 18px; }
+.operations-config-form label { display: grid; gap: 8px; }
+.operations-config-form .ant-input-number { max-width: 280px; width: 100%; }
+.operations-config-actions { border-top: 1px solid #edf0f4; display: flex; gap: 8px; justify-content: flex-end; padding-top: 18px; }
+.active-save-heading { align-items: flex-start; display: flex; gap: 12px; }
+.active-save-heading > svg { color: #b47e24; flex: 0 0 auto; }
+.active-save-heading .ant-typography { margin-bottom: 0; }
+.operations-config-form .ant-radio-group { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.operations-config-form .ant-radio-button-wrapper { text-align: center; }
+@media (max-width: 1080px) { .operations-config-grid { grid-template-columns: 1fr; } }
+@media (max-width: 720px) {
+  .operations-config-intro { display: grid; gap: 16px; padding: 20px; }
+  .operations-config-intro > .ant-btn { width: 100%; }
+  .operations-config-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .operations-config-metrics > div { padding: 14px; }
+  .operations-config-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .operations-config-form .ant-descriptions-item-container { align-items: start; display: grid; gap: 8px; grid-template-columns: 80px minmax(0, 1fr); }
+  .operations-config-form .ant-descriptions-item, .operations-config-form .ant-descriptions-item-content { min-width: 0; white-space: normal; }
+}

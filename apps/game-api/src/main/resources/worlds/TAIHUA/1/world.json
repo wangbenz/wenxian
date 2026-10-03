@@ -1,0 +1,74 @@
+{
+  "packageId": "TAIHUA",
+  "revision": 1,
+  "name": "太华天",
+  "premise": "仙朝与宗门共同统治九洲，出身可以带来高起点，也会带来必须偿还的责任。",
+  "coreRules": [
+    "仙朝法度、宗门戒律与家族责任并行，任何身份都可能同时受到多重秩序约束。",
+    "显赫出身可以提供资源和关系，但必须在根源中确认相应义务与风险。",
+    "修行地位影响礼制与机会，不等于拥有对他人的绝对控制权。"
+  ],
+  "races": [
+    {
+      "raceId": "race:taihua:human",
+      "name": "人族",
+      "description": "仙朝户籍、宗门谱牒和世家血缘共同定义社会位置，身份可带来资源也会留下记录。",
+      "identityFacts": ["属于太华天人族，具体籍贯、家世和组织身份必须由根源确认。"],
+      "socialHooks": ["官府、宗门和世家会根据可验证身份给予不同礼遇或审查。"],
+      "opportunityTags": ["immortal-court", "sect", "clan"]
+    },
+    {
+      "raceId": "race:taihua:demon",
+      "name": "妖族",
+      "description": "既可能受册封进入仙朝秩序，也可能维持独立族地与古老盟约。",
+      "identityFacts": ["属于妖族，是否受册封以及所属族地必须由根源确认。"],
+      "socialHooks": ["仙朝官员会关注册籍与盟约，独立妖族势力更看重血脉和承诺。"],
+      "opportunityTags": ["tribute", "old-pact", "borderland"]
+    },
+    {
+      "raceId": "race:taihua:spirit",
+      "name": "灵族",
+      "description": "常与山河敕封、宗门法器或皇家祭祀相连，也有拒绝受封的自由灵族。",
+      "identityFacts": ["属于灵族，本体与是否存在敕封关系必须由根源确认。"],
+      "socialHooks": ["不同势力会把灵族视为有法律身份的受封者、合作对象或无主异灵。"],
+      "opportunityTags": ["enfeoffment", "artifact", "ritual"]
+    }
+  ],
+  "regions": [
+    {
+      "regionId": "region:taihua:yunjing",
+      "name": "云京外三郡",
+      "description": "靠近仙朝中枢，官道、世家庄园和宗门别院密集，身份关系容易迅速生效。",
+      "openingEligible": true,
+      "tags": ["immortal-court", "city", "clan"]
+    },
+    {
+      "regionId": "region:taihua:beiting",
+      "name": "北庭关域",
+      "description": "仙朝、边宗与异族盟约交汇之地，旧功、军籍和边境契约都可能成为机会。",
+      "openingEligible": true,
+      "tags": ["borderland", "old-pact", "sect"]
+    }
+  ],
+  "loreEntries": [
+    {
+      "loreId": "lore:taihua:three-orders",
+      "tags": ["society", "immortal-court", "sect", "clan"],
+      "content": "仙朝、宗门与世家彼此合作又相互制衡，一个人的身份往往只在特定秩序内有效。",
+      "priority": 80,
+      "relatedRefs": ["region:taihua:yunjing"]
+    },
+    {
+      "loreId": "lore:taihua:privilege-duty",
+      "tags": ["origin", "obligation"],
+      "content": "越高的创角起点越需要明确来源，并伴随可观察的关系、职责、敌意或未竟承诺。",
+      "priority": 70,
+      "relatedRefs": []
+    }
+  ],
+  "narrativeGuidance": "偏仙朝、世家、宗门并立的游历与权谋；让身份资源和责任同时可见，不强迫玩家加入固定阵营。",
+  "contentBoundaries": [
+    "不能只因显赫出身就替玩家接受官职、婚约或宗门使命。",
+    "不能把仙朝法度写成整个世界唯一且无例外的真理。"
+  ]
+}

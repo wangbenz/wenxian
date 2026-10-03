@@ -1,0 +1,202 @@
+{
+  "syntheticNote": "四份独立的合成前态，用于炼气初期到中期的资格尺度讨论。它们不是实际玩家记录，也不用于修改正式命卷。各案处于同一回合并包含同样数量的历史经历；案例编号和 reviewHints 仅供宿主审阅，不发送给模型。",
+  "commonScenario": {
+    "character": "合成角色，人族散修，当前为炼气初期。已经能感知并有限运用灵气，建立最初的灵力循环，能自主依既有行气法修行。共同的早期基础是循环衔接处容易散乱；后来是否改变，以各自已确认的经历和当前记录为准。",
+    "abilityName": "既有行气法",
+    "abilityInitialStatus": "这是角色已经学过并实际使用的行气方法，并非刚得到的新法。现有用途和限制见当前学习记录；持有一页辅助抄本，不意味着掌握未学过的内容。",
+    "location": "东陆青岐州一处安静的独修静室，本轮仍在此处。",
+    "people": "当前没有可交互人物，也没有等待他人检验或答应他人的事项。",
+    "scope": "本轮只回顾已完成的修行经历，不新增实操，不执行实际晋升，不改变地点。纯内修可以形成进入中期的资格，不强制外部考核；具体是否充分，应结合已有基础和实际经历判断。没有新伤势、修为损伤或其他新阻碍。"
+  },
+  "playerAction": "我现在只回顾已经完成的修行经历，核对已有记录，判断自己进入炼气中期的准备是否充分；不增加练习，不尝试晋升，也不更换地点。",
+  "cases": [
+    {
+      "id": "C01",
+      "experiences": [
+        {
+          "id": "experience:scale:1",
+          "turn": 1,
+          "statement": "独自按既有行气法运转灵力，能完成基本循环。行至原先薄弱的衔接处时，用力过急，灵力散乱；放缓后曾接续起来，但尚不能维持。",
+          "abilityRefs": ["ability:replay:breathing"]
+        },
+        {
+          "id": "experience:scale:2",
+          "turn": 2,
+          "statement": "继续沿用自己的方法内修，已经能察觉衔接处何时过急，并主动放缓。接续仍只短暂出现，随后又在原处散乱；收功时未受伤，原有基本循环仍能完成。",
+          "abilityRefs": ["ability:replay:breathing"]
+        }
+      ],
+      "learning": {
+        "achieved": "能够自主感知和有限运用灵气，完成基本行气循环；已能辨认原薄弱处用力过急的情况并主动放缓。",
+        "limitations": "原薄弱处的接续仍只能短暂维持，之后容易再次散乱；尚未实际做到稳定接续。",
+        "evidenceRefs": ["experience:scale:1", "experience:scale:2"]
+      },
+      "accumulation": {
+        "achieved": "实际内修使角色认清原有衔接问题，并形成主动调整的经验；既有炼气基础保持。",
+        "limitations": "调整还没有使原薄弱处的灵力运行稳定下来。",
+        "evidenceRefs": ["experience:scale:1", "experience:scale:2"]
+      },
+      "qualification": null,
+      "firstTurnGrowth": {
+        "learning": {
+          "achieved": "能够自主感知和有限运用灵气，完成基本行气循环；已试出在原薄弱处放缓可以短暂接续。",
+          "limitations": "原薄弱处仍容易因用力过急而散乱，短暂接续尚不能维持。",
+          "evidenceRefs": ["experience:scale:1"]
+        },
+        "accumulation": {
+          "achieved": "实际内修使角色接触到原衔接问题与放缓调整之间的关系。",
+          "limitations": "原薄弱处尚未稳定，既有基本循环之外没有确认新的能力。",
+          "evidenceRefs": ["experience:scale:1"]
+        }
+      },
+      "reviewHints": [
+        "讨论标签：不足。倾向尚未形成中期资格，但不把标签作为固定模型答案或确定性晋升规则。",
+        "若提出 READY，应具体审读现有经历如何支持整体基础已经稳定，不能凭调整过一次、已有两条引用或字段齐全通过。",
+        "不能新增练习或顿悟来补足本轮的回顾行动，不能把原有炼气基础写成尚未引气入体。",
+        "不得要求凑够练习次数、时长、证据条数，或额外接受老师、战斗、制药、换场景考核。"
+      ]
+    },
+    {
+      "id": "C02",
+      "experiences": [
+        {
+          "id": "experience:scale:1",
+          "turn": 1,
+          "statement": "在持续独自内修的过程中，角色逐渐能察觉原薄弱处用力过急的变化，并自行调整灵力收放。原先容易散乱的一段已能接续，完整运行不再依赖偶然出现的顺畅感觉。",
+          "abilityRefs": ["ability:replay:breathing"]
+        },
+        {
+          "id": "experience:scale:2",
+          "turn": 2,
+          "statement": "后续独修中，角色正常停歇后重新行气，仍能自主找回运行方式并维持原薄弱处的衔接。曾有杂念打断专注，角色察觉后自行放缓，重新调匀灵力；收功时无异常。没有进行行走、战斗或制药考核。",
+          "abilityRefs": ["ability:replay:breathing"]
+        }
+      ],
+      "learning": {
+        "achieved": "能够自主感知和有限运用灵气，完成基本行气循环；原薄弱处已能接续，停歇后可以找回运行方式，并能在熟悉的轻微分心后自行调整。",
+        "limitations": "仍需主动留意灵力收放；快走、战斗或制药中的使用尚未验证，也没有掌握新的术法。",
+        "evidenceRefs": ["experience:scale:1", "experience:scale:2"]
+      },
+      "accumulation": {
+        "achieved": "持续纯内修已改变原先衔接容易散乱的基础：灵力运行更稳定，能够自主接续、重新开始和调整熟悉范围内的扰动。",
+        "limitations": "这份积累体现于既有行气法的内修过程，不代表所有用途均熟练，也不代表更高大境界的能力。",
+        "evidenceRefs": ["experience:scale:1", "experience:scale:2"]
+      },
+      "qualification": null,
+      "firstTurnGrowth": {
+        "learning": {
+          "achieved": "能够自主感知和有限运用灵气，完成基本行气循环；原薄弱处已能通过自行调整灵力收放接续，完整运行不再依赖偶然的顺畅感觉。",
+          "limitations": "需要主动留意灵力收放；停歇后重新开始以及分心后的调整尚未在这份经历中记录。",
+          "evidenceRefs": ["experience:scale:1"]
+        },
+        "accumulation": {
+          "achieved": "持续内修使原先容易散乱的衔接得到稳定改善，已能自主维持原有灵力循环。",
+          "limitations": "这份经历只体现既有行气法的内修变化，不代表所有条件下均能稳定运用。",
+          "evidenceRefs": ["experience:scale:1"]
+        }
+      },
+      "reviewHints": [
+        "讨论标签：较充分的纯内修。READY 是有依据的候选，模型仍需说明具体理由；未给 READY 时审读理由，不仅按标签判定。",
+        "不能因为尚未在行走、战斗或制药中使用而自动否定纯内修资格，也不能临时要求外部认证。",
+        "本轮无需再练一次或新增成长，资格可以引用此前已接受的实际经历；回顾本身不能冒充新增实操。",
+        "角色仍为炼气初期，不能把准备结论写成已经进入中期。"
+      ]
+    },
+    {
+      "id": "C03",
+      "experiences": [
+        {
+          "id": "experience:scale:1",
+          "turn": 1,
+          "statement": "角色独自按既有行气法完成内修，正常收功。现存记录记下了这次实际修行，没有记下原薄弱衔接处的具体表现。",
+          "abilityRefs": ["ability:replay:breathing"]
+        },
+        {
+          "id": "experience:scale:2",
+          "turn": 2,
+          "statement": "角色后来继续独修，收功无异常。记录只写气息较顺，没有说明原薄弱处是否持续接续，也没有记下该处再次散乱。",
+          "abilityRefs": ["ability:replay:breathing"]
+        }
+      ],
+      "learning": {
+        "achieved": "能够自主感知和有限运用灵气，完成基本行气循环；有实际独修和正常收功的记录。",
+        "limitations": "当前记录不足以确定原薄弱处是否已稳定改变，不能由此断言已经改善或仍然散乱。",
+        "evidenceRefs": ["experience:scale:1", "experience:scale:2"]
+      },
+      "accumulation": {
+        "achieved": "已实际沿既有方法内修，记录保留了完成练习与收功的事实。",
+        "limitations": "这份记录没有交代原有灵力基础发生了怎样的持续变化。",
+        "evidenceRefs": ["experience:scale:1", "experience:scale:2"]
+      },
+      "qualification": null,
+      "firstTurnGrowth": {
+        "learning": {
+          "achieved": "能够自主感知和有限运用灵气，完成基本行气循环；已记录独自完成内修并正常收功。",
+          "limitations": "现存记录未交代原薄弱衔接处的具体表现，不能由此确定是否改变。",
+          "evidenceRefs": ["experience:scale:1"]
+        },
+        "accumulation": {
+          "achieved": "已实际沿既有方法完成内修。",
+          "limitations": "这份经历记录没有说明原有灵力基础发生了什么具体变化。",
+          "evidenceRefs": ["experience:scale:1"]
+        }
+      },
+      "reviewHints": [
+        "讨论标签：记录不清。应区分资料不足与角色实际能力不足，不能把缺少详细描写改写成悟性差、修为退步或仍未入门。",
+        "模型自行判断现有资料能否支持资格；若给 READY，必须能解释已有事实的支持，不能补造被省略的历史过程。",
+        "本轮只回顾，不能通过新增试练来填补记录空白；也不能要求玩家先重做已经发生的经历。",
+        "不得按两条经历、相同回合或记录长短推断积累多少，不强制老师认证或外出考核。"
+      ]
+    },
+    {
+      "id": "C04",
+      "experiences": [
+        {
+          "id": "experience:scale:1",
+          "turn": 1,
+          "statement": "在持续独自内修的过程中，角色逐渐能察觉原薄弱处用力过急的变化，并自行调整灵力收放。原先容易散乱的一段已能接续，完整运行不再依赖偶然出现的顺畅感觉。",
+          "abilityRefs": ["ability:replay:breathing"]
+        },
+        {
+          "id": "experience:scale:2",
+          "turn": 2,
+          "statement": "后续独修中，角色正常停歇后重新行气，仍能自主找回运行方式并维持原薄弱处的衔接。曾有杂念打断专注，角色察觉后自行放缓，重新调匀灵力；收功时无异常。没有进行行走、战斗或制药考核。",
+          "abilityRefs": ["ability:replay:breathing"]
+        }
+      ],
+      "learning": {
+        "achieved": "能够自主感知和有限运用灵气，完成基本行气循环；原薄弱处已能接续，停歇后可以找回运行方式，并能在熟悉的轻微分心后自行调整。",
+        "limitations": "仍需主动留意灵力收放；快走、战斗或制药中的使用尚未验证，也没有掌握新的术法。",
+        "evidenceRefs": ["experience:scale:1", "experience:scale:2"]
+      },
+      "accumulation": {
+        "achieved": "持续纯内修已改变原先衔接容易散乱的基础：灵力运行更稳定，能够自主接续、重新开始和调整熟悉范围内的扰动。",
+        "limitations": "这份积累体现于既有行气法的内修过程，不代表所有用途均熟练，也不代表更高大境界的能力。",
+        "evidenceRefs": ["experience:scale:1", "experience:scale:2"]
+      },
+      "qualification": {
+        "reason": "此前已依据实际持续内修、原薄弱处自主稳定接续及调整扰动的经历，接受了进入炼气中期的准备资格；角色尚未实际晋升。",
+        "evidenceRefs": ["experience:scale:1", "experience:scale:2"],
+        "grantedTurn": 2
+      },
+      "firstTurnGrowth": {
+        "learning": {
+          "achieved": "能够自主感知和有限运用灵气，完成基本行气循环；原薄弱处已能通过自行调整灵力收放接续，完整运行不再依赖偶然的顺畅感觉。",
+          "limitations": "需要主动留意灵力收放；停歇后重新开始以及分心后的调整尚未在这份经历中记录。",
+          "evidenceRefs": ["experience:scale:1"]
+        },
+        "accumulation": {
+          "achieved": "持续内修使原先容易散乱的衔接得到稳定改善，已能自主维持原有灵力循环。",
+          "limitations": "这份经历只体现既有行气法的内修变化，不代表所有条件下均能稳定运用。",
+          "evidenceRefs": ["experience:scale:1"]
+        }
+      },
+      "reviewHints": [
+        "讨论标签：已有资格的普通复查。除已有资格外，历史经历、学习和积累与 C02 完全相同；资格成立属于合成前态，不计为本批新授予。",
+        "本轮可以 NONE 或重申 READY，但原资格、首次形成回合与依据应保留；不要求新增学习或积累。",
+        "若模型用 NOT_READY 或正文式说明否定已成立资格，应单独记为语义问题，不能因为 Java 最终保留字段就算通过。",
+        "不得为重新证明准备而新增实操、外部考核、材料或师承条件；不得把已有资格当实际经历循环证明，也不得自动晋升。"
+      ]
+    }
+  ]
+}

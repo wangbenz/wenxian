@@ -1,0 +1,83 @@
+{
+  "premise": "仙路真假难辨，宗门、世族、妖庭与散修仍为长生争夺资源。",
+  "coreRules": [
+    {
+      "ruleId": "rule:xuanxu:inheritance",
+      "text": "修行传承通常依附宗门、家族、师承或危险机缘，公开知识并不完整。",
+      "priority": 100
+    },
+    {
+      "ruleId": "rule:xuanxu:realm-boundary",
+      "text": "境界带来能力边界与身份差异，但不直接决定一次行动必然成功。",
+      "priority": 100
+    },
+    {
+      "ruleId": "rule:xuanxu:plural-races",
+      "text": "人、妖、灵共享可比较的八级境界标尺，族群身份影响机会与关系而不锁死立场。",
+      "priority": 90
+    }
+  ],
+  "contentBoundaries": [
+    {
+      "boundaryId": "boundary:xuanxu:realm-outcome",
+      "text": "不能把境界差距直接写成玩家行动必然失败。"
+    },
+    {
+      "boundaryId": "boundary:xuanxu:race-agency",
+      "text": "不能因为种族身份自动指定玩家阵营或道德立场。"
+    },
+    {
+      "boundaryId": "boundary:xuanxu:ending-agency",
+      "text": "渡劫只作为 L8 圆满后的玩家主动终局事件，不是普通境界。"
+    }
+  ],
+  "races": [
+    {
+      "raceId": "race:xuanxu:human",
+      "name": "人族",
+      "description": "城邦、宗门与世族中的主要族群，传承选择广，但常受出身和门第牵制。",
+      "identityFacts": ["属于人族，寿元与体魄起点遵循玄墟界常见人族边界。"],
+      "socialHooks": ["宗门和世族通常先询问师承、籍贯与家世。"],
+      "opportunityTags": ["sect", "clan", "city"],
+      "primaryProgressionTrackRef": "track:xuanxu:human"
+    },
+    {
+      "raceId": "race:xuanxu:yao",
+      "name": "妖族",
+      "description": "由本相、血脉与族地共同塑造身份，可能游离于人族秩序之外。",
+      "identityFacts": ["属于妖族，具体本相必须由创角根源中的身份事实确认。"],
+      "socialHooks": ["不同宗门、妖庭与凡人聚落对妖族的信任程度不同。"],
+      "opportunityTags": ["bloodline", "wilderness", "yao-court"],
+      "primaryProgressionTrackRef": "track:xuanxu:yao"
+    },
+    {
+      "raceId": "race:xuanxu:spirit",
+      "name": "灵族",
+      "description": "由器物、草木、山川或灵气生出灵智，来历本身往往就是修行线索。",
+      "identityFacts": ["属于灵族，本源或本体必须由创角根源中的身份事实确认。"],
+      "socialHooks": ["修士可能把灵族视为同道、异类或可争夺的机缘。"],
+      "opportunityTags": ["artifact", "spirit-land", "awakening"],
+      "primaryProgressionTrackRef": "track:xuanxu:spirit"
+    }
+  ],
+  "regions": [
+    {
+      "regionId": "region:xuanxu:qingqi",
+      "name": "东陆青岐州",
+      "description": "宗门山门、凡人城镇与荒野遗迹交错，适合作为多数身份的开场区域。",
+      "tags": ["sect", "city", "ruins"]
+    },
+    {
+      "regionId": "region:xuanxu:cangling",
+      "name": "苍岭妖境",
+      "description": "妖族部落与山野灵地相连，人族秩序只能触及边缘。",
+      "tags": ["wilderness", "yao-court", "spirit-land"]
+    }
+  ],
+  "narrativeProfile": {
+    "guidance": "古典宗门修仙，强调选择、机缘与代价；未知内容通过经历揭示，不预设唯一正道。",
+    "tone": ["古典", "克制", "因果清晰"],
+    "conflictThemes": ["选择", "机缘", "代价", "身份"],
+    "openSpace": "未知内容通过经历揭示；未定义的人物、地域与支线可以在不冲突时继续生成。"
+  }
+}

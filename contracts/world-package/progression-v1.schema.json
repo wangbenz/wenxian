@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["systems"],
+  "properties": {
+    "systems": {
+      "type": "array", "minItems": 1, "maxItems": 8,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["systemId", "revision", "kind", "displayName", "completion", "steps", "tracks"],
+        "properties": {
+          "systemId": {"$ref": "./common-v1.schema.json#/$defs/stableId"},
+          "revision": {"type": "integer", "minimum": 1},
+          "kind": {"const": "LINEAR_TIERED"},
+          "displayName": {"type": "string", "minLength": 1, "maxLength": 80},
+          "completion": {
+            "type": "object", "additionalProperties": false,
+            "required": ["position", "unlocks"],
+            "properties": {
+              "position": {"const": "TRACK_END"},
+              "unlocks": {"const": "player-confirmed-ending-v1"}
+            }
+          },
+          "steps": {
+            "type": "array", "minItems": 1, "maxItems": 8,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["stepId", "order", "name"],
+              "properties": {
+                "stepId": {"$ref": "./common-v1.schema.json#/$defs/stableId"},
+                "order": {"type": "integer", "minimum": 1},
+                "name": {"type": "string", "minLength": 1, "maxLength": 40}
+              }
+            }
+          },
+          "tracks": {
+            "type": "array", "minItems": 1, "maxItems": 20,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["trackId", "identityRefs", "start", "stages"],
+              "properties": {
+                "trackId": {"$ref": "./common-v1.schema.json#/$defs/stableId"},
+                "identityRefs": {
+                  "type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true,
+                  "items": {"$ref": "./common-v1.schema.json#/$defs/stableId"}
+                },
+                "start": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["stageRef", "stepRef"],
+                  "properties": {
+                    "stageRef": {"$ref": "./common-v1.schema.json#/$defs/stableId"},
+                    "stepRef": {"$ref": "./common-v1.schema.json#/$defs/stableId"}
+                  }
+                },
+                "stages": {
+                  "type": "array", "minItems": 2, "maxItems": 20,
+                  "items": {
+                    "type": "object", "additionalProperties": false,
+                    "required": [
+                      "stageId", "order", "comparisonTier", "name", "description",
+                      "capabilityBoundary", "aliases"
+                    ],
+                    "properties": {
+                      "stageId": {"$ref": "./common-v1.schema.json#/$defs/stableId"},
+                      "order": {"type": "integer", "minimum": 1},
+                      "comparisonTier": {"type": "integer", "minimum": 1},
+                      "name": {"type": "string", "minLength": 1, "maxLength": 80},
+                      "description": {"type": "string", "minLength": 1, "maxLength": 1000},
+                      "capabilityBoundary": {"type": "string", "minLength": 1, "maxLength": 1000},
+                      "aliases": {
+                        "type": "array", "uniqueItems": true,
+                        "items": {"type": "string", "minLength": 1, "maxLength": 80}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

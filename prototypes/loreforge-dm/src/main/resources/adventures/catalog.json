@@ -1,0 +1,6 @@
+{
+  "default": "paper-journey",
+  "packs": [
+    {"id": "paper-journey", "label": "一束草的去处 · 连续三场"}
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "packageId": "WANYAO",
+  "revision": 1,
+  "name": "万妖原",
+  "premise": "人、妖、灵三族以血脉、香火与契约争夺成道之机，仙并非唯一答案。",
+  "coreRules": [
+    "血脉、香火和契约都是力量与社会关系的来源，但必须由已确认事实支撑。",
+    "族群内部存在不同部族、道路与利益，种族不能直接决定阵营。",
+    "修行可以走化形、血脉、祭祀、灵契等道路，不以单一宗门体系解释全部角色。"
+  ],
+  "races": [
+    {
+      "raceId": "race:wanyao:human",
+      "name": "人族",
+      "description": "多生活在河谷城寨、商路和祭祀共同体中，常以技艺、香火或契约与异族共存。",
+      "identityFacts": ["属于人族，具体城寨、信仰和契约关系必须由根源确认。"],
+      "socialHooks": ["不同部族会先判断来历、技艺以及是否背负旧契。"],
+      "opportunityTags": ["settlement", "trade", "ritual"]
+    },
+    {
+      "raceId": "race:wanyao:demon",
+      "name": "妖族",
+      "description": "血脉与部族关系显著，但本相、化形程度和族群责任都由具体根源决定。",
+      "identityFacts": ["属于妖族，本相、血脉与化形经历必须由创角根源确认。"],
+      "socialHooks": ["同族可能关注血脉与部族，异族更在意过往契约和实际行为。"],
+      "opportunityTags": ["bloodline", "tribe", "awakening"]
+    },
+    {
+      "raceId": "race:wanyao:spirit",
+      "name": "灵族",
+      "description": "可能源于山川、草木、器物或香火，其存在方式会改变可接触的修行机会。",
+      "identityFacts": ["属于灵族，本源与已经建立的香火或契约必须由根源确认。"],
+      "socialHooks": ["聚落、部族与祭司可能寻求供奉、结契、庇护或驱逐。"],
+      "opportunityTags": ["spirit-land", "incense", "pact"]
+    }
+  ],
+  "regions": [
+    {
+      "regionId": "region:wanyao:cangwu",
+      "name": "苍梧妖原",
+      "description": "山原、石窟和部族领地相连，血脉苏醒与旧契线索频繁出现。",
+      "openingEligible": true,
+      "tags": ["tribe", "bloodline", "wilderness"]
+    },
+    {
+      "regionId": "region:wanyao:hegu",
+      "name": "白水河谷",
+      "description": "多族商路与人族城寨交汇，交易、香火和跨族关系更容易成为开局局势。",
+      "openingEligible": true,
+      "tags": ["trade", "settlement", "incense"]
+    }
+  ],
+  "loreEntries": [
+    {
+      "loreId": "lore:wanyao:three-paths",
+      "tags": ["cultivation", "bloodline", "incense", "pact"],
+      "content": "血脉、香火与契约可以并存，却分别依赖身体传承、群体认同和明确关系，不能凭空互换。",
+      "priority": 80,
+      "relatedRefs": ["region:wanyao:cangwu", "region:wanyao:hegu"]
+    },
+    {
+      "loreId": "lore:wanyao:plural-tribes",
+      "tags": ["society", "race", "tribe"],
+      "content": "三族都不是单一阵营；部族、聚落、祭司和商队会依据利益与旧约形成临时关系。",
+      "priority": 70,
+      "relatedRefs": ["race:wanyao:human", "race:wanyao:demon", "race:wanyao:spirit"]
+    }
+  ],
+  "narrativeGuidance": "突出多种族修行、血脉觉醒和族群关系，让契约与香火产生机会和代价，但不替玩家绑定阵营。",
+  "contentBoundaries": [
+    "不能把妖族或灵族默认写成敌对、野蛮或可被占有的对象。",
+    "不能在根源未确认时凭空赋予稀有血脉、供奉群体或强制契约。"
+  ]
+}

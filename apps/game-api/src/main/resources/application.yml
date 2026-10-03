@@ -1,0 +1,107 @@
+server:
+  port: ${PORT:18080}
+
+spring:
+  application:
+    name: wenxian-game-backend
+  config:
+    import: optional:file:./src/main/resources/application-secret.yml
+  jackson:
+    default-property-inclusion: non_null
+  datasource:
+    url: ${GAME_DATABASE_URL:jdbc:mysql://127.0.0.1:3306/wenxian?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${GAME_DATABASE_USERNAME:wenxian_app}
+    password: ${GAME_DATABASE_PASSWORD:}
+    driver-class-name: ${GAME_DATABASE_DRIVER:com.mysql.cj.jdbc.Driver}
+    hikari:
+      connection-timeout: 10000
+      validation-timeout: 5000
+      maximum-pool-size: ${GAME_DATABASE_MAX_POOL_SIZE:100}
+      minimum-idle: 1
+      idle-timeout: 180000
+      max-lifetime: 240000
+      keepalive-time: 60000
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+
+game:
+  world-packages:
+    # 启动默认只读；只有 dev/test + 本地库 + 显式开关才允许自动发布。
+    auto-publish: ${WENXIAN_WORLD_PACKAGE_AUTO_PUBLISH:false}
+    release-root: ${WENXIAN_WORLD_PACKAGE_RELEASE_ROOT:world-packages/official/XUANXU/2/}
+    legacy-namespace: wenxian.official
+  cors:
+    allowed-origin-patterns: ${WENXIAN_CORS_ALLOWED_ORIGIN_PATTERNS:http://127.0.0.1:*,http://localhost:*,http://192.168.*:*,http://10.*:*,http://172.*:*}
+  invite:
+    bootstrap-code: ${WENXIAN_INVITE_CODE:WENXIAN-LOCAL}
+  auth:
+    session-days: ${WENXIAN_SESSION_DAYS:30}
+    idle-hours: ${WENXIAN_SESSION_IDLE_HOURS:12}
+    secure-cookie: ${WENXIAN_SECURE_COOKIE:false}
+    ip-hash-pepper: ${WENXIAN_IP_HASH_PEPPER:wenxian-local-ip-pepper-change-me}
+    registrations-per-ip-per-day: ${WENXIAN_REGISTRATIONS_PER_IP_PER_DAY:1}
+    login-failures-per-window: ${WENXIAN_LOGIN_FAILURES_PER_WINDOW:5}
+    email-verification:
+      # H5 完成两步注册并通过真实邮箱冒烟前保持关闭，关闭时兼容现有邮箱+密码注册请求。
+      enabled: ${WENXIAN_EMAIL_VERIFICATION_ENABLED:false}
+      digest-pepper: ${WENXIAN_EMAIL_VERIFICATION_PEPPER:}
+      expires-minutes: ${WENXIAN_EMAIL_VERIFICATION_EXPIRES_MINUTES:10}
+      resend-after-seconds: ${WENXIAN_EMAIL_VERIFICATION_RESEND_AFTER_SECONDS:60}
+      max-attempts: ${WENXIAN_EMAIL_VERIFICATION_MAX_ATTEMPTS:5}
+      max-per-email-per-hour: ${WENXIAN_EMAIL_VERIFICATION_MAX_PER_EMAIL_PER_HOUR:5}
+      max-per-ip-per-hour: ${WENXIAN_EMAIL_VERIFICATION_MAX_PER_IP_PER_HOUR:10}
+    # 独立灰度进程专用。启用后只认进程环境中的账号名单，不读取共享 RDS 的正式白名单模式。
+    isolated-access:
+      enabled: ${WENXIAN_ISOLATED_ACCESS_ENABLED:false}
+      allowed-emails: ${WENXIAN_ISOLATED_ACCESS_ALLOWED_EMAILS:}
+      title: ${WENXIAN_ISOLATED_ACCESS_TITLE:当前版本正在受邀测试}
+      message: ${WENXIAN_ISOLATED_ACCESS_MESSAGE:当前版本仅向受邀账号开放，请使用收到的测试账号进入。}
+      resume-at: ${WENXIAN_ISOLATED_ACCESS_RESUME_AT:}
+  mail:
+    # 默认关闭。生产只通过进程环境注入 RAM AccessKey，不把真实密钥写进仓库或 application-secret.yml。
+    enabled: ${WENXIAN_MAIL_ENABLED:false}
+    aliyun:
+      access-key-id: ${ALIBABA_CLOUD_ACCESS_KEY_ID:}
+      access-key-secret: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET:}
+      account-name: ${WENXIAN_MAIL_ACCOUNT_NAME:no-reply@notice.wenxianlu.cn}
+      from-alias: ${WENXIAN_MAIL_FROM_ALIAS:问仙录}
+      endpoint: ${WENXIAN_MAIL_ENDPOINT:dm.aliyuncs.com}
+      region-id: ${WENXIAN_MAIL_REGION_ID:cn-hangzhou}
+      connect-timeout-millis: ${WENXIAN_MAIL_CONNECT_TIMEOUT_MILLIS:5000}
+      read-timeout-millis: ${WENXIAN_MAIL_READ_TIMEOUT_MILLIS:10000}
+  account-retention:
+    # M4 已具备候选/通知状态机，但未接真实邮件供应商；历史归属和副本演练完成前四个开关均保持关闭。
+    policy-evaluation-enabled: ${WENXIAN_ACCOUNT_POLICY_EVALUATION_ENABLED:false}
+    notification-delivery-enabled: ${WENXIAN_ACCOUNT_NOTIFICATION_DELIVERY_ENABLED:false}
+    automatic-deletion-enabled: ${WENXIAN_ACCOUNT_AUTOMATIC_DELETION_ENABLED:false}
+    notice-after-days: ${WENXIAN_ACCOUNT_NOTICE_AFTER_DAYS:23}
+    delete-after-days: ${WENXIAN_ACCOUNT_DELETE_AFTER_DAYS:30}
+    minimum-notice-days: ${WENXIAN_ACCOUNT_MINIMUM_NOTICE_DAYS:7}
+    notice-retry-hours: ${WENXIAN_ACCOUNT_NOTICE_RETRY_HOURS:6}
+    scheduler-batch-size: ${WENXIAN_ACCOUNT_RETENTION_BATCH_SIZE:50}
+    subject-hash-pepper: ${WENXIAN_ACCOUNT_SUBJECT_HASH_PEPPER:wenxian-local-retention-pepper-change-me}
+  ai-config-master-key: ${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}
+  # 仅用于明确要求服务器环境密钥覆盖数据库平台密钥的部署；日常由中性模型目录管理。
+  model-catalog-force-environment-key: ${WENXIAN_AI_CONFIG_FORCE_ENVIRONMENT:false}
+  story-correction-token-secret: ${WENXIAN_STORY_CORRECTION_TOKEN_SECRET:${WENXIAN_AI_CONFIG_MASTER_KEY:wenxian-local-config-key-change-me}}
+  story-correction-token-ttl-minutes: ${WENXIAN_STORY_CORRECTION_TOKEN_TTL_MINUTES:10}
+
+wenxian:
+  turn-credit:
+    enabled: ${WENXIAN_TURN_CREDIT_ENABLED:false}
+  internal:
+    model-validation-token: ${WENXIAN_MODEL_VALIDATION_TOKEN:}
+  model:
+    # 模型与 AI Service 使用有界缓存复用线程安全客户端，避免玩家自备密钥长期占满进程内存。
+    chat-registry-maximum-entries: ${WENXIAN_MODEL_CHAT_REGISTRY_MAXIMUM_ENTRIES:256}
+    ai-service-registry-maximum-entries: ${WENXIAN_MODEL_AI_SERVICE_REGISTRY_MAXIMUM_ENTRIES:512}
+  story:
+    # 仅灰度/定向排障开启；记录上下文来源和事实提交概要，不复制完整正文与 Prompt。
+    turn-diagnostics-enabled: ${WENXIAN_STORY_TURN_DIAGNOSTICS_ENABLED:false}
+
+deepseek:
+  api-key: ${DEEPSEEK_API_KEY:}
+  base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+  model: ${DEEPSEEK_MODEL:deepseek-v4-flash}

@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "source": "ANONYMIZED_PLAYER_REPORTS",
+  "cases": [
+    {
+      "id": "character-death-no-silent-revival",
+      "category": "CHARACTER_LIFECYCLE",
+      "given": {
+        "entities": [
+          {
+            "id": "character-mentor",
+            "type": "CHARACTER",
+            "name": "闻溪",
+            "objectiveStatus": "DEAD",
+            "playerKnownStatus": "DEAD"
+          }
+        ]
+      },
+      "action": "回到旧居寻找师父留下的线索。",
+      "expected": {
+        "requiredEntityIds": ["character-mentor"],
+        "allowedResults": ["追忆", "调查遗物", "发现有依据的新线索"],
+        "stateAssertions": ["character-mentor.objectiveStatus=DEAD"]
+      },
+      "forbidden": ["没有复生依据却让闻溪以活人身份出现", "创建第二个同名重要人物绕过死亡状态"]
+    },
+    {
+      "id": "mastered-ability-remains-usable",
+      "category": "ABILITY_AUTHORITY",
+      "given": {
+        "entities": [
+          {
+            "id": "ability-reflection",
+            "type": "ABILITY",
+            "name": "照影诀",
+            "status": "AVAILABLE"
+          }
+        ]
+      },
+      "action": "施展照影诀查看石门后的禁制。",
+      "expected": {
+        "requiredEntityIds": ["ability-reflection"],
+        "allowedResults": ["成功施展", "受环境限制", "施展后承担合理代价"],
+        "stateAssertions": ["不创建第二个照影诀实体"]
+      },
+      "forbidden": ["声称主角尚未掌握照影诀", "只按名称新建同名能力"]
+    },
+    {
+      "id": "known-item-quantity-is-conserved",
+      "category": "ITEM_OWNERSHIP",
+      "given": {
+        "entities": [
+          {
+            "id": "item-clearing-pill",
+            "type": "ITEM",
+            "name": "清心丹",
+            "quantityKnown": true,
+            "quantity": 3,
+            "inPossession": true
+          },
+          {
+            "id": "item-unnumbered-treasure",
+            "type": "ITEM",
+            "name": "一包散碎灵材",
+            "quantityKnown": false,
+            "inPossession": true
+          }
+        ]
+      },
+      "action": "取出一枚清心丹服下，再检查那包散碎灵材。",
+      "expected": {
+        "requiredEntityIds": ["item-clearing-pill", "item-unnumbered-treasure"],
+        "allowedResults": ["清心丹数量变为2", "散碎灵材保持数量未知"],
+        "stateAssertions": ["item-clearing-pill.quantity=2", "item-unnumbered-treasure.quantityKnown=false"]
+      },
+      "forbidden": ["清心丹数量仍为3", "把未知数量自动记为1", "物品数量变成负数"]
+    },
+    {
+      "id": "explicit-time-duration-is-respected",
+      "category": "WORLD_TIME",
+      "given": {
+        "worldTime": {"year": 2, "day": 18, "phase": "MORNING"}
+      },
+      "action": "闭关三年，专心温养神识；若没有外力打断，不要提前出关。",
+      "expected": {
+        "requiredEntityIds": [],
+        "allowedResults": ["完整经过三年", "明确返回INTERRUPTED并说明实际语义时长和中断原因"],
+        "stateAssertions": ["worldTimeAfter.year=worldTimeBefore.year+3"]
+      },
+      "forbidden": ["无解释只推进一天", "正文写三年而落库时间不是三年", "发生中断却不返回原因"]
+    },
+    {
+      "id": "major-decision-remains-with-player",
+      "category": "PLAYER_AGENCY",
+      "given": {
+        "facts": ["主角尚未加入任何宗门", "眼前使者正在说明入门条件"]
+      },
+      "action": "问清加入宗门需要承担什么，也问问拒绝会有什么后果。",
+      "expected": {
+        "requiredEntityIds": [],
+        "allowedResults": ["说明条件", "说明后果", "停在是否加入的决定点"],
+        "stateAssertions": ["decisionCheckpoint.required=true"]
+      },
+      "forbidden": ["替玩家答应加入", "替玩家拒绝", "自动拜师或立誓"]
+    },
+    {
+      "id": "world-revision-is-explicit-and-audited",
+      "category": "WORLD_AMENDMENT",
+      "given": {
+        "worldFacts": [
+          {
+            "id": "world-fact-ascension",
+            "statement": "此界无人能够飞升",
+            "revision": 1,
+            "active": true
+          }
+        ]
+      },
+      "action": "修订世界设定：飞升一直存在，只是道路被少数势力隐瞒。以后按这个设定推进。",
+      "expected": {
+        "requiredEntityIds": ["world-fact-ascension"],
+        "allowedResults": ["以REVISE建立新世界事实版本", "保留旧设定和修订理由"],
+        "stateAssertions": ["world-fact-ascension.revision=2", "amendment.operation=REVISE"]
+      },
+      "forbidden": ["静默改写以前的回合正文", "让新旧冲突设定同时作为当前事实生效"]
+    }
+  ]
+}

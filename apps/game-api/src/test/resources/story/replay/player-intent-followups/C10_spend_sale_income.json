@@ -1,0 +1,10 @@
+{
+  "replayId": "C10_sale_then_spend",
+  "initialCaseId": "C10_sell_all_herbs_bound",
+  "followupActions": [
+    {
+      "action": "用刚才卖药所得买一份普通干粮，先问价；钱够才付款，不赊欠。",
+      "choiceId": null
+    }
+  ]
+}

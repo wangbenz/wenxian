@@ -1,0 +1,57 @@
+{
+  "playableRaceRefs": [
+    "race:xuanxu:human",
+    "race:xuanxu:yao",
+    "race:xuanxu:spirit"
+  ],
+  "openingRegionRefs": [
+    "region:xuanxu:qingqi",
+    "region:xuanxu:cangling"
+  ],
+  "defaultOpeningRegionRef": "region:xuanxu:qingqi",
+  "requiredOriginFacts": [
+    {
+      "identityRef": "race:xuanxu:yao",
+      "factType": "IDENTITY",
+      "semanticRole": "identity:true-form",
+      "playerLabel": "本相"
+    },
+    {
+      "identityRef": "race:xuanxu:spirit",
+      "factType": "IDENTITY",
+      "semanticRole": "identity:origin-form",
+      "playerLabel": "本源或本体"
+    }
+  ],
+  "routeThemes": [
+    {
+      "themeId": "route:xuanxu:inheritance",
+      "summary": "围绕残缺传承、师承或宗门关系形成开放根源。",
+      "loreRefs": ["lore:xuanxu:inheritance"]
+    },
+    {
+      "themeId": "route:xuanxu:identity",
+      "summary": "围绕族群身份、来历和社会关系形成开放根源。",
+      "loreRefs": ["lore:xuanxu:plural-orders"]
+    },
+    {
+      "themeId": "route:xuanxu:debt",
+      "summary": "围绕未偿还的承诺、责任或旧事形成开放根源。",
+      "loreRefs": []
+    }
+  ],
+  "scenarioSeeds": [
+    {
+      "seedId": "seed:xuanxu:qingqi-arrival",
+      "eligibleRegionRefs": ["region:xuanxu:qingqi"],
+      "tags": ["arrival", "sect", "mystery"],
+      "summary": "从青岐州的宗门、城镇或遗迹边缘进入世界的开放局势。"
+    },
+    {
+      "seedId": "seed:xuanxu:cangling-arrival",
+      "eligibleRegionRefs": ["region:xuanxu:cangling"],
+      "tags": ["arrival", "wilderness", "identity"],
+      "summary": "从苍岭妖境的族地、灵地或边缘聚落进入世界的开放局势。"
+    }
+  ]
+}

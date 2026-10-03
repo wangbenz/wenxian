@@ -1,0 +1,19 @@
+{
+    "document": {
+        "display_name": "5e Core",
+        "gamesystem": {
+            "key": "5e-2014",
+            "name": "5th Edition 2014"
+        },
+        "key": "core",
+        "name": "5e Core Concepts",
+        "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+        "publisher": {
+            "key": "open5e",
+            "name": "Open5e"
+        },
+        "type": "MISC"
+    },
+    "key": "weapon",
+    "name": "Weapon"
+}

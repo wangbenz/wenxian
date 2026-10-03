@@ -1,0 +1,1765 @@
+{
+    "creatures": [
+        {
+            "ability_scores": {
+                "charisma": 5,
+                "constitution": 14,
+                "dexterity": 8,
+                "intelligence": 2,
+                "strength": 16,
+                "wisdom": 8
+            },
+            "actions": [
+                {
+                    "action_type": "ACTION",
+                    "attacks": [
+                        {
+                            "attack_type": "WEAPON",
+                            "damage_bonus": null,
+                            "damage_die_count": null,
+                            "damage_die_type": null,
+                            "damage_type": {
+                                "key": "thunder",
+                                "name": "Thunder"
+                            },
+                            "distance_unit": "feet",
+                            "extra_damage_bonus": null,
+                            "extra_damage_die_count": null,
+                            "extra_damage_die_type": null,
+                            "extra_damage_type": null,
+                            "long_range": null,
+                            "name": "Bite attack",
+                            "range": null,
+                            "reach": 5,
+                            "target_creature_only": false,
+                            "to_hit_mod": 5
+                        }
+                    ],
+                    "crossreferences": {
+                        "to": []
+                    },
+                    "desc": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 2 (1d4) bludgeoning damage.",
+                    "legendary_action_cost": 1,
+                    "limited_to_form": null,
+                    "name": "Bite",
+                    "order_in_statblock": 0,
+                    "usage_limits": null
+                }
+            ],
+            "alignment": "unaligned",
+            "armor_class": 9,
+            "armor_detail": "",
+            "blindsight_range": null,
+            "category": "Miscellaneous Creatures",
+            "challenge_rating": 0.125,
+            "creaturesets": [
+                "common-mounts"
+            ],
+            "darkvision_range": null,
+            "document": {
+                "display_name": "5e 2014 Rules",
+                "gamesystem": {
+                    "key": "5e-2014",
+                    "name": "5th Edition 2014"
+                },
+                "key": "srd-2014",
+                "name": "System Reference Document 5.1",
+                "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+                "publisher": {
+                    "key": "wizards-of-the-coast",
+                    "name": "Wizards of the Coast"
+                },
+                "type": "SOURCE"
+            },
+            "environments": [
+                {
+                    "key": "desert",
+                    "name": "Desert"
+                },
+                {
+                    "key": "urban",
+                    "name": "Urban"
+                }
+            ],
+            "experience_points": 25,
+            "hit_dice": "2d10+4",
+            "hit_points": 15,
+            "illustration": null,
+            "initiative_bonus": -1,
+            "key": "srd_camel",
+            "languages": {
+                "as_string": "",
+                "data": []
+            },
+            "modifiers": {
+                "charisma": -3,
+                "constitution": 2,
+                "dexterity": -1,
+                "intelligence": -4,
+                "strength": 3,
+                "wisdom": -1
+            },
+            "name": "Camel",
+            "normal_sight_range": 10560,
+            "passive_perception": 9,
+            "proficiency_bonus": null,
+            "resistances_and_immunities": {
+                "condition_immunities": [],
+                "condition_immunities_display": "",
+                "damage_immunities": [],
+                "damage_immunities_display": "",
+                "damage_resistances": [],
+                "damage_resistances_display": "",
+                "damage_vulnerabilities": [],
+                "damage_vulnerabilities_display": ""
+            },
+            "saving_throws": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "saving_throws_all": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "size": {
+                "key": "large",
+                "name": "Large"
+            },
+            "skill_bonuses": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "skill_bonuses_all": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "speed": {
+                "unit": "feet",
+                "walk": 50
+            },
+            "speed_all": {
+                "burrow": 0,
+                "climb": 25,
+                "crawl": 25,
+                "fly": 0,
+                "hover": false,
+                "swim": 25,
+                "unit": "feet",
+                "walk": 50
+            },
+            "subcategory": null,
+            "traits": [],
+            "tremorsense_range": null,
+            "truesight_range": null,
+            "type": {
+                "key": "beast",
+                "name": "Beast"
+            }
+        },
+        {
+            "ability_scores": {
+                "charisma": 5,
+                "constitution": 13,
+                "dexterity": 10,
+                "intelligence": 2,
+                "strength": 14,
+                "wisdom": 10
+            },
+            "actions": [],
+            "alignment": "unaligned",
+            "armor_class": 10,
+            "armor_detail": "",
+            "blindsight_range": null,
+            "category": "Miscellaneous Creatures",
+            "challenge_rating": 0.0,
+            "creaturesets": [
+                "common-mounts"
+            ],
+            "darkvision_range": null,
+            "document": {
+                "display_name": "5e 2014 Rules",
+                "gamesystem": {
+                    "key": "5e-2014",
+                    "name": "5th Edition 2014"
+                },
+                "key": "srd-2014",
+                "name": "System Reference Document 5.1",
+                "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+                "publisher": {
+                    "key": "wizards-of-the-coast",
+                    "name": "Wizards of the Coast"
+                },
+                "type": "SOURCE"
+            },
+            "environments": [],
+            "experience_points": 0,
+            "hit_dice": null,
+            "hit_points": 11,
+            "illustration": null,
+            "initiative_bonus": 0,
+            "key": "srd_donkey",
+            "languages": {
+                "as_string": "",
+                "data": []
+            },
+            "modifiers": {
+                "charisma": -3,
+                "constitution": 1,
+                "dexterity": 0,
+                "intelligence": -4,
+                "strength": 2,
+                "wisdom": 0
+            },
+            "name": "Donkey",
+            "normal_sight_range": null,
+            "passive_perception": 10,
+            "proficiency_bonus": null,
+            "resistances_and_immunities": {
+                "condition_immunities": [],
+                "condition_immunities_display": "",
+                "damage_immunities": [],
+                "damage_immunities_display": "",
+                "damage_resistances": [],
+                "damage_resistances_display": "",
+                "damage_vulnerabilities": [],
+                "damage_vulnerabilities_display": ""
+            },
+            "saving_throws": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "saving_throws_all": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "size": {
+                "key": "medium",
+                "name": "Medium"
+            },
+            "skill_bonuses": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "skill_bonuses_all": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "speed": {
+                "unit": "feet",
+                "walk": 0
+            },
+            "speed_all": {
+                "burrow": 0,
+                "climb": 0,
+                "crawl": 0,
+                "fly": 0,
+                "hover": false,
+                "swim": 0,
+                "unit": "feet",
+                "walk": 0
+            },
+            "subcategory": null,
+            "traits": [],
+            "tremorsense_range": null,
+            "truesight_range": null,
+            "type": {
+                "key": "beast",
+                "name": "Beast"
+            }
+        },
+        {
+            "ability_scores": {
+                "charisma": 7,
+                "constitution": 12,
+                "dexterity": 10,
+                "intelligence": 2,
+                "strength": 18,
+                "wisdom": 11
+            },
+            "actions": [
+                {
+                    "action_type": "ACTION",
+                    "attacks": [
+                        {
+                            "attack_type": "WEAPON",
+                            "damage_bonus": null,
+                            "damage_die_count": 2,
+                            "damage_die_type": "D4",
+                            "damage_type": {
+                                "key": "thunder",
+                                "name": "Thunder"
+                            },
+                            "distance_unit": "feet",
+                            "extra_damage_bonus": null,
+                            "extra_damage_die_count": null,
+                            "extra_damage_die_type": null,
+                            "extra_damage_type": null,
+                            "long_range": null,
+                            "name": "Hooves attack",
+                            "range": null,
+                            "reach": 5,
+                            "target_creature_only": false,
+                            "to_hit_mod": 6
+                        }
+                    ],
+                    "crossreferences": {
+                        "to": []
+                    },
+                    "desc": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 9 (2d4 + 4) bludgeoning damage.",
+                    "legendary_action_cost": 1,
+                    "limited_to_form": null,
+                    "name": "Hooves",
+                    "order_in_statblock": 0,
+                    "usage_limits": null
+                }
+            ],
+            "alignment": "unaligned",
+            "armor_class": 10,
+            "armor_detail": "",
+            "blindsight_range": null,
+            "category": "Miscellaneous Creatures",
+            "challenge_rating": 0.25,
+            "creaturesets": [
+                "common-mounts"
+            ],
+            "darkvision_range": null,
+            "document": {
+                "display_name": "5e 2014 Rules",
+                "gamesystem": {
+                    "key": "5e-2014",
+                    "name": "5th Edition 2014"
+                },
+                "key": "srd-2014",
+                "name": "System Reference Document 5.1",
+                "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+                "publisher": {
+                    "key": "wizards-of-the-coast",
+                    "name": "Wizards of the Coast"
+                },
+                "type": "SOURCE"
+            },
+            "environments": [
+                {
+                    "key": "urban",
+                    "name": "Urban"
+                }
+            ],
+            "experience_points": 50,
+            "hit_dice": "3d10+3",
+            "hit_points": 19,
+            "illustration": null,
+            "initiative_bonus": 0,
+            "key": "srd_draft-horse",
+            "languages": {
+                "as_string": "",
+                "data": []
+            },
+            "modifiers": {
+                "charisma": -2,
+                "constitution": 1,
+                "dexterity": 0,
+                "intelligence": -4,
+                "strength": 4,
+                "wisdom": 0
+            },
+            "name": "Draft Horse",
+            "normal_sight_range": 10560,
+            "passive_perception": 10,
+            "proficiency_bonus": null,
+            "resistances_and_immunities": {
+                "condition_immunities": [],
+                "condition_immunities_display": "",
+                "damage_immunities": [],
+                "damage_immunities_display": "",
+                "damage_resistances": [],
+                "damage_resistances_display": "",
+                "damage_vulnerabilities": [],
+                "damage_vulnerabilities_display": ""
+            },
+            "saving_throws": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "saving_throws_all": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "size": {
+                "key": "large",
+                "name": "Large"
+            },
+            "skill_bonuses": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "skill_bonuses_all": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "speed": {
+                "unit": "feet",
+                "walk": 40
+            },
+            "speed_all": {
+                "burrow": 0,
+                "climb": 20,
+                "crawl": 20,
+                "fly": 0,
+                "hover": false,
+                "swim": 20,
+                "unit": "feet",
+                "walk": 40
+            },
+            "subcategory": null,
+            "traits": [],
+            "tremorsense_range": null,
+            "truesight_range": null,
+            "type": {
+                "key": "beast",
+                "name": "Beast"
+            }
+        },
+        {
+            "ability_scores": {
+                "charisma": 6,
+                "constitution": 17,
+                "dexterity": 9,
+                "intelligence": 3,
+                "strength": 22,
+                "wisdom": 11
+            },
+            "actions": [
+                {
+                    "action_type": "ACTION",
+                    "attacks": [
+                        {
+                            "attack_type": "WEAPON",
+                            "damage_bonus": null,
+                            "damage_die_count": 3,
+                            "damage_die_type": "D8",
+                            "damage_type": {
+                                "key": "thunder",
+                                "name": "Thunder"
+                            },
+                            "distance_unit": "feet",
+                            "extra_damage_bonus": null,
+                            "extra_damage_die_count": null,
+                            "extra_damage_die_type": null,
+                            "extra_damage_type": null,
+                            "long_range": null,
+                            "name": "Gore attack",
+                            "range": null,
+                            "reach": 5,
+                            "target_creature_only": false,
+                            "to_hit_mod": 8
+                        }
+                    ],
+                    "crossreferences": {
+                        "to": []
+                    },
+                    "desc": "Melee Weapon Attack: +8 to hit, reach 5 ft., one target. Hit: 19 (3d8 + 6) piercing damage.",
+                    "legendary_action_cost": 1,
+                    "limited_to_form": null,
+                    "name": "Gore",
+                    "order_in_statblock": 0,
+                    "usage_limits": null
+                },
+                {
+                    "action_type": "ACTION",
+                    "attacks": [
+                        {
+                            "attack_type": "WEAPON",
+                            "damage_bonus": null,
+                            "damage_die_count": 3,
+                            "damage_die_type": "D10",
+                            "damage_type": {
+                                "key": "thunder",
+                                "name": "Thunder"
+                            },
+                            "distance_unit": "feet",
+                            "extra_damage_bonus": null,
+                            "extra_damage_die_count": null,
+                            "extra_damage_die_type": null,
+                            "extra_damage_type": null,
+                            "long_range": null,
+                            "name": "Stomp attack",
+                            "range": null,
+                            "reach": 5,
+                            "target_creature_only": true,
+                            "to_hit_mod": 8
+                        }
+                    ],
+                    "crossreferences": {
+                        "to": []
+                    },
+                    "desc": "Melee Weapon Attack: +8 to hit, reach 5 ft., one prone creature. Hit: 22 (3d10 + 6) bludgeoning damage.",
+                    "legendary_action_cost": 1,
+                    "limited_to_form": null,
+                    "name": "Stomp",
+                    "order_in_statblock": 1,
+                    "usage_limits": null
+                }
+            ],
+            "alignment": "unaligned",
+            "armor_class": 12,
+            "armor_detail": "natural armor",
+            "blindsight_range": null,
+            "category": "Miscellaneous Creatures",
+            "challenge_rating": 4.0,
+            "creaturesets": [
+                "common-mounts"
+            ],
+            "darkvision_range": null,
+            "document": {
+                "display_name": "5e 2014 Rules",
+                "gamesystem": {
+                    "key": "5e-2014",
+                    "name": "5th Edition 2014"
+                },
+                "key": "srd-2014",
+                "name": "System Reference Document 5.1",
+                "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+                "publisher": {
+                    "key": "wizards-of-the-coast",
+                    "name": "Wizards of the Coast"
+                },
+                "type": "SOURCE"
+            },
+            "environments": [
+                {
+                    "key": "desert",
+                    "name": "Desert"
+                },
+                {
+                    "key": "forest",
+                    "name": "Forest or Jungle"
+                },
+                {
+                    "key": "grassland",
+                    "name": "Grassland or Plains"
+                }
+            ],
+            "experience_points": 1100,
+            "hit_dice": "8d12+24",
+            "hit_points": 76,
+            "illustration": null,
+            "initiative_bonus": -1,
+            "key": "srd_elephant",
+            "languages": {
+                "as_string": "",
+                "data": []
+            },
+            "modifiers": {
+                "charisma": -2,
+                "constitution": 3,
+                "dexterity": -1,
+                "intelligence": -4,
+                "strength": 6,
+                "wisdom": 0
+            },
+            "name": "Elephant",
+            "normal_sight_range": 10560,
+            "passive_perception": 10,
+            "proficiency_bonus": null,
+            "resistances_and_immunities": {
+                "condition_immunities": [],
+                "condition_immunities_display": "",
+                "damage_immunities": [],
+                "damage_immunities_display": "",
+                "damage_resistances": [],
+                "damage_resistances_display": "",
+                "damage_vulnerabilities": [],
+                "damage_vulnerabilities_display": ""
+            },
+            "saving_throws": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "saving_throws_all": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "size": {
+                "key": "huge",
+                "name": "Huge"
+            },
+            "skill_bonuses": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "skill_bonuses_all": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "speed": {
+                "unit": "feet",
+                "walk": 40
+            },
+            "speed_all": {
+                "burrow": 0,
+                "climb": 20,
+                "crawl": 20,
+                "fly": 0,
+                "hover": false,
+                "swim": 20,
+                "unit": "feet",
+                "walk": 40
+            },
+            "subcategory": null,
+            "traits": [
+                {
+                    "desc": "If the elephant moves at least 20 ft. straight toward a creature and then hits it with a gore attack on the same turn, that target must succeed on a DC 12 Strength saving throw or be knocked prone. If the target is prone, the elephant can make one stomp attack against it as a bonus action.",
+                    "name": "Trampling Charge"
+                }
+            ],
+            "tremorsense_range": null,
+            "truesight_range": null,
+            "type": {
+                "key": "beast",
+                "name": "Beast"
+            }
+        },
+        {
+            "ability_scores": {
+                "charisma": 7,
+                "constitution": 12,
+                "dexterity": 14,
+                "intelligence": 3,
+                "strength": 13,
+                "wisdom": 12
+            },
+            "actions": [
+                {
+                    "action_type": "ACTION",
+                    "attacks": [
+                        {
+                            "attack_type": "WEAPON",
+                            "damage_bonus": null,
+                            "damage_die_count": 1,
+                            "damage_die_type": "D6",
+                            "damage_type": {
+                                "key": "thunder",
+                                "name": "Thunder"
+                            },
+                            "distance_unit": "feet",
+                            "extra_damage_bonus": null,
+                            "extra_damage_die_count": null,
+                            "extra_damage_die_type": null,
+                            "extra_damage_type": null,
+                            "long_range": null,
+                            "name": "Bite attack",
+                            "range": null,
+                            "reach": 5,
+                            "target_creature_only": false,
+                            "to_hit_mod": 3
+                        }
+                    ],
+                    "crossreferences": {
+                        "to": []
+                    },
+                    "desc": "Melee Weapon Attack: +3 to hit, reach 5 ft., one target. Hit: 4 (1d6 + 1) piercing damage. If the target is a creature, it must succeed on a DC 11 Strength saving throw or be knocked prone.",
+                    "legendary_action_cost": 1,
+                    "limited_to_form": null,
+                    "name": "Bite",
+                    "order_in_statblock": 0,
+                    "usage_limits": null
+                }
+            ],
+            "alignment": "unaligned",
+            "armor_class": 12,
+            "armor_detail": "",
+            "blindsight_range": null,
+            "category": "Miscellaneous Creatures",
+            "challenge_rating": 0.125,
+            "creaturesets": [
+                "common-mounts"
+            ],
+            "darkvision_range": null,
+            "document": {
+                "display_name": "5e 2014 Rules",
+                "gamesystem": {
+                    "key": "5e-2014",
+                    "name": "5th Edition 2014"
+                },
+                "key": "srd-2014",
+                "name": "System Reference Document 5.1",
+                "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+                "publisher": {
+                    "key": "wizards-of-the-coast",
+                    "name": "Wizards of the Coast"
+                },
+                "type": "SOURCE"
+            },
+            "environments": [
+                {
+                    "key": "forest",
+                    "name": "Forest or Jungle"
+                },
+                {
+                    "key": "hills",
+                    "name": "Hills"
+                },
+                {
+                    "key": "urban",
+                    "name": "Urban"
+                }
+            ],
+            "experience_points": 25,
+            "hit_dice": "1d8+1",
+            "hit_points": 5,
+            "illustration": null,
+            "initiative_bonus": 2,
+            "key": "srd_mastiff",
+            "languages": {
+                "as_string": "",
+                "data": []
+            },
+            "modifiers": {
+                "charisma": -2,
+                "constitution": 1,
+                "dexterity": 2,
+                "intelligence": -4,
+                "strength": 1,
+                "wisdom": 1
+            },
+            "name": "Mastiff",
+            "normal_sight_range": 10560,
+            "passive_perception": 13,
+            "proficiency_bonus": null,
+            "resistances_and_immunities": {
+                "condition_immunities": [],
+                "condition_immunities_display": "",
+                "damage_immunities": [],
+                "damage_immunities_display": "",
+                "damage_resistances": [],
+                "damage_resistances_display": "",
+                "damage_vulnerabilities": [],
+                "damage_vulnerabilities_display": ""
+            },
+            "saving_throws": {},
+            "saving_throws_all": {
+                "charisma": -2,
+                "constitution": 1,
+                "dexterity": 2,
+                "intelligence": -4,
+                "strength": 1,
+                "wisdom": 1
+            },
+            "size": {
+                "key": "medium",
+                "name": "Medium"
+            },
+            "skill_bonuses": {
+                "perception": 3
+            },
+            "skill_bonuses_all": {
+                "acrobatics": 2,
+                "animal_handling": 1,
+                "arcana": -4,
+                "athletics": 1,
+                "deception": -2,
+                "history": -4,
+                "insight": 1,
+                "intimidation": -2,
+                "investigation": -4,
+                "medicine": 1,
+                "nature": -4,
+                "perception": 3,
+                "performance": -2,
+                "persuasion": -2,
+                "religion": -4,
+                "sleight_of_hand": 2,
+                "stealth": 2,
+                "survival": 1
+            },
+            "speed": {
+                "unit": "feet",
+                "walk": 40
+            },
+            "speed_all": {
+                "burrow": 0,
+                "climb": 20,
+                "crawl": 20,
+                "fly": 0,
+                "hover": false,
+                "swim": 20,
+                "unit": "feet",
+                "walk": 40
+            },
+            "subcategory": null,
+            "traits": [
+                {
+                    "desc": "The mastiff has advantage on Wisdom (Perception) checks that rely on hearing or smell.",
+                    "name": "Keen Hearing and Smell"
+                }
+            ],
+            "tremorsense_range": null,
+            "truesight_range": null,
+            "type": {
+                "key": "beast",
+                "name": "Beast"
+            }
+        },
+        {
+            "ability_scores": {
+                "charisma": 5,
+                "constitution": 13,
+                "dexterity": 10,
+                "intelligence": 2,
+                "strength": 14,
+                "wisdom": 10
+            },
+            "actions": [
+                {
+                    "action_type": "ACTION",
+                    "attacks": [
+                        {
+                            "attack_type": "WEAPON",
+                            "damage_bonus": null,
+                            "damage_die_count": 1,
+                            "damage_die_type": "D4",
+                            "damage_type": {
+                                "key": "thunder",
+                                "name": "Thunder"
+                            },
+                            "distance_unit": "feet",
+                            "extra_damage_bonus": null,
+                            "extra_damage_die_count": null,
+                            "extra_damage_die_type": null,
+                            "extra_damage_type": null,
+                            "long_range": null,
+                            "name": "Hooves attack",
+                            "range": null,
+                            "reach": 5,
+                            "target_creature_only": false,
+                            "to_hit_mod": 2
+                        }
+                    ],
+                    "crossreferences": {
+                        "to": []
+                    },
+                    "desc": "Melee Weapon Attack: +2 to hit, reach 5 ft., one target. Hit: 4 (1d4 + 2) bludgeoning damage.",
+                    "legendary_action_cost": 1,
+                    "limited_to_form": null,
+                    "name": "Hooves",
+                    "order_in_statblock": 0,
+                    "usage_limits": null
+                }
+            ],
+            "alignment": "unaligned",
+            "armor_class": 10,
+            "armor_detail": "",
+            "blindsight_range": null,
+            "category": "Miscellaneous Creatures",
+            "challenge_rating": 0.125,
+            "creaturesets": [
+                "common-mounts"
+            ],
+            "darkvision_range": null,
+            "document": {
+                "display_name": "5e 2014 Rules",
+                "gamesystem": {
+                    "key": "5e-2014",
+                    "name": "5th Edition 2014"
+                },
+                "key": "srd-2014",
+                "name": "System Reference Document 5.1",
+                "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+                "publisher": {
+                    "key": "wizards-of-the-coast",
+                    "name": "Wizards of the Coast"
+                },
+                "type": "SOURCE"
+            },
+            "environments": [
+                {
+                    "key": "grassland",
+                    "name": "Grassland or Plains"
+                },
+                {
+                    "key": "hills",
+                    "name": "Hills"
+                },
+                {
+                    "key": "urban",
+                    "name": "Urban"
+                }
+            ],
+            "experience_points": 25,
+            "hit_dice": "2d8+2",
+            "hit_points": 11,
+            "illustration": null,
+            "initiative_bonus": 0,
+            "key": "srd_mule",
+            "languages": {
+                "as_string": "",
+                "data": []
+            },
+            "modifiers": {
+                "charisma": -3,
+                "constitution": 1,
+                "dexterity": 0,
+                "intelligence": -4,
+                "strength": 2,
+                "wisdom": 0
+            },
+            "name": "Mule",
+            "normal_sight_range": 10560,
+            "passive_perception": 10,
+            "proficiency_bonus": null,
+            "resistances_and_immunities": {
+                "condition_immunities": [],
+                "condition_immunities_display": "",
+                "damage_immunities": [],
+                "damage_immunities_display": "",
+                "damage_resistances": [],
+                "damage_resistances_display": "",
+                "damage_vulnerabilities": [],
+                "damage_vulnerabilities_display": ""
+            },
+            "saving_throws": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "saving_throws_all": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "size": {
+                "key": "medium",
+                "name": "Medium"
+            },
+            "skill_bonuses": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "skill_bonuses_all": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "speed": {
+                "unit": "feet",
+                "walk": 40
+            },
+            "speed_all": {
+                "burrow": 0,
+                "climb": 20,
+                "crawl": 20,
+                "fly": 0,
+                "hover": false,
+                "swim": 20,
+                "unit": "feet",
+                "walk": 40
+            },
+            "subcategory": null,
+            "traits": [
+                {
+                    "desc": "The mule is considered to be a Large animal for the purpose of determining its carrying capacity.",
+                    "name": "Beast of Burden"
+                },
+                {
+                    "desc": "The mule has advantage on Strength and Dexterity saving throws made against effects that would knock it prone.",
+                    "name": "Sure-Footed"
+                }
+            ],
+            "tremorsense_range": null,
+            "truesight_range": null,
+            "type": {
+                "key": "beast",
+                "name": "Beast"
+            }
+        },
+        {
+            "ability_scores": {
+                "charisma": 7,
+                "constitution": 13,
+                "dexterity": 10,
+                "intelligence": 2,
+                "strength": 15,
+                "wisdom": 11
+            },
+            "actions": [
+                {
+                    "action_type": "ACTION",
+                    "attacks": [
+                        {
+                            "attack_type": "WEAPON",
+                            "damage_bonus": null,
+                            "damage_die_count": 2,
+                            "damage_die_type": "D4",
+                            "damage_type": {
+                                "key": "thunder",
+                                "name": "Thunder"
+                            },
+                            "distance_unit": "feet",
+                            "extra_damage_bonus": null,
+                            "extra_damage_die_count": null,
+                            "extra_damage_die_type": null,
+                            "extra_damage_type": null,
+                            "long_range": null,
+                            "name": "Hooves attack",
+                            "range": null,
+                            "reach": 5,
+                            "target_creature_only": false,
+                            "to_hit_mod": 4
+                        }
+                    ],
+                    "crossreferences": {
+                        "to": []
+                    },
+                    "desc": "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 7 (2d4 + 2) bludgeoning damage.",
+                    "legendary_action_cost": 1,
+                    "limited_to_form": null,
+                    "name": "Hooves",
+                    "order_in_statblock": 0,
+                    "usage_limits": null
+                }
+            ],
+            "alignment": "unaligned",
+            "armor_class": 10,
+            "armor_detail": "",
+            "blindsight_range": null,
+            "category": "Miscellaneous Creatures",
+            "challenge_rating": 0.125,
+            "creaturesets": [
+                "common-mounts"
+            ],
+            "darkvision_range": null,
+            "document": {
+                "display_name": "5e 2014 Rules",
+                "gamesystem": {
+                    "key": "5e-2014",
+                    "name": "5th Edition 2014"
+                },
+                "key": "srd-2014",
+                "name": "System Reference Document 5.1",
+                "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+                "publisher": {
+                    "key": "wizards-of-the-coast",
+                    "name": "Wizards of the Coast"
+                },
+                "type": "SOURCE"
+            },
+            "environments": [
+                {
+                    "key": "mountain",
+                    "name": "Mountain"
+                },
+                {
+                    "key": "urban",
+                    "name": "Urban"
+                }
+            ],
+            "experience_points": 25,
+            "hit_dice": "2d8+2",
+            "hit_points": 11,
+            "illustration": null,
+            "initiative_bonus": 0,
+            "key": "srd_pony",
+            "languages": {
+                "as_string": "",
+                "data": []
+            },
+            "modifiers": {
+                "charisma": -2,
+                "constitution": 1,
+                "dexterity": 0,
+                "intelligence": -4,
+                "strength": 2,
+                "wisdom": 0
+            },
+            "name": "Pony",
+            "normal_sight_range": 10560,
+            "passive_perception": 10,
+            "proficiency_bonus": null,
+            "resistances_and_immunities": {
+                "condition_immunities": [],
+                "condition_immunities_display": "",
+                "damage_immunities": [],
+                "damage_immunities_display": "",
+                "damage_resistances": [],
+                "damage_resistances_display": "",
+                "damage_vulnerabilities": [],
+                "damage_vulnerabilities_display": ""
+            },
+            "saving_throws": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "saving_throws_all": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "size": {
+                "key": "medium",
+                "name": "Medium"
+            },
+            "skill_bonuses": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "skill_bonuses_all": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "speed": {
+                "unit": "feet",
+                "walk": 40
+            },
+            "speed_all": {
+                "burrow": 0,
+                "climb": 20,
+                "crawl": 20,
+                "fly": 0,
+                "hover": false,
+                "swim": 20,
+                "unit": "feet",
+                "walk": 40
+            },
+            "subcategory": null,
+            "traits": [],
+            "tremorsense_range": null,
+            "truesight_range": null,
+            "type": {
+                "key": "beast",
+                "name": "Beast"
+            }
+        },
+        {
+            "ability_scores": {
+                "charisma": 7,
+                "constitution": 12,
+                "dexterity": 10,
+                "intelligence": 2,
+                "strength": 16,
+                "wisdom": 11
+            },
+            "actions": [
+                {
+                    "action_type": "ACTION",
+                    "attacks": [
+                        {
+                            "attack_type": "WEAPON",
+                            "damage_bonus": null,
+                            "damage_die_count": 2,
+                            "damage_die_type": "D4",
+                            "damage_type": {
+                                "key": "thunder",
+                                "name": "Thunder"
+                            },
+                            "distance_unit": "feet",
+                            "extra_damage_bonus": null,
+                            "extra_damage_die_count": null,
+                            "extra_damage_die_type": null,
+                            "extra_damage_type": null,
+                            "long_range": null,
+                            "name": "Hooves attack",
+                            "range": null,
+                            "reach": 5,
+                            "target_creature_only": false,
+                            "to_hit_mod": 5
+                        }
+                    ],
+                    "crossreferences": {
+                        "to": []
+                    },
+                    "desc": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 8 (2d4 + 3) bludgeoning damage.",
+                    "legendary_action_cost": 1,
+                    "limited_to_form": null,
+                    "name": "Hooves",
+                    "order_in_statblock": 0,
+                    "usage_limits": null
+                }
+            ],
+            "alignment": "unaligned",
+            "armor_class": 10,
+            "armor_detail": "",
+            "blindsight_range": null,
+            "category": "Miscellaneous Creatures",
+            "challenge_rating": 0.25,
+            "creaturesets": [
+                "common-mounts"
+            ],
+            "darkvision_range": null,
+            "document": {
+                "display_name": "5e 2014 Rules",
+                "gamesystem": {
+                    "key": "5e-2014",
+                    "name": "5th Edition 2014"
+                },
+                "key": "srd-2014",
+                "name": "System Reference Document 5.1",
+                "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+                "publisher": {
+                    "key": "wizards-of-the-coast",
+                    "name": "Wizards of the Coast"
+                },
+                "type": "SOURCE"
+            },
+            "environments": [
+                {
+                    "key": "grassland",
+                    "name": "Grassland or Plains"
+                },
+                {
+                    "key": "urban",
+                    "name": "Urban"
+                }
+            ],
+            "experience_points": 50,
+            "hit_dice": "2d10+2",
+            "hit_points": 13,
+            "illustration": null,
+            "initiative_bonus": 0,
+            "key": "srd_riding-horse",
+            "languages": {
+                "as_string": "",
+                "data": []
+            },
+            "modifiers": {
+                "charisma": -2,
+                "constitution": 1,
+                "dexterity": 0,
+                "intelligence": -4,
+                "strength": 3,
+                "wisdom": 0
+            },
+            "name": "Riding Horse",
+            "normal_sight_range": 10560,
+            "passive_perception": 10,
+            "proficiency_bonus": null,
+            "resistances_and_immunities": {
+                "condition_immunities": [],
+                "condition_immunities_display": "",
+                "damage_immunities": [],
+                "damage_immunities_display": "",
+                "damage_resistances": [],
+                "damage_resistances_display": "",
+                "damage_vulnerabilities": [],
+                "damage_vulnerabilities_display": ""
+            },
+            "saving_throws": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "saving_throws_all": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "size": {
+                "key": "large",
+                "name": "Large"
+            },
+            "skill_bonuses": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "skill_bonuses_all": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "speed": {
+                "unit": "feet",
+                "walk": 60
+            },
+            "speed_all": {
+                "burrow": 0,
+                "climb": 30,
+                "crawl": 30,
+                "fly": 0,
+                "hover": false,
+                "swim": 30,
+                "unit": "feet",
+                "walk": 60
+            },
+            "subcategory": null,
+            "traits": [],
+            "tremorsense_range": null,
+            "truesight_range": null,
+            "type": {
+                "key": "beast",
+                "name": "Beast"
+            }
+        },
+        {
+            "ability_scores": {
+                "charisma": 7,
+                "constitution": 13,
+                "dexterity": 12,
+                "intelligence": 2,
+                "strength": 18,
+                "wisdom": 12
+            },
+            "actions": [
+                {
+                    "action_type": "ACTION",
+                    "attacks": [
+                        {
+                            "attack_type": "WEAPON",
+                            "damage_bonus": null,
+                            "damage_die_count": 2,
+                            "damage_die_type": "D6",
+                            "damage_type": {
+                                "key": "thunder",
+                                "name": "Thunder"
+                            },
+                            "distance_unit": "feet",
+                            "extra_damage_bonus": null,
+                            "extra_damage_die_count": null,
+                            "extra_damage_die_type": null,
+                            "extra_damage_type": null,
+                            "long_range": null,
+                            "name": "Hooves attack",
+                            "range": null,
+                            "reach": 5,
+                            "target_creature_only": false,
+                            "to_hit_mod": 6
+                        }
+                    ],
+                    "crossreferences": {
+                        "to": []
+                    },
+                    "desc": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 11 (2d6 + 4) bludgeoning damage.",
+                    "legendary_action_cost": 1,
+                    "limited_to_form": null,
+                    "name": "Hooves",
+                    "order_in_statblock": 0,
+                    "usage_limits": null
+                }
+            ],
+            "alignment": "unaligned",
+            "armor_class": 11,
+            "armor_detail": "",
+            "blindsight_range": null,
+            "category": "Miscellaneous Creatures",
+            "challenge_rating": 0.5,
+            "creaturesets": [
+                "common-mounts"
+            ],
+            "darkvision_range": null,
+            "document": {
+                "display_name": "5e 2014 Rules",
+                "gamesystem": {
+                    "key": "5e-2014",
+                    "name": "5th Edition 2014"
+                },
+                "key": "srd-2014",
+                "name": "System Reference Document 5.1",
+                "permalink": "https://dnd.wizards.com/resources/systems-reference-document",
+                "publisher": {
+                    "key": "wizards-of-the-coast",
+                    "name": "Wizards of the Coast"
+                },
+                "type": "SOURCE"
+            },
+            "environments": [
+                {
+                    "key": "urban",
+                    "name": "Urban"
+                }
+            ],
+            "experience_points": 100,
+            "hit_dice": "3d10+3",
+            "hit_points": 19,
+            "illustration": null,
+            "initiative_bonus": 1,
+            "key": "srd_warhorse",
+            "languages": {
+                "as_string": "",
+                "data": []
+            },
+            "modifiers": {
+                "charisma": -2,
+                "constitution": 1,
+                "dexterity": 1,
+                "intelligence": -4,
+                "strength": 4,
+                "wisdom": 1
+            },
+            "name": "Warhorse",
+            "normal_sight_range": 10560,
+            "passive_perception": 11,
+            "proficiency_bonus": null,
+            "resistances_and_immunities": {
+                "condition_immunities": [],
+                "condition_immunities_display": "",
+                "damage_immunities": [],
+                "damage_immunities_display": "",
+                "damage_resistances": [],
+                "damage_resistances_display": "",
+                "damage_vulnerabilities": [],
+                "damage_vulnerabilities_display": ""
+            },
+            "saving_throws": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "saving_throws_all": {
+                "charisma": 0,
+                "constitution": 0,
+                "dexterity": 0,
+                "intelligence": 0,
+                "strength": 0,
+                "wisdom": 0
+            },
+            "size": {
+                "key": "large",
+                "name": "Large"
+            },
+            "skill_bonuses": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "skill_bonuses_all": {
+                "acrobatics": 0,
+                "animal_handling": 0,
+                "arcana": 0,
+                "athletics": 0,
+                "deception": 0,
+                "history": 0,
+                "insight": 0,
+                "intimidation": 0,
+                "investigation": 0,
+                "medicine": 0,
+                "nature": 0,
+                "perception": 0,
+                "performance": 0,
+                "persuasion": 0,
+                "religion": 0,
+                "sleight_of_hand": 0,
+                "stealth": 0,
+                "survival": 0
+            },
+            "speed": {
+                "unit": "feet",
+                "walk": 60
+            },
+            "speed_all": {
+                "burrow": 0,
+                "climb": 30,
+                "crawl": 30,
+                "fly": 0,
+                "hover": false,
+                "swim": 30,
+                "unit": "feet",
+                "walk": 60
+            },
+            "subcategory": null,
+            "traits": [
+                {
+                    "desc": "If the horse moves at least 20 ft. straight toward a creature and then hits it with a hooves attack on the same turn, that target must succeed on a DC 14 Strength saving throw or be knocked prone. If the target is prone, the horse can make another attack with its hooves against it as a bonus action.",
+                    "name": "Trampling Charge"
+                }
+            ],
+            "tremorsense_range": null,
+            "truesight_range": null,
+            "type": {
+                "key": "beast",
+                "name": "Beast"
+            }
+        }
+    ],
+    "document": "srd-2014",
+    "key": "common-mounts",
+    "name": "Common Mounts"
+}

@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 2,
+  "saveId": "story-contract-v2",
+  "turnNumber": 0,
+  "status": "ACTIVE",
+  "worldTime": {
+    "year": 1,
+    "day": 1,
+    "phase": "MORNING"
+  },
+  "coreState": {
+    "currentLocationRef": "region:xuanxu:qingqi",
+    "currentLocationName": "东陆青岐州",
+    "condition": "平静",
+    "lifeGoal": "查明父亲失踪的真相"
+  },
+  "trustedProjection": {
+    "creationContract": {
+      "worldBinding": {
+        "packageId": "XUANXU",
+        "revision": 2,
+        "nameSnapshot": "玄墟界",
+        "premiseSnapshot": "仙路真假难辨，众生在未知中求取自己的道路。",
+        "openingRegionRef": "region:xuanxu:qingqi"
+      },
+      "identity": {
+        "protagonistName": "沈砚",
+        "genderCode": "MALE",
+        "raceId": "race:xuanxu:human",
+        "raceNameSnapshot": "人族"
+      },
+      "origin": {
+        "summary": "循着父亲留下的残缺令牌来到青岐州。",
+        "establishedFacts": [
+          {
+            "factId": "origin:fact:father-missing",
+            "type": "PAST_EVENT",
+            "statement": "父亲三年前离家后失去音讯。"
+          }
+        ],
+        "openHooks": [
+          {
+            "hookId": "origin:hook:token",
+            "summary": "残缺令牌的来历与用途仍未查明。"
+          }
+        ],
+        "startingEntityRefs": []
+      },
+      "opening": {
+        "locationRef": "region:xuanxu:qingqi",
+        "situation": "初到青岐州城外，尚未决定先去何处。"
+      },
+      "realmBinding": {
+        "scaleId": "realm-scale:xuanxu",
+        "scaleRevision": 1,
+        "startingRankKey": "L1",
+        "startingPhase": "EARLY"
+      }
+    },
+    "playPreference": {
+      "focus": [
+        "EXPLORATION",
+        "RELATIONSHIP"
+      ],
+      "combatFrequency": "LOW",
+      "pace": "BALANCED",
+      "guidance": "LIGHT",
+      "additionalNote": "希望先观察再作重大决定。",
+      "updatedAt": "2026-08-29T00:00:00Z"
+    },
+    "cultivationSystem": {
+      "systemId": "cultivation:xuanxu:human",
+      "schemaVersion": 1,
+      "name": "人族玄修境界",
+      "summary": "玄墟界人族从炼气至大乘的八阶修行序列。",
+      "race": "人族",
+      "recommendedStartStageId": "realm:xuanxu:human:l1",
+      "stages": [
+        {
+          "stageId": "realm:xuanxu:human:l1",
+          "order": 1,
+          "name": "炼气",
+          "description": "感应并引导天地灵气。",
+          "aliases": [],
+          "allowedNextStageIds": ["realm:xuanxu:human:l2"]
+        },
+        {
+          "stageId": "realm:xuanxu:human:l2",
+          "order": 2,
+          "name": "筑基",
+          "description": "稳固修行根基。",
+          "aliases": [],
+          "allowedNextStageIds": ["realm:xuanxu:human:l3"]
+        },
+        {
+          "stageId": "realm:xuanxu:human:l3",
+          "order": 3,
+          "name": "金丹",
+          "description": "凝结金丹。",
+          "aliases": [],
+          "allowedNextStageIds": ["realm:xuanxu:human:l4"]
+        },
+        {
+          "stageId": "realm:xuanxu:human:l4",
+          "order": 4,
+          "name": "元婴",
+          "description": "元婴初成。",
+          "aliases": [],
+          "allowedNextStageIds": ["realm:xuanxu:human:l5"]
+        },
+        {
+          "stageId": "realm:xuanxu:human:l5",
+          "order": 5,
+          "name": "化神",
+          "description": "神识蜕变。",
+          "aliases": [],
+          "allowedNextStageIds": ["realm:xuanxu:human:l6"]
+        },
+        {
+          "stageId": "realm:xuanxu:human:l6",
+          "order": 6,
+          "name": "炼虚",
+          "description": "参悟虚实变化。",
+          "aliases": [],
+          "allowedNextStageIds": ["realm:xuanxu:human:l7"]
+        },
+        {
+          "stageId": "realm:xuanxu:human:l7",
+          "order": 7,
+          "name": "合体",
+          "description": "形神合一。",
+          "aliases": [],
+          "allowedNextStageIds": ["realm:xuanxu:human:l8"]
+        },
+        {
+          "stageId": "realm:xuanxu:human:l8",
+          "order": 8,
+          "name": "大乘",
+          "description": "大道将成。",
+          "aliases": [],
+          "allowedNextStageIds": []
+        }
+      ],
+      "confirmation": {
+        "source": "WORLD_PACKAGE_FIXED",
+        "confirmedAt": "2026-08-29T00:00:00Z"
+      }
+    },
+    "protagonistCultivation": {
+      "systemId": "cultivation:xuanxu:human",
+      "currentStageId": "realm:xuanxu:human:l1",
+      "phase": "EARLY",
+      "progressMarks": 0,
+      "requiredProgressMarks": 2,
+      "progressNote": ""
+    },
+    "worldFacts": [],
+    "knowledge": []
+  },
+  "scene": {
+    "title": "青岐州外",
+    "narrative": "城门尚远，风中带着陌生药香。沈砚握着残缺令牌，还没有替自己决定下一步。",
+    "situation": "主角刚抵达青岐州，可以观察、询问或暂作休整。",
+    "pendingDecision": null,
+    "choices": []
+  }
+}

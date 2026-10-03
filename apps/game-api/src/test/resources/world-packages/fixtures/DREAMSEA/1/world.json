@@ -1,0 +1,38 @@
+{
+  "premise": "梦海随记忆潮汐改变航路，岛民以守梦或逐潮决定自己的道路。",
+  "coreRules": [
+    {"ruleId": "rule:dreamsea:tide", "text": "潮汐改变可见航路，但不能改写已经确认的个人经历。", "priority": 100}
+  ],
+  "contentBoundaries": [
+    {"boundaryId": "boundary:dreamsea:agency", "text": "守梦或逐潮必须由玩家决定。"}
+  ],
+  "races": [
+    {
+      "raceId": "race:dreamsea:islander",
+      "name": "岛民",
+      "description": "在固定岛屿生活、擅长保存记忆的人。",
+      "identityFacts": ["出生或长期生活在梦海岛屿。"],
+      "socialHooks": ["通常重视口述记忆和归航承诺。"],
+      "opportunityTags": ["island", "memory"],
+      "primaryProgressionTrackRef": "track:dreamsea:islander"
+    },
+    {
+      "raceId": "race:dreamsea:tideborn",
+      "name": "潮生者",
+      "description": "从潮汐与遗忘中醒来的流动生命。",
+      "identityFacts": ["本体与一段潮汐记忆相连。"],
+      "socialHooks": ["常被询问从哪一段记忆中醒来。"],
+      "opportunityTags": ["tide", "memory"],
+      "primaryProgressionTrackRef": "track:dreamsea:tideborn"
+    }
+  ],
+  "regions": [
+    {"regionId": "region:dreamsea:harbor", "name": "拾梦港", "description": "回收潮汐遗物的小港。", "tags": ["harbor", "memory"]}
+  ],
+  "narrativeProfile": {
+    "guidance": "以清澈而克制的笔触表现记忆与归属，不替玩家决定守梦或逐潮。",
+    "tone": ["清澈", "克制"],
+    "conflictThemes": ["记忆", "归属"],
+    "openSpace": "未命名岛屿可以在航行中被发现。"
+  }
+}
