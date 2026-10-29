@@ -1,0 +1,52 @@
+{
+  "id": "qingxi-trial",
+  "revision": 2,
+  "title": "青溪镇",
+  "scope": "青木坊本地试玩",
+  "summary": "以资料库的修行与器物定义为背景；青溪镇、青木坊和开篇人物是本局场景，不宣称来自公共资料。",
+  "foundations": [
+    {"category": "realms", "key": "lianqi"},
+    {"category": "realms", "key": "zhuji"}
+  ],
+  "adopted_definitions": [
+    {"category": "realms", "key": "lianqi", "revision": 2},
+    {"category": "realms", "key": "zhuji", "revision": 2},
+    {"category": "arts", "key": "basic-breathing", "revision": 2},
+    {"category": "items", "key": "medicinal-spirit-herb", "revision": 2},
+    {"category": "arts", "key": "object-control", "revision": 2},
+    {"category": "items", "key": "storage-pouch", "revision": 2},
+    {"category": "items", "key": "basic-protection-talisman", "revision": 2}
+  ],
+  "item_use_rules": [
+    {"id": "simple-protection", "definition": {"category": "items", "key": "basic-protection-talisman"},
+     "kind": "single-protection", "name": "贴身护光"}
+  ],
+  "opening": {
+    "id": "qingmu-trial",
+    "realm": {"category": "realms", "key": "lianqi"},
+    "realm_stage": "初期",
+    "practice": {"category": "arts", "key": "basic-breathing"},
+    "practice_id": "breathing",
+    "practice_stage": "初学",
+    "context": [{"category": "items", "key": "medicinal-spirit-herb"}],
+    "location": "青溪镇·青木坊门前",
+    "scene_title": "青木坊的来货",
+    "condition": "安好",
+    "narrative": [
+      "你刚到青溪镇，行囊里只有随身衣物。眼前的青木坊正忙着收一批药材。",
+      "掌柜翻过货单，看了看门边的竹筐：‘要是愿意搭把手，先帮我核一核来货。食宿的事，咱们可以谈。’",
+      "送货人还在门口等着。你可以接下差事、先问清来路，也可以离开这里，另寻机会。"
+    ],
+    "choices": [
+      {"id": "help", "label": "先问清核货要求与食宿条件", "hint": "谈妥之后，再决定是否接下。"},
+      {"id": "ask", "label": "向送货人打听这批药材的来路", "hint": "先了解情况，再考虑是否参与。"},
+      {"id": "leave", "label": "离开青木坊，去河边吐纳", "hint": "暂不接差事，先安定自己的修行。"}
+    ],
+    "items": [{"id": "clothes", "name": "随身衣物", "category": "随身物", "status": "完好", "quantity": 1, "description": "出门时带着的一套衣物。"}],
+    "characters": [
+      {"id": "shopkeeper", "name": "青木坊掌柜", "identity": "药材铺掌柜", "state": "核对货单", "location": "青木坊", "relation": "初次见面"},
+      {"id": "carrier", "name": "送货人", "identity": "来货的送货人", "state": "等候核货", "location": "青木坊门前", "relation": "尚未交谈"}
+    ],
+    "time": {"year": 1, "day": 1, "phase": "MORNING"}
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "opening_grant": 1000,
+  "providers": [{
+    "code": "LOCAL", "name": "本地续写", "base_url": "https://api.deepseek.com",
+    "personal_enabled": false,
+    "models": [{"code": "GENERAL", "name": "标准续写", "api_model": "deepseek-flash", "reasoning_effort": "none", "tool_protocol": "deepseek-json"}]
+  }],
+  "tiers": [{"code": "LIGHT", "name": "本地试玩", "description": "本地测试点数，每回消耗 1 点；不代表正式定价。", "point_cost": 1, "provider": "LOCAL", "model": "GENERAL"}],
+  "default_tier": "LIGHT"
+}

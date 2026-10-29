@@ -1,0 +1,63 @@
+.game-shell .runtime-mode-note {
+  display: block;
+  margin: 0 0 16px;
+  color: var(--ink-soft);
+  font-family: var(--utility);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.game-shell .settings-reference-link {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  width: 100%; padding: 18px 0; color: var(--ink); text-align: left;
+  background: none; border: 0; border-bottom: 1px solid var(--line); cursor: pointer;
+}
+.settings-reference-link > span { display: grid; gap: 6px; }
+.settings-reference-link strong { font: 16px var(--display); }
+.settings-reference-link small { color: var(--ink-soft); font: 12px var(--utility); }
+/* 资料菜单沿用原配色和阅读字号，只保留分类、目录和内容的层级。 */
+.reference-view { overflow-wrap: anywhere; }
+.reference-view .reference-back { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 0; margin-bottom: 12px; border: 0; background: none; color: var(--ink-soft); font: 13px var(--utility); cursor: pointer; }
+.reference-heading { margin-bottom: 24px; }
+.reference-heading h1 { margin: 0; font: 600 28px/1.4 var(--display); }
+.reference-layout { display: grid; gap: 24px; }
+.reference-category-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 12px; align-content: start; border-bottom: 1px solid var(--line); }
+.reference-category-nav button { position: relative; min-width: 0; min-height: 46px; padding: 10px 0; color: var(--ink-soft); font: 13px/1.6 var(--utility); text-align: center; border: 0; border-bottom: 2px solid transparent; background: none; cursor: pointer; }
+.reference-category-nav button[aria-current="page"] { color: var(--ink); border-bottom-color: var(--celadon-dark); font-weight: 650; }
+.reference-content { min-width: 0; }
+.reference-content-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.reference-content-heading h2 { margin: 0; font: 600 calc(var(--reading-title-size) + 4px)/1.5 var(--display); }
+.reference-content-heading h2:focus { outline: none; }
+.reference-content-heading > span { flex-shrink: 0; color: var(--ink-soft); font: 12px var(--utility); }
+.reference-world-intro small { font: 12px/1.8 var(--utility); color: var(--ink-soft); }
+.reference-world-intro h3 { margin: 8px 0 12px; font: 550 20px/1.5 var(--display); }
+.reference-world-intro p, .reference-section p { margin: 10px 0 0; white-space: pre-wrap; font-size: var(--reading-story-size); line-height: 1.95; }
+.reference-section { margin-top: 28px; }
+.reference-section h3 { margin: 0; color: var(--ink); font: 600 var(--reading-title-size)/1.6 var(--display); }
+.reference-list { list-style: none; margin: 0; padding: 0; }
+.reference-list li { border-bottom: 1px solid var(--line); }
+.reference-list button { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 8px 12px; width: 100%; min-height: 72px; padding: 16px 0; color: var(--ink); text-align: left; border: 0; background: none; cursor: pointer; }
+.reference-entry-title { font: 550 calc(var(--reading-title-size) + 1px)/1.6 var(--display); }
+.reference-list small { font: 11px/1.6 var(--utility); color: var(--ink-soft); }
+.reference-entry-description { grid-column: 1 / -1; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font: var(--reading-body-size)/1.8 var(--utility); color: var(--ink-soft); }
+.reference-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; font: 12px var(--utility); }
+.reference-pagination button, .reference-error button { min-height: 44px; padding: 8px 12px; color: var(--celadon-dark); font: 13px var(--utility); border: 1px solid var(--line); background: none; cursor: pointer; }
+.reference-pagination button:disabled { opacity: .4; cursor: default; }
+.reference-version { display: flex; flex-wrap: wrap; gap: 8px 16px; font: 12px/1.8 var(--utility); color: var(--ink-soft); }
+.reference-example { font: 12px/1.8 var(--utility); color: var(--ink-soft); }
+.reference-empty { margin: 32px 0; }
+.reference-empty p { margin-bottom: 8px; }
+.reference-empty > span { color: var(--ink-soft); font: 13px/1.8 var(--utility); }
+.reference-error { margin: 24px 0; line-height: 1.8; }
+.reference-view .reference-note { margin-top: 32px; color: var(--ink-soft); font: 11px/1.8 var(--utility); }
+@media (hover: hover) {
+  .reference-category-nav button:hover { color: var(--ink); }
+  .reference-list button:hover .reference-entry-title { color: var(--celadon-dark); }
+}
+@media (min-width: 760px) {
+  .reference-layout { grid-template-columns: 120px minmax(0, 1fr); gap: 32px; }
+  .reference-category-nav { position: sticky; top: 0; grid-template-columns: minmax(0, 1fr); align-self: start; padding-right: 20px; border-bottom: 0; border-right: 1px solid var(--line); }
+  .reference-category-nav button { margin: 0 0 4px; padding: 12px 0 12px 12px; text-align: left; border-bottom: 0; border-left: 2px solid transparent; }
+  .reference-category-nav button[aria-current="page"] { border-left-color: var(--celadon-dark); background: var(--paper-strong); }
+}
+@media (max-width: 359px) { .reference-category-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

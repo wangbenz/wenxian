@@ -17,7 +17,7 @@ test("local demo runs the real player flow without the Java backend", async ({ p
   await page.getByRole("button", { name: /先问清故人的名讳/ }).click();
   await page.getByRole("button", { name: "确认行动" }).click();
   await expect(page.getByText("已确认", { exact: true })).toBeVisible();
-  await expect(page.getByText("正在续写这一回", { exact: true })).toBeVisible();
+  await expect(page.getByText("正在等待这一回的结果", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "你准备如何回应？" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /跟随对方进入渡口/ })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "雾中回音" })).toBeVisible();

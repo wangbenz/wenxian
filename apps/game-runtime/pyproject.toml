@@ -1,0 +1,27 @@
+[project]
+name = "wenxian-game-runtime"
+version = "0.1.0"
+description = "问仙录独立游戏运行时，原 H5 的 Python 试玩链路"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "httpx>=0.28,<1",
+    "langchain>=1.2,<2",
+    "langchain-openai>=1,<2",
+    "cryptography>=46,<51",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]

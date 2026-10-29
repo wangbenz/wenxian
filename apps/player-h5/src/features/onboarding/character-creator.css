@@ -1,0 +1,130 @@
+/* 人物命卷：既有山水封面、纸页与书签；不影响 Java 创角或游戏阅读页。 */
+.game-shell[data-stage="create"][data-creator="manuscript"] { --content-width: 1080px; background: #19272b; }
+.game-shell[data-stage="create"][data-creator="manuscript"] .paper-background { background: #19272b; filter: none; opacity: 1; }
+.game-shell[data-stage="create"][data-creator="manuscript"] .game-header { color: #eee7d8; background: rgba(23, 37, 41, .92); border-bottom: 1px solid rgba(184, 163, 124, .28); box-shadow: none; backdrop-filter: none; }
+.game-shell[data-stage="create"][data-creator="manuscript"] .game-header::after { display: none; }
+.game-shell[data-stage="create"][data-creator="manuscript"] :is(.header-back-button, .app-context-title) { color: #eee7d8; }
+.game-shell[data-stage="create"][data-creator="manuscript"] .screen-content { display: block; width: min(100%, 1080px); padding: 18px 12px 32px; }
+.character-creator {
+  --folio: #eee7d8; --folio-ink: #29383b; --folio-muted: #625e52;
+  --folio-line: #bbab8d; --folio-red: #8b3a2a; --folio-body: max(15px, var(--reading-body-size));
+  display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; margin: 0 auto;
+  color: var(--folio-ink); border: 1px solid #9c8e74; border-left: 6px solid #2a3b3c;
+  background: var(--folio); box-shadow: 0 16px 48px rgba(0, 0, 0, .22); scroll-margin-block-start: 18px;
+}
+.character-creator * { box-sizing: border-box; }
+.character-creator .creator-cover { display: flex; flex-direction: column; justify-content: space-between; min-width: 0; height: 150px; padding: 22px 24px; color: #f1e8d5; background: #1d2c30 url("/assets/game/xuan-paper-night.png") right top / cover; border-bottom: 1px solid #b3a182; }
+.character-creator .creator-cover-label { align-self: flex-start; font: 15px/1.5 var(--display); letter-spacing: .35em; }
+.character-creator .creator-cover-name { overflow-wrap: anywhere; font: 500 clamp(28px, 7.8vw, 38px)/1.5 var(--display); letter-spacing: .12em; text-shadow: 0 2px 8px #172528; }
+.character-creator .creator-folio { min-width: 0; padding: 0 22px 28px; background: linear-gradient(rgba(238, 231, 216, .95), rgba(238, 231, 216, .95)), url("/assets/game/xuan-paper-alley.png") center / cover; }
+.character-creator .creator-bookmarks { margin: 0 -22px 24px; }
+.character-creator .creator-bookmarks ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; margin: 0; padding: 0; }
+.character-creator .creator-bookmarks li { min-width: 0; }
+.character-creator .creator-bookmarks button { width: 100%; min-height: 48px; padding: 10px; border: 0; border-right: 1px solid var(--folio-line); border-bottom: 1px solid var(--folio-line); color: var(--folio-muted); background: #ddd3bd; font: 15px/1.6 var(--display); letter-spacing: .15em; }
+.character-creator .creator-bookmarks li:last-child button { border-right: 0; }
+.character-creator .creator-bookmarks button[aria-current="step"] { color: var(--folio-red); background: var(--folio); border-bottom-color: transparent; box-shadow: inset 0 3px var(--folio-red); }
+.character-creator .creator-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 24px; }
+.character-creator .creator-heading h1 { margin: 0; font: 600 28px/1.5 var(--display); letter-spacing: .1em; }
+.character-creator .creator-heading h1:focus { outline: none; }
+.character-creator .creator-leaf-number { padding: 5px 7px; color: var(--folio-red); border: 1px solid var(--folio-red); font: 15px/1.4 var(--display); }
+.character-creator .creator-stage { display: grid; gap: 20px; }
+.character-creator button { cursor: pointer; }
+.character-creator button:disabled { cursor: default; opacity: .45; }
+.character-creator :is(button, summary) { -webkit-tap-highlight-color: transparent; }
+.character-creator :is(button, summary, input, textarea):focus-visible { outline: 2px solid var(--folio-red); outline-offset: 4px; }
+.character-creator :is(button, summary) svg { flex-shrink: 0; width: 16px; height: 16px; }
+.character-creator fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.character-creator legend { margin-bottom: 8px; padding: 0; color: var(--folio-muted); font: 12px/1.6 var(--utility); }
+.character-creator .creator-name-input { display: flex; align-items: center; gap: 8px; padding: 4px 0 14px; border-bottom: 1px solid var(--folio-line); }
+.game-shell .character-creator .creator-name-input input { flex: 1; min-width: 0; width: 100%; padding: 8px 0; color: var(--folio-ink); border: 0; border-radius: 0; background: none; font: 500 32px/1.5 var(--display); letter-spacing: .12em; }
+.character-creator .creator-name-input input::placeholder { color: #716b5e; font-size: 24px; letter-spacing: .05em; }
+.character-creator .creator-text-button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 6px 0; border: 0; color: var(--folio-red); background: none; font: 12px/1.6 var(--utility); }
+.character-creator .creator-name-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+.character-creator .creator-name-options button { position: relative; display: grid; place-items: center; min-width: 0; min-height: 142px; padding: 14px 8px 24px; color: var(--folio-ink); border: 1px solid var(--folio-line); border-top: 3px solid var(--folio-line); border-radius: 0; background: rgba(250, 247, 237, .4); }
+.character-creator .creator-name-options button > span { writing-mode: vertical-rl; text-orientation: upright; font: 500 24px/1.6 var(--display); letter-spacing: .15em; }
+.character-creator .creator-name-options button[aria-pressed="true"] { color: var(--folio-red); border-color: var(--folio-red); background: rgba(139, 58, 42, .055); }
+.character-creator .creator-name-options button > svg { position: absolute; right: 6px; bottom: 6px; color: var(--folio-red); }
+.character-creator .creator-gender > div { display: flex; gap: 20px; }
+.character-creator .creator-gender button { min-width: 56px; min-height: 44px; padding: 8px 4px; border: 0; border-bottom: 1px solid transparent; border-radius: 0; color: var(--folio-muted); background: none; font: 15px/1.6 var(--display); }
+.character-creator .creator-gender button[aria-pressed="true"] { color: var(--folio-red); border-bottom-color: var(--folio-red); }
+.character-creator .creator-section-heading { display: flex; justify-content: flex-end; margin: -12px 0 6px; }
+.character-creator .creator-path-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-bottom: -1px; }
+.character-creator .creator-path-tabs button { position: relative; min-width: 0; min-height: 76px; padding: 10px 8px; border: 1px solid var(--folio-line); border-radius: 0; color: var(--folio-muted); background: #ddd3bd; text-align: left; }
+.character-creator .creator-path-tabs button[aria-selected="true"] { z-index: 1; color: var(--folio-ink); border-bottom-color: #f3eddf; background: #f3eddf; box-shadow: inset 0 2px var(--folio-red); }
+.character-creator .creator-path-tabs button > span { display: block; margin-bottom: 4px; color: var(--folio-red); font: 11px/1.4 var(--display); }
+.character-creator .creator-path-tabs strong { display: block; overflow-wrap: anywhere; font: 500 13px/1.6 var(--display); }
+.character-creator .creator-path-tabs svg { position: absolute; top: 8px; right: 6px; color: var(--folio-red); width: 12px; height: 12px; }
+.character-creator .creator-path-leaf { min-width: 0; padding: 22px 20px; border: 1px solid var(--folio-line); background: #f3eddf; }
+.character-creator .creator-path-leaf h2 { margin: 0 0 16px; color: var(--folio-ink); font: 600 22px/1.6 var(--display); }
+.character-creator .creator-path-leaf p, .character-creator .creator-selected-draft p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--folio-body)/1.95 var(--display); }
+.character-creator .creator-path-leaf dl { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--folio-line); }
+.character-creator .creator-path-leaf dl > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.character-creator .creator-path-leaf dt { color: var(--folio-red); }
+.character-creator .creator-use-path { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; margin: 20px 0 0 auto; padding: 8px 14px; border: 1px solid var(--folio-red); border-radius: 0; color: var(--folio-red); background: none; font: 14px/1.6 var(--display); }
+.character-creator .creator-use-path[aria-pressed="true"] { color: #f7efdc; background: var(--folio-red); }
+.character-creator .creator-blank-leaf { display: grid; place-items: center; min-height: 100px; border-block: 1px solid var(--folio-line); }
+.character-creator .creator-generate { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 52px; padding: 10px 12px; color: var(--folio-red); border: 0; border-radius: 0; background: none; font: 500 18px/1.6 var(--display); letter-spacing: .08em; }
+.character-creator .creator-selected-draft { padding: 0 0 0 16px; border-left: 2px solid var(--folio-red); }
+.character-creator .creator-selected-draft p { margin-top: 10px; }
+.character-creator .creator-selected-draft p > span { margin-right: 12px; color: var(--folio-muted); font: 12px/1.8 var(--utility); }
+.character-creator details { min-width: 0; }
+.character-creator summary { display: flex; align-items: center; gap: 8px; min-height: 44px; color: var(--folio-muted); cursor: pointer; list-style: none; font: 12px/1.6 var(--utility); }
+.character-creator summary::-webkit-details-marker { display: none; }
+.character-creator details[open] > summary svg { transform: rotate(180deg); }
+.character-creator .creator-editor { padding-bottom: 12px; border-bottom: 1px solid var(--folio-line); }
+.character-creator .creator-editor > summary { justify-content: space-between; }
+.character-creator .creator-fields { display: grid; gap: 18px; padding: 10px 0 6px; }
+.character-creator .creator-fields label, .character-creator .creator-custom-preference label { display: grid; min-width: 0; gap: 8px; }
+.character-creator .creator-fields label > span { color: var(--folio-muted); font: 12px/1.6 var(--utility); }
+.game-shell .character-creator textarea { width: 100%; padding: 10px 12px; resize: vertical; color: var(--folio-ink); border: 1px solid var(--folio-line); border-radius: 0; background: rgba(250, 247, 237, .6); font: var(--folio-body)/1.9 var(--display); }
+.character-creator .creator-preference-options { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.character-creator .creator-preference-options button { min-height: 44px; padding: 8px 2px; color: var(--folio-muted); border: 0; border-bottom: 1px solid transparent; border-radius: 0; background: none; font: 14px/1.6 var(--display); }
+.character-creator .creator-preference-options button[aria-pressed="true"] { color: var(--folio-red); border-bottom-color: var(--folio-red); }
+.character-creator .creator-custom-preference { margin-top: 4px; }
+.character-creator .creator-custom-preference textarea { margin-top: 8px; }
+.character-creator .creator-actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; padding-top: 20px; border-top: 1px solid var(--folio-line); }
+.character-creator .creator-primary { display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 48px; min-width: 152px; padding: 10px 22px; border: 1px solid #6e2d21; border-radius: 0; color: #f7efdc; background: var(--folio-red); box-shadow: inset 0 0 0 2px var(--folio-red), inset 0 0 0 3px rgba(247, 239, 220, .3); font: 500 16px/1.7 var(--display); letter-spacing: .15em; }
+.character-creator .creator-secondary { min-height: 48px; min-width: 64px; margin-right: auto; padding: 10px 4px; color: var(--folio-muted); border: 0; background: none; font: 14px/1.6 var(--display); }
+.character-creator .creator-field-error { margin: 8px 0 0; color: var(--folio-red); font: 13px/1.7 var(--utility); }
+.character-creator .creator-review-character { padding-bottom: 24px; border-bottom: 1px solid var(--folio-line); }
+.character-creator .creator-review-name { display: flex; align-items: baseline; gap: 16px; margin-bottom: 20px; }
+.character-creator .creator-review-name h2 { margin: 0; font: 500 32px/1.5 var(--display); letter-spacing: .1em; }
+.character-creator .creator-review-name > span { color: var(--folio-muted); font: 13px/1.6 var(--utility); }
+.character-creator dl { display: grid; gap: 12px; margin: 0; }
+.character-creator dl > div { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+.character-creator dt { color: var(--folio-muted); font: 12px/1.8 var(--utility); }
+.character-creator dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--folio-body)/1.9 var(--display); }
+.character-creator .creator-opening h2 { margin: 0 0 16px; font: 600 21px/1.6 var(--display); }
+.character-creator .creator-opening p { margin: 0 0 16px; font: var(--folio-body)/1.95 var(--display); }
+.character-creator .creator-opening dl { margin-top: 16px; padding-top: 20px; border-top: 1px solid var(--folio-line); }
+.character-creator .creator-progress { margin: 16px 0 0; color: var(--folio-muted); font: 13px/1.8 var(--utility); }
+.character-creator .creator-resume { margin-top: 16px; }
+@media (hover: hover) {
+  .character-creator .creator-name-options button:hover, .character-creator .creator-use-path:hover { border-color: var(--folio-red); }
+  .character-creator :is(summary, .creator-secondary):hover { color: var(--folio-red); }
+}
+@media (min-width: 800px) {
+  .game-shell[data-stage="create"][data-creator="manuscript"] .screen-content { padding: 36px 24px 48px; }
+  .character-creator { grid-template-columns: 260px minmax(0, 1fr); border-left-width: 10px; scroll-margin-block-start: 36px; }
+  .character-creator .creator-cover { min-height: 660px; height: 100%; padding: 42px 32px; justify-content: flex-start; background-position: right top; border-right: 1px solid var(--folio-line); border-bottom: 0; }
+  .character-creator .creator-cover-label { writing-mode: vertical-rl; font-size: 22px; }
+  .character-creator .creator-cover-name { margin: 56px 0 0 auto; writing-mode: vertical-rl; font-size: 42px; }
+  .character-creator .creator-folio { padding: 0 36px 36px; }
+  .character-creator .creator-bookmarks { margin-inline: -36px; margin-bottom: 32px; }
+  .character-creator .creator-heading { margin-bottom: 28px; }
+  .character-creator .creator-heading h1 { font-size: 32px; }
+  .character-creator .creator-stage { gap: 24px; }
+  .character-creator .creator-name-options { gap: 16px; }
+  .character-creator .creator-path-leaf { padding: 28px; }
+}
+@media (max-width: 359px) {
+  .character-creator .creator-folio { padding-inline: 16px; }
+  .character-creator .creator-bookmarks { margin-inline: -16px; }
+  .character-creator .creator-name-input { flex-wrap: wrap; }
+  .character-creator .creator-name-input input { flex-basis: 100%; }
+  .character-creator .creator-name-options { gap: 6px; }
+  .character-creator .creator-name-options button > span { font-size: 22px; }
+  .character-creator .creator-path-leaf { padding: 18px 16px; }
+  .character-creator .creator-path-leaf h2 { font-size: 20px; }
+  .character-creator .creator-preference-options { gap: 4px 12px; }
+}

@@ -1,0 +1,12 @@
+{
+  "opening_grant": 12,
+  "grant_valid_days": 30,
+  "providers": [{
+    "code": "EXAMPLE", "name": "示例服务",
+    "base_url": "https://api.example.test/v1", "personal_enabled": true,
+    "platform_key_env": "WENXIAN_EXAMPLE_PLATFORM_KEY",
+    "models": [{"code": "GENERAL", "name": "通用续写", "api_model": "replace-with-authorized-model"}]
+  }],
+  "tiers": [{"code": "LIGHT", "name": "轻量", "description": "仅演示配置格式", "point_cost": 4, "provider": "EXAMPLE", "model": "GENERAL"}],
+  "default_tier": "LIGHT"
+}

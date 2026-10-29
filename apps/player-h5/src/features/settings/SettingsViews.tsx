@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowRightIcon, ChevronDownIcon, ReloadIcon } from "@radix-ui/react-icons";
 import type { ReleaseNote, StoryCorrectionPreview, StoryGenerationSettings } from "../../game-api";
 import type { CleanupTarget } from "../gameplay/GameViews";
@@ -8,7 +8,7 @@ export type ThemeMode = "system" | "paper" | "night";
 export type FontSizeMode = "compact" | "standard" | "large";
 export type TurnLimitNotice = { message: string; contactText: string; supportGroup: string };
 
-export function GenerationSettingsDialog({ settings, error, isBusy, onCancel, onUsePlatform, onSave, onActivate, onDelete }: { settings: StoryGenerationSettings; error: UiProblem | null; isBusy: boolean; onCancel: () => void; onUsePlatform: (tierCode?: "LIGHT" | "BALANCED" | "DEEP") => void; onSave: (provider: string, model: string, key: string) => void; onActivate: (provider: string, model: string) => void; onDelete: (provider: string) => void }) {
+export function GenerationSettingsDialog({ settings, error, isBusy, onCancel, onUsePlatform, onSave, onActivate, onDelete, verificationDeferred = false }: { verificationDeferred?: boolean; settings: StoryGenerationSettings; error: UiProblem | null; isBusy: boolean; onCancel: () => void; onUsePlatform: (tierCode?: "LIGHT" | "BALANCED" | "DEEP") => void; onSave: (provider: string, model: string, key: string) => void; onActivate: (provider: string, model: string) => void; onDelete: (provider: string) => void }) {
   const fallbackProvider = settings.personalProviders[0]?.code ?? "";
   const [providerCode, setProviderCode] = useState(settings.selectedPersonalProvider ?? fallbackProvider);
   const provider = settings.personalProviders.find((item) => item.code === providerCode) ?? settings.personalProviders[0];
@@ -38,7 +38,7 @@ export function GenerationSettingsDialog({ settings, error, isBusy, onCancel, on
           {current ? <span className="generation-source-current">使用中</span> : <button disabled={isBusy || !settings.platform.available} onClick={() => onUsePlatform(tier.code)} type="button">选择此档</button>}
         </article>;
       })}</div>}
-      <p>也可接入自己的推演服务；密钥验证成功后使用量由对应服务计费，平台不扣点。</p>
+      <p>{verificationDeferred ? "也可接入自己的推演服务。保存密钥不会发起请求；续写时由对应服务验证和计费，平台不扣点。" : "也可接入自己的推演服务；密钥验证成功后使用量由对应服务计费，平台不扣点。"}</p>
       {insecureRemote && <p className="credential-warning">当前连接未启用 HTTPS，为避免密钥在传输中暴露，暂不允许保存。</p>}
       {settings.personalProviders.length === 0 ? <p className="credential-warning">当前暂未开放可接入的推演服务。</p> : <div className="credential-field">
         <label>推演服务<span className="select-control"><select disabled={isBusy} onChange={(event) => selectProvider(event.currentTarget.value)} value={providerCode}>{settings.personalProviders.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select><ChevronDownIcon aria-hidden="true" /></span></label>
@@ -50,7 +50,7 @@ export function GenerationSettingsDialog({ settings, error, isBusy, onCancel, on
         <button className="ink-dialog-cancel" disabled={isBusy} onClick={onCancel} type="button">返回</button>
         {provider?.credentialConfigured && <button className="credential-delete" disabled={isBusy} onClick={() => onDelete(provider.code)} type="button">移除密钥</button>}
         {provider?.credentialConfigured && !apiKey.trim() && <button className="ink-dialog-confirm" disabled={isBusy || !modelCode} onClick={() => onActivate(provider.code, modelCode)} type="button">使用此密钥</button>}
-        {provider && <button className="ink-dialog-confirm" disabled={isBusy || insecureRemote || !modelCode || apiKey.trim().length < 20} onClick={() => onSave(provider.code, modelCode, apiKey.trim())} type="button">{isBusy ? "正在验证…" : provider.credentialConfigured ? "验证并替换" : "验证并启用"}</button>}
+        {provider && <button className="ink-dialog-confirm" disabled={isBusy || insecureRemote || !modelCode || apiKey.trim().length < 20} onClick={() => onSave(provider.code, modelCode, apiKey.trim())} type="button">{isBusy ? verificationDeferred ? "正在保存…" : "正在验证…" : verificationDeferred ? provider.credentialConfigured ? "保存并替换" : "保存并启用" : provider.credentialConfigured ? "验证并替换" : "验证并启用"}</button>}
       </div>
     </section>
   </div>;
@@ -127,7 +127,7 @@ export function StoryCorrectionDialog({ preview, error, isBusy, onCancel, onPrev
   </section></div>;
 }
 
-export function SettingsView({ fontSize, generation, email, passwordConfigured, version, isBusy, onFontSize, onPlatform, onGenerationSettings, onPasswordSettings, onSaves, onReset, onLogout, onDeleteAccount }: { fontSize: FontSizeMode; generation: StoryGenerationSettings | null; email: string; passwordConfigured: boolean; version: string; isBusy: boolean; onFontSize: (value: FontSizeMode) => void; onPlatform: () => void; onGenerationSettings: () => void; onPasswordSettings: () => void; onSaves: () => void; onReset: () => void; onLogout: () => void; onDeleteAccount: () => void }) {
+export function SettingsView({ fontSize, generation, email, passwordConfigured, version, isBusy, onFontSize, onPlatform, onGenerationSettings, onPasswordSettings, onSaves, onReset, onLogout, onDeleteAccount, localTrial, onReference }: { fontSize: FontSizeMode; generation: StoryGenerationSettings | null; email: string; passwordConfigured: boolean; version: string; isBusy: boolean; onFontSize: (value: FontSizeMode) => void; onPlatform: () => void; onGenerationSettings: () => void; onPasswordSettings: () => void; onSaves: () => void; onReset: () => void; onLogout: () => void; onDeleteAccount: () => void; localTrial?: { modeLabel: string; saveControls: ReactNode; accountEnabled?: boolean; generationEnabled?: boolean; settingsControl?: ReactNode }; onReference?: () => void }) {
   const personalProvider = generation?.personalProviders.find((item) => item.code === generation.selectedPersonalProvider)
     ?? generation?.personalProviders.find((item) => item.credentialConfigured)
     ?? generation?.personalProviders[0];
@@ -135,7 +135,7 @@ export function SettingsView({ fontSize, generation, email, passwordConfigured, 
   const platformSelected = generation?.mode !== "PERSONAL";
   const personalSelected = generation?.mode === "PERSONAL";
   const personalConfigured = Boolean(personalProvider?.credentialConfigured);
-  const personalReady = personalConfigured && personalProvider?.credentialStatus === "ACTIVE";
+  const personalReady = personalConfigured && ["ACTIVE", "SAVED"].includes(personalProvider?.credentialStatus ?? "");
   const personalAvailable = (generation?.personalProviders.length ?? 0) > 0;
   const platformRemaining = generation?.platform.remainingTurns ?? 0;
   const selectedTier = generation?.platformTiers?.find((tier) => tier.selected);
@@ -143,7 +143,7 @@ export function SettingsView({ fontSize, generation, email, passwordConfigured, 
     ? `全部命卷共享 · 剩余 ${platformRemaining} 点${selectedTier ? ` · 本档 ${selectedTier.pointCost} 点/次` : ""}`
     : "平台点数已用完，可接入自己的续写服务";
   const personalDetail = personalReady
-    ? `${personalProvider?.name ?? "自己的服务"}${personalModel ? ` · ${personalModel.name}` : ""}`
+    ? `${personalProvider?.name ?? "自己的服务"}${personalModel ? ` · ${personalModel.name}` : ""}${personalProvider?.credentialStatus === "SAVED" ? " · 已保存，首次续写时验证" : ""}`
     : personalConfigured
       ? "已保存，需要重新验证后使用"
       : "尚未接入";
@@ -151,12 +151,13 @@ export function SettingsView({ fontSize, generation, email, passwordConfigured, 
   return <div className="record-view settings-view">
     <header className="settings-heading"><h1>设置</h1></header>
     <section className="settings-section settings-reading-section"><h2>阅读</h2><div className="settings-preference-row"><div className="settings-row-copy"><strong>字号</strong><small>故事、选项与人物资料同步调整</small></div><div aria-label="字号" className="theme-switch font-size-switch">{([['compact','小字'],['standard','标准'],['large','大字']] as Array<[FontSizeMode,string]>).map(([id,label]) => <button aria-pressed={fontSize === id} data-selected={fontSize === id} data-size-option={id} key={id} onClick={() => onFontSize(id)} type="button">{label}</button>)}</div></div></section>
-    <section className="settings-section generation-settings-section"><h2>续写</h2><div className="settings-option-list">
+    {localTrial && !localTrial.generationEnabled ? <section className="settings-section generation-settings-section"><h2>续写</h2><div className="settings-option-list"><article className="settings-option-row settings-generation-row" data-current><div className="settings-row-copy"><span className="settings-row-state">当前试玩</span><strong>{localTrial.modeLabel}</strong><small>使用独立测试命卷</small></div>{localTrial.settingsControl}</article></div></section> : <section className="settings-section generation-settings-section"><h2>续写</h2><div className="settings-option-list">
       <article className="settings-option-row settings-generation-row" data-current={platformSelected}><div className="settings-row-copy"><span className="settings-row-state">{platformSelected ? "正在使用" : "平台提供"}</span><strong>平台续写 · {selectedTier?.name ?? "默认档"}</strong><small>{platformDetail}</small></div><button disabled={isBusy} onClick={platformSelected ? onGenerationSettings : onPlatform} type="button">{platformSelected ? "管理" : "使用"}</button></article>
       {personalAvailable && <article className="settings-option-row settings-generation-row" data-current={personalSelected} data-problem={personalSelected && !personalReady}><div className="settings-row-copy"><span className="settings-row-state">{personalSelected ? personalReady ? "正在使用" : "需要验证" : personalReady ? "已接入" : personalConfigured ? "需要验证" : "可选"}</span><strong>自己的续写</strong><small>{personalDetail}</small></div><button disabled={isBusy} onClick={onGenerationSettings} type="button">{personalAction}</button></article>}
-    </div></section>
-    <details className="settings-fold"><summary><span><strong>命卷</strong><small>查看全部命卷 · 重开当前故事</small></span></summary><div className="settings-fold-content"><p>切换命卷不会改变已经写入的故事；重开只影响当前角色。</p><div className="settings-action-grid"><button disabled={isBusy} onClick={onSaves} type="button">我的命卷</button><button disabled={isBusy} onClick={onReset} type="button"><ReloadIcon aria-hidden="true" />重开此世</button></div></div></details>
-    <details className="settings-fold settings-danger-zone"><summary><span><strong>账号</strong><small>{email || "当前账号"}</small></span></summary><div className="settings-fold-content"><p>{passwordConfigured ? "登录密码已设置。" : "请为旧账号设置登录密码。"}</p><div className="settings-action-grid"><button disabled={isBusy} onClick={onPasswordSettings} type="button">{passwordConfigured ? "修改密码" : "设置密码"}</button><button disabled={isBusy} onClick={onLogout} type="button">退出账号</button></div><button className="delete-account-button" disabled={isBusy} onClick={onDeleteAccount} type="button">注销账号与全部命卷</button></div></details>
+    </div></section>}
+    {onReference && <section className="settings-section"><h2>世界资料</h2><button className="settings-reference-link" onClick={onReference} type="button"><span><strong>查看世界资料</strong><small>世界设定、游玩规则与资料目录</small></span><ArrowRightIcon aria-hidden="true" /></button></section>}
+    <details className="settings-fold"><summary><span><strong>命卷</strong><small>{localTrial ? "查看试玩命卷 · 开始新的试玩" : "查看全部命卷 · 重开当前故事"}</small></span></summary><div className="settings-fold-content"><p>{localTrial ? "新建试玩会保留当前命卷。模拟记录须留在模拟命卷内。" : "切换命卷不会改变已经写入的故事；重开只影响当前角色。"}</p><div className="settings-action-grid">{localTrial ? localTrial.saveControls : <><button disabled={isBusy} onClick={onSaves} type="button">我的命卷</button><button disabled={isBusy} onClick={onReset} type="button"><ReloadIcon aria-hidden="true" />重开此世</button></>}</div></div></details>
+    {(!localTrial || localTrial.accountEnabled) && <details className="settings-fold settings-danger-zone"><summary><span><strong>账号</strong><small>{email || "当前账号"}</small></span></summary><div className="settings-fold-content"><p>{passwordConfigured ? "登录密码已设置。" : "请为旧账号设置登录密码。"}</p><div className="settings-action-grid"><button disabled={isBusy} onClick={onPasswordSettings} type="button">{passwordConfigured ? "修改密码" : "设置密码"}</button><button disabled={isBusy} onClick={onLogout} type="button">退出账号</button></div>{!localTrial && <button className="delete-account-button" disabled={isBusy} onClick={onDeleteAccount} type="button">注销账号与全部命卷</button>}</div></details>}
     <footer className="settings-version"><span>问仙录</span><strong>{version}</strong></footer>
   </div>;
 }

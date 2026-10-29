@@ -1,56 +1,99 @@
-# Responsive H5 Game Agent Guide
+# 问仙录开发规则
 
-## Product Contract
+## 产品原则
 
-- This deliverable is a real responsive H5 game, not a phone mockup.
-- Render directly into the browser viewport. Do not add `PhoneFrame`, `MobileRuntime`, an iPhone/Android bezel, a simulated status bar, a device picker, or a simulated keyboard.
-- Mobile browsers are the primary target. Use `100dvh`, native text inputs, and CSS safe-area environment variables.
-- On wider screens, keep the paper background full-viewport and constrain the readable game content to a centered column.
-- Selected visual direction: `墨卷纪事` — warm xuan-paper, restrained ink wash, celadon accents, cinnabar risk states, and literary Chinese typography.
-- The core loop must support both quick choices and free-text actions.
-- A single world timeline is authoritative. Every named character has an independent record and evolves against the same timeline.
-- Keep product documentation compact: one game-design document and one Agent/data architecture document.
-- Keep release history in `docs/version-history.md`. Every release-oriented commit must update the matching version entry for H5, admin, and backend/data changes; do not hardcode the displayed version in either frontend.
+- 问仙录是一款 AI 修仙互动叙事产品，开发时以真实游戏的质量要求约束代码和体验。
+- 已确认经历和已提交事件必须可追溯，并在相关时可靠召回；不要求每轮装载全部历史，不能因上下文裁剪删除历史或静默改写事实。
+- 游戏内叙事 Agent 默认执行玩家授权的主角行动及其直接后果；玩家明确指导尚未发生的故事、NPC 反应或结果时，可在不冲突既有事实和适用设定的范围内按指导展开。未指定部分自然发展，Agent 不得额外替主角作出未经授权的重大决定或增加同等代价。
+- 未来创作指导在正式生成、提交前不构成已发生事实；叙事偏好不自动等于指定结果，计划和传闻也不能升级为事实。NPC 与环境可以发生符合本轮授权和时间边界的变化；改变已发生事实仍需显式修正。具体已确认范围见 `docs/game-design.md` 第 1.1 节。
+- 玩家可以自由尝试尚未发生的可能；可信状态不能以频繁阻断剧情为代价。
+- 当前不建设精密战力计算、固定物价模拟或由 Java 穷举修仙内容的规则系统。
+- 具体需求、产品方向和玩法参见 `docs/business-requirements.md`、`docs/product-direction.md` 和 `docs/game-design.md`，以用户已确认的当前需求为依据。核对文档适用阶段，发现冲突或过时决策先指出，不将历史方案自动扩展为当前需求或数据操作授权。
 
-## Editing Boundary
+## 0.18 独立设计与已知问题验证
 
-- Build game UI in `frontend/src/Prototype.tsx` and `frontend/src/prototype.css`.
-- `frontend/src/App.tsx` is the deliberately minimal H5 entry and should render `Prototype` directly.
-- Treat `frontend/src/main.tsx`, `frontend/src/styles.css`, `frontend/vite.config.ts`, `frontend/worker/index.js`, and `frontend/scripts/prepare-sites-build.mjs` as runtime files. Edit them only when the requested runtime or deployment behavior requires it.
-- The old `frontend/src/mobile/` package and device assets remain only as unused template material; do not reconnect them to the app.
-- The authoritative game rules live in `backend/src/main/java/com/wenxian/game/`. Do not add a second game engine to the frontend.
-- If an intentional runtime change modifies a locked file, run `npm run update:runtime-lock`, then `npm run check:runtime`.
+- 用户于 2026-09-12 明确要求：仅浅度了解现有功能和代码，不持续借鉴、模仿旧版本设计。当前已经掌握的概况足够启动设计，不再进行历代设计、代码或剧情样案扫描来寻找新玩法。
+- 用户于 2026-09-14 指定内部迭代使用 0.18。对外“2.0”仍是探索称呼，不将产品编号直接用于 API、状态格式、Prompt 或数据表。
+- 先依据用户已确认的需求独立设计玩家目标、核心决策、取舍与反馈，不以旧回合流程、资产字段、成长规则或技术结构作为默认前提；已确认的用户边界和数据保护继续有效。
+- 新稿形成前，不从旧方案摘取机制、拼接旧设计或仅改名称；“记忆可靠、尊重选择、状态一致”等质量要求不计作 2.0 的创新机制。
+- 委派创意任务时使用只含新需求、明确约束及玩家语言问题清单的独立简报，不把旧版本方案、代码和剧情样案传作创意输入。保留问题，不提前指定旧解法；外部同类资料若用于参考，应说明来源与实际借鉴范围。
+- 新玩法差异和已知问题改善分别验收；前者不能由修复、表结构或界面换样替代，后者不能由新机制名称或顺畅样文替代。基础设施可按价值复用，不为证明新颖而重写。
+- 新玩法确定后，才按新方案的具体需要少量读取当前实现，以评估接口、复用与兼容；不反过来修改玩法迎合旧结构。新旧差异首先按已有功能概览核对，不为补稿重新翻阅历史设计。
+- 当前方法与验收入口为 `docs/v0.18-rebuild-method.md`。新候选须说明具体决策、取舍、后果和否决条件，再进入最小技术设计与连续试玩；不继续以扩写通用方法或存储文档充当玩法进展。
+- 历史产品文档保留其原适用范围，不因仍在仓库内就自动成为 0.18 的设计依据。既有“2.0”探索稿仍是过程材料，不自动批准实施。
 
-## Interaction Rules
+## 架构原则
 
-- Keep the scene content vertically scrollable while the action composer and primary navigation remain fixed.
-- Use browser-native focus and keyboard behavior. When the composer is focused, hide the bottom navigation so it does not compete with the soft keyboard.
-- Every control must remain keyboard accessible and have an accessible name.
-- Preserve server persistence with a read-only browser cache when offline. Never run a local rules Agent in place of DeepSeek.
+- 账户、命卷、剧情回合、可信状态、模型调用、回合额度和运营统计必须有明确的领域归属和权威数据源。
+- 上层流程只加载当前操作需要的数据，不得为方便而提前装载无关领域的完整状态。
+- 局部异常应限制在所属领域内，不得扩散到不依赖该数据的流程。
+- 数据库中已确认的结构化状态与事件是游戏事实来源，必须区分当前状态、过去观察、人物声明、传闻和计划；剧情正文、摘要、ChatMemory 和模型上下文不能单独覆盖权威事实或把未证实内容升级为事实。
+- 模型负责理解意图、生成剧情并提出结构化状态建议，不能直接修改数据库权威状态。
+- 服务端程序负责身份、权限、生命周期、幂等、并发、事务、状态版本和安全边界，并执行经过确认、边界明确的玩法规则及世界包声明；不得用零散分支、臆造公式或不完整词表裁决开放剧情。原 `apps/game-api` 使用 Java；用户于 2026-10-11 授权在 `apps/game-runtime` 使用 Python 增量重构，先以独立试玩数据验证。
+- 推荐依赖方向为 `Controller -> Application Service -> Domain -> Repository / Model Gateway`。
+- 禁止 Controller 直接修改持久化状态、Repository 承担业务裁决、H5 根据剧情正文推算角色事实。
+- 允许稳定引用、标签、别名和受限词项用于候选检索；不得仅凭关键词命中裁决剧情结果、身份、权限或事实。不得用账号特判或不断增加同步审阅模型代替问题分析。
+- API、状态版本、Prompt 版本、模型版本和产品发布版本是不同概念，不得相互推断。
+- 详细架构、迁移和部署边界以 `docs/architecture.md` 为准。
 
-## Account Turn Quota Contract
+## 游戏内 Agent 与模型调用
 
-- The platform-sponsored turn limit is authoritative in `gameplay_config.account_public_turn_limit`. It is a cumulative per-account limit, does not reset daily, and changing it applies to both existing and new accounts.
-- Never hardcode the sponsored turn count in H5 copy. Registration success, Adventure usage, World settings, remaining turns, and exhaustion handling must use the backend `AiSettings.turnLimit`, `usedTurns`, and `remainingTurns`.
-- The exhaustion message is managed from the admin Limits page and stored in `gameplay_config.account_public_turn_limit_message`. Player support/QQ copy reuses `gameplay_config.registration_contact_text` so operators maintain contact information in one place.
-- Exhaustion is a normal business outcome, not a model failure. The backend returns HTTP 429 with code `PUBLIC_TURN_LIMIT_REACHED`; H5 must show the dedicated ink-style dialog with the configured message, support contact, QQ copy action when a group number is present, and a route to World/key settings. Do not replace it with “天机紊乱”.
-- A valid player-owned generation key bypasses the sponsored-turn limit and must not increment sponsored usage. Genuine network/provider/5xx failures may still use the generic “天机紊乱” presentation.
+- 原 Java 模块使用 LangChain4j，Python 游戏运行时使用 LangChain；它们是模型应用层，不只作为 HTTP 客户端使用。
+- Prompt 使用 `resources` 下的文件管理，不在大型 Service 中拼接长 Prompt。
+- 按稳定任务职责建立类型化 AI Service 和模型路由，模型输出必须经过类型协议、校验、归并和事务提交。
+- ChatMemory 只能作为可重建的模型上下文，不能替代数据库历史。
+- 平台模型名称和凭证仅保留在服务端；玩家密钥必须加密保存、禁止明文返回和日志输出。
+- 模型失败、格式修复和事务回滚不得重复扣减或错误消耗玩家回合。
+- 真实模型能力不能只由提供商名称或 OpenAI 兼容接口推断，必须通过受控回放验证。
 
-## Deployment and Data Safety
+## 代码与数据边界
 
-- The public H5 entry is `https://wenxianlu.cn` (also `https://www.wenxianlu.cn`). Alibaba Cloud DNS points both `@` and `www` to the Hong Kong SWAS public IP `8.217.11.8` (instance `c895cacc73c9474a83623882f93853e1`, `Ubuntu-dhmd`, Ubuntu 22.04). Do not change these DNS records or move traffic without explicit user approval.
-- The Hong Kong server is an HTTPS edge only: Nginx serves `/var/www/wenxian/current`, and `/api/` proxies to the JD Cloud H5 origin at `http://116.198.232.119:25173`. Java, the admin backend, and MySQL do not run on the Hong Kong server. The admin console remains on the JD Cloud deployment.
-- Hong Kong Nginx config is `/etc/nginx/sites-available/wenxian` with a symlink in `sites-enabled`. The Let's Encrypt certificate covers `wenxianlu.cn` and `www.wenxianlu.cn`; files live under `/etc/letsencrypt/live/wenxianlu.cn/`, and `certbot.timer` performs renewal. Never copy or commit the private key. Verify with `nginx -t`, `systemctl status certbot.timer`, and `certbot renew --dry-run` after certificate or Nginx changes.
-- The Mac uses the dedicated SSH identity `/Users/ben/.ssh/id_ed25519_wenxian_hk` for `root@8.217.11.8`. This path identifies a local private key and must never be copied into the repository. Keep TCP 80/443 public; restrict TCP 22 to trusted source IPs when operational access allows it.
-- A frontend release must update the Hong Kong static directory (prefer an atomic release/symlink deployment) and verify both HTTPS hostnames plus one hashed asset. Backend releases still happen on JD Cloud; an H5 `502` on `/api/` normally means the JD origin/backend is unavailable, not that TLS or the Hong Kong static host failed.
-- The shared test database is Alibaba Cloud RDS MySQL 8, database `wenxian`. The H5 backend and admin backend must use the same RDS database through their private external Spring configuration.
-- The old Docker MySQL instance on the JD Cloud test server is retained only as a short-term rollback source and must remain stopped during normal operation. Do not start it as the application database or expose its port publicly.
-- Server secrets belong only in `/opt/wenxian-test/application-secret.yml` and `/opt/wenxian-admin/application-secret.yml` (or environment variables). Never commit database passwords, API keys, temporary client option files, dumps, or production data.
-- Before a database cutover, stop both backends, create an off-server backup, import into an empty target database, and compare every table's exact row count before switching connection settings.
-- After database or deployment changes, verify both backend processes, `/api/v1/health`, one database-backed public endpoint, and the admin login route before reopening the service.
+- H5：`apps/player-h5`
+- 原游戏后端：`apps/game-api`；新增 Python 游戏运行时：`apps/game-runtime`（当前独立本地试玩，尚未替换正式入口）
+- 管理台前端：`apps/admin-web`
+- 管理台后端：`apps/admin-api`
+- 开物（Loreforge，修仙内容工坊）：`loreforge/`。用户于 2026-09-15 确认先放在当前目录和 Git 仓库中，后续再调整；代码、专属内容和文档在该子目录内组织，产品与服务职责保持独立，不提前拆仓库或初始化嵌套仓库。目录入口见 `loreforge/README.md`。
+- 原数据库迁移：`database/migrations`；独立 Python 试玩 SQLite 迁移：`apps/game-runtime/migrations`，不得写入旧游戏或资料库数据库。
+- 新业务使用稳定领域名称，不使用 V0.14、V0.15、V0.16 等发布版本号命名包、接口或数据表。
+- 新增或修改的 MySQL 表、关键字段和业务保护索引必须有中文注释。
+- 新增 Service、Engine、Repository、Migrator 和复杂 DTO 必须有说明职责与失败边界的中文 Javadoc；Python 模块使用中文 docstring。
+- 数据库结构变化必须提供显式迁移脚本；`CREATE TABLE IF NOT EXISTS` 不能替代已有表升级。
+- 表结构或关键字段变化必须同步更新 `docs/data-dictionary.md`。
+- 不得提交数据库密码、API Key、私钥、数据导出或包含真实玩家隐私的文件。
+- 现有未提交内容默认属于用户；不得擅自清理、覆盖、暂存或提交无关文件。
 
-## Verification
+## H5 交互原则
 
-- Run `mvn test` in `backend`, then `npm run check:runtime`, `npm run build`, and `npm run test:sites` in `frontend` before handoff.
-- In Codex Desktop, keep the local preview running and verify the actual H5 in the in-app browser at mobile and wide viewport sizes.
-- Do not deploy unless the user explicitly asks to publish or share.
+- H5 是响应式网页，不得使用手机外壳、模拟状态栏、设备选择器或模拟键盘。
+- 优先适配手机，同时保证平板和桌面端可用。
+- 使用浏览器原生输入与键盘行为；玩家提交行动后应立即看见已选内容和加载状态。
+- 请求失败时保留玩家输入，并提供明确、可恢复的反馈。
+- 不向玩家展示 Java、JSON、模型名称、内部状态枚举或技术错误堆栈。
+- 页面只展示后端已经确认的状态，不依据剧情文本自行推导事实。
+
+## 开发流程
+
+开发新功能前，必须明确：
+
+1. 玩家目标与已确认需求。
+2. 领域归属和权威数据来源。
+3. 游戏内叙事 Agent、Java、H5 与数据库的职责。
+4. 状态变化、异常处理和降级行为。
+5. 旧数据兼容、迁移或重置策略。
+6. 最小验证、整体回放和回滚方式。
+
+- 不要从单次事故直接推导长期架构，也不要通过持续打补丁代替领域设计。
+- 小改动只做与风险相称的最低验证，并入同一核心里程碑后再进行整体回归。
+- 数据库、认证、额度、密钥、数据删除和并发事务属于高风险改动，必须单独验证安全与回滚边界。
+- 每个可独立验收的功能完成最低验证后单独提交，不把多个无关功能混在同一提交中。
+- 汇报时区分“已编码并最低验证”“已并入核心里程碑”“已完成整体回归”。
+
+## 验证与发布
+
+- 后端构建与测试使用 Java 21，执行前核对 Maven 使用的 JDK；在 `apps/game-api` 按改动运行相关测试，模块整体回归执行 `mvn test`。环境与命令见 `docs/architecture.md`。
+- Python 运行时使用 `uv sync --locked`、`uv run pytest` 和 `uv run ruff check src tests`。真实模型回放须先明确模型、预算和范围，fixture/离线模型不作为玩法签收。
+- H5 按改动范围验证：`npm run build` 已包含 `check:runtime`；交互变化运行相关 `test:runtime` 浏览器用例并检查受影响页面，Sites 相关变化运行 `npm run test:sites`；整体回归执行全部适用检查。
+- 模型、Prompt、上下文、事实裁决或核心叙事流程的改动，在宣称对应核心玩法完成前必须通过受控真实模型连续回放，检查延迟、错误恢复、状态一致性和玩家可见结果；文档或基础设施的局部验收不自动触发该回放。
+- 单项测试通过不代表核心功能完成；完成还要求默认执行路径切换、矛盾旧路径退出以及整体回放通过。
+- 未经用户明确授权不得部署、切流量、修改共享数据库或删除数据。
+- 版本变化记录到 `docs/version-history.md`，数据库字典记录到 `docs/data-dictionary.md`，详细运行与部署方式记录到 `docs/architecture.md`。

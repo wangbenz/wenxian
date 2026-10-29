@@ -33,14 +33,8 @@ function keepSubmittedChoiceVisible(target: HTMLElement) {
   }, 40);
 }
 
-function AgentProgress() {
-  const phases = ["承接前情", "续写故事", "写入命卷"];
-  const [phase, setPhase] = useState(0);
-  useEffect(() => {
-    const timer = window.setInterval(() => setPhase((current) => Math.min(phases.length - 1, current + 1)), 2200);
-    return () => window.clearInterval(timer);
-  }, []);
-  return <section aria-atomic="true" className="chapter-generating" data-phase={phase} role="status"><div className="chapter-progress-copy"><small>命卷续写中</small><strong>正在续写这一回</strong><p>{phases[phase]}</p></div><div aria-hidden="true" className="chapter-writing-line"><span /></div></section>;
+function ActionWaiting() {
+  return <section aria-atomic="true" className="chapter-generating" role="status"><div className="chapter-progress-copy"><small>命卷续写中</small><strong>正在等待这一回的结果</strong><p>收到结果后会更新故事。</p></div><div aria-hidden="true" className="chapter-writing-line"><span /></div></section>;
 }
 
 export function AdventureView({
@@ -97,7 +91,7 @@ export function AdventureView({
     {!isBusy && recoveryPanel}
     {game.pendingDecision && <section className="pending-decision" aria-label="等待你的决定" role="status"><p className="eyebrow">由你决定</p><strong>{game.pendingDecision.prompt}</strong><small>命卷已经停在这里，不会替你作出这个选择。</small></section>}
     {isBusy && pendingAction && <section aria-label="已确认的行动" className="submitted-action" role="status"><span>已确认</span><p>{pendingAction.label}</p></section>}
-    {isBusy && <AgentProgress />}
+    {isBusy && <ActionWaiting />}
     {!isBusy && <section className="chapter-decision" aria-labelledby="chapter-decision-title" data-recovery={Boolean(error) || undefined}>
       <header><h2 id="chapter-decision-title">{actionLocked ? "原行动结果尚未确认" : error ? "重新选择，或原样再试" : "你准备如何回应？"}</h2></header>
       {!actionLocked && <div className="choice-list" aria-label="可选行动">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ArrowLeftIcon, ChevronDownIcon, Cross2Icon, EnterIcon, Pencil1Icon } from "@radix-ui/react-icons";
+import { ArrowLeftIcon } from "@radix-ui/react-icons";
 import {
   ApiError,
   gameApi,
@@ -79,6 +79,9 @@ import {
 import { problemFrom, type UiProblem } from "./shared/problem";
 import { DesignPreviewApp } from "./design/DesignPreview";
 import { DesignReviewHub } from "./design/DesignReviewHub";
+import RuntimeApp from "./runtime/RuntimeApp";
+import AccountRuntimeApp from "./runtime/AccountRuntimeApp";
+import { ActionComposer } from "./features/gameplay/ActionComposer";
 
 function confirmedOrigin(draft: CharacterDraft, raceId: string,
                          route: StoryCharacterRoute): StoryCharacterOriginSubmission {
@@ -104,6 +107,14 @@ function hasPreparedOpening(route: StoryCharacterRoute): boolean {
 }
 
 export default function PlayerApp() {
+  const runtime = new URLSearchParams(window.location.search).get("runtime")
+    ?? (import.meta.env.DEV ? import.meta.env.VITE_LOCAL_PLAYER_RUNTIME : undefined);
+  if (runtime === "python-account") return <AccountRuntimeApp />;
+  return runtime === "python"
+    ? <RuntimeApp /> : <LegacyPlayerApp />;
+}
+
+function LegacyPlayerApp() {
   const [stage, setStage] = useState<AppStage>("loading");
   const [tab, setTab] = useState<TabId>("adventure");
   const [auth, setAuth] = useState<AuthResponse | null>(null);
@@ -1069,10 +1080,7 @@ export default function PlayerApp() {
           <h3>{actionLocked ? "行动结果待确认" : "原行动已恢复"}</h3>
           <p>{isCheckingRecovery ? "正在查询原行动结果…" : currentRecovery.message ?? "原行动已保留，正在确认这次行动的结果。"}</p>
           {actionLocked && <div className="turn-recovery-actions"><button disabled={isBusy || syncMode !== "server"} onClick={() => void continueStoryTurnRecovery()} type="button">继续查询</button>{recoveryStatus === "UNKNOWN" && <button disabled={isBusy || syncMode !== "server"} onClick={() => void continueStoryTurnRecovery(true)} type="button">重试原行动</button>}</div>}
-        </section> : null} actionPanel={!isBusy || isCheckingRecovery ? <section aria-labelledby="turn-action-title" className="turn-action-zone" data-testid="turn-action-zone">
-          <button disabled={actionLocked} aria-expanded={customActionOpen} aria-label="展开自定义行动，不采用推荐选项时，亲自描述下一步" className="turn-action-toggle" onClick={() => setCustomActionOpen((current) => !current)} type="button"><span className="turn-action-icon"><Pencil1Icon /></span><strong id="turn-action-title">或，写下自己的行动</strong><ChevronDownIcon aria-hidden="true" /></button>
-          {customActionOpen && <form className="action-composer" data-has-draft={Boolean(draft.trim())} onSubmit={(event) => { event.preventDefault(); if (actionLocked || !draft.trim()) return; const textarea = event.currentTarget.querySelector("textarea"); textarea?.blur(); setIsComposerFocused(false); void takeTurn("TEXT", { content: draft.trim() }); }}><div className="action-composer-input"><textarea aria-label="自由行动" readOnly={actionLocked} maxLength={300} onBlur={() => window.setTimeout(() => setIsComposerFocused(false), 120)} onChange={(event) => updateActionDraft(event.currentTarget.value)} onFocus={(event) => { const target = event.currentTarget; setIsComposerFocused(true); revealFormControl(target, 160); }} placeholder="例如：先不登船，向茶摊老板打听昨夜靠岸的黑篷船。" rows={4} value={draft} />{draft && !actionLocked && <button aria-label="清空输入" className="clear-draft" onClick={() => updateActionDraft("")} type="button"><Cross2Icon /></button>}</div><div className="action-composer-footer"><span className="action-composer-meta">{actionLocked ? "确认原行动结果后才能提交新行动" : "草稿会在切换选项后保留"}</span><button aria-label="确认此行动" className="act-button" disabled={actionLocked || !draft.trim() || syncMode !== "server"} type="submit"><span>确认行动</span><EnterIcon /></button></div></form>}
-        </section> : null} choices={choices} customActionActive={customActionOpen} error={error} game={game} generation={generationSettings} isBusy={isBusy && !isCheckingRecovery} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onChoiceMode={() => setCustomActionOpen(false)} pendingAction={pendingAction} />}
+        </section> : null} actionPanel={!isBusy || isCheckingRecovery ? <ActionComposer open={customActionOpen} draft={draft} locked={actionLocked} offline={syncMode !== "server"} maxLength={300} placeholder="例如：先不登船，向茶摊老板打听昨夜靠岸的黑篷船。" onToggle={() => setCustomActionOpen(current => !current)} onDraft={updateActionDraft} onFocusChange={setIsComposerFocused} onSubmit={action => void takeTurn("TEXT", { content: action })} /> : null} choices={choices} customActionActive={customActionOpen} error={error} game={game} generation={generationSettings} isBusy={isBusy && !isCheckingRecovery} offline={syncMode !== "server"} onChoice={(choiceId) => void takeTurn("CHOICE", { choiceId })} onChoiceMode={() => setCustomActionOpen(false)} pendingAction={pendingAction} />}
         {stage === "game" && game?.phase === "playing" && tab === "character" && <CharacterView game={game} isBusy={isBusy} onCleanup={setCleanupTarget} />}
         {stage === "game" && game?.phase === "playing" && tab === "chronicle" && <ChronicleView game={game} isBusy={isBusy} onCorrection={openCorrection} />}
         {stage === "game" && game?.phase === "playing" && tab === "settings" && <SettingsView email={email} fontSize={fontSize} generation={generationSettings} isBusy={isBusy} onDeleteAccount={() => setShowDeleteAccount(true)} onFontSize={setFontSize} onGenerationSettings={() => setShowGenerationSettings(true)} onLogout={() => void logout()} onPasswordSettings={() => setShowPasswordSettings(true)} onPlatform={() => void usePlatformGeneration()} onReset={resetGame} onSaves={() => setStage("saves")} passwordConfigured={auth?.passwordConfigured ?? false} version={bootstrap?.version ?? "版本同步中"} />}

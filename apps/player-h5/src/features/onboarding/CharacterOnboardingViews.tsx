@@ -17,6 +17,12 @@ const PHASE_NAMES: Record<string, string> = {
   PERFECT: "圆满",
 };
 
+type CreationStep = "identity" | "path" | "review";
+function CreationFlowHeading({ step, description }: { step: CreationStep; description: string }) {
+  const stepNumber = step === "identity" ? 1 : step === "path" ? 2 : 3;
+  return <header className="creation-flow-heading"><div><h1>{step === "identity" ? "定下此身" : step === "path" ? "选择来处" : "开启此卷"}</h1></div><p>{description}</p><ol className="creation-progress" aria-label={`创建命卷，第${stepNumber}步，共3步`}>{["定其身", "择其途", "启其卷"].map((label, index) => <li aria-current={stepNumber === index + 1 ? "step" : undefined} data-complete={stepNumber > index + 1} key={label}><span /><b>{["一", "二", "三"][index]}</b><small>{label}</small></li>)}</ol></header>;
+}
+
 function RealmScalePreview({ world, raceId }: { world: StoryWorldPackageOption; raceId: string }) {
   const selectedRaceOption = world.races.find((race) => race.raceId === raceId) ?? world.races[0];
   const selectedStages = world.realmScale.ranks.map((rank) => ({
@@ -101,9 +107,6 @@ export function CharacterCreationView({
     preferences.pace.find((option) => option.code === draft.playPreference.pace)?.name,
     preferences.guidance.find((option) => option.code === draft.playPreference.guidance)?.name,
   ].filter(Boolean).join(" · ");
-  const stepNumber = step === "identity" ? 1 : step === "path" ? 2 : 3;
-  const stepLabels = ["定其身", "择其途", "启其卷"];
-  const stepMarks = ["一", "二", "三"];
   const moveTo = (nextStep: "identity" | "path" | "review") => {
     setStep(nextStep);
     window.requestAnimationFrame(() => creationViewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -134,13 +137,7 @@ export function CharacterCreationView({
   return (
     <div className="creation-view creation-flow-view" data-creation-step={step} ref={creationViewRef}>
       <section className="creation-flow-card">
-        <header className="creation-flow-heading">
-          <div><h1>{step === "identity" ? "定下此身" : step === "path" ? "选择来处" : "开启此卷"}</h1></div>
-          <p>{step === "identity" ? "姓名、族属与身份由你确定。" : step === "path" ? "选择来处，再决定故事更看重什么。" : "核对开篇；确认后，这些内容会写入命卷。"}</p>
-          <ol className="creation-progress" aria-label={`创建命卷，第${stepNumber}步，共3步`}>
-            {stepLabels.map((label, index) => <li aria-current={stepNumber === index + 1 ? "step" : undefined} data-complete={stepNumber > index + 1} key={label}><span /><b>{stepMarks[index]}</b><small>{label}</small></li>)}
-          </ol>
-        </header>
+        <CreationFlowHeading step={step} description={step === "identity" ? "姓名、族属与身份由你确定。" : step === "path" ? "选择来处，再决定故事更看重什么。" : "核对开篇；确认后，这些内容会写入命卷。"} />
 
         {step === "identity" && <div className="creation-stage creation-identity-stage">
           <section className="creation-world-strip" aria-label="当前世界">
@@ -247,6 +244,9 @@ export function CharacterCreationView({
     </div>
   );
 }
+
+export { LocalCharacterCreationView } from "./LocalCharacterCreationView";
+export type { LocalCharacterDraft, LocalOpeningPreview } from "./LocalCharacterCreationView";
 
 function PreferenceOptionGroup({ legend, options, selected, multiple = false, onChange }: {
   legend: string;

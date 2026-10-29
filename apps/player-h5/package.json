@@ -9,9 +9,14 @@
     "test:runtime": "playwright test",
     "test:sites": "node --test tests/sites-worker.test.mjs",
     "predev": "npm run check:runtime",
-    "dev": "vite",
+    "dev": "uv run --locked --project ../game-runtime python ../game-runtime/scripts/run_local_player.py",
+    "dev:ui": "vite",
+    "dev:creation": "vite --config vite.creation-preview.config.ts",
+    "dev:legacy": "vite --config vite.config.ts",
+    "test:local": "playwright test --config playwright.local.config.ts",
     "prebuild": "npm run check:runtime",
-    "build": "tsc && vite build && node scripts/prepare-sites-build.mjs"
+    "build": "tsc && vite build && node scripts/prepare-sites-build.mjs",
+    "build:creation": "tsc && vite build --config vite.creation-preview.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/noto-serif-sc": "5.3.0",
