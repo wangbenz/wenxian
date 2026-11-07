@@ -1,0 +1,96 @@
+{
+  "format_version": "content-library-v1",
+  "note": "格式示例，内容为草稿，待 Feno 审定，不代表正式数值。",
+  "realms": [
+    {
+      "key": "lianqi",
+      "name": "炼气",
+      "aliases": ["练气"],
+      "description": "引天地灵气入体，在经脉中运转积蓄法力，是修仙的第一个大境界。",
+      "usage": "叙事中区分凡人与修士的起点；炼气修士可以施展简单术法、驱使下品法器。",
+      "limitations": "法力有限，连续施法很快力竭；肉身仍接近凡人，刀剑和毒物依然致命。",
+      "source": "通用修仙设定",
+      "order": 1,
+      "detail": "full",
+      "stages": [
+        {"key": "l1", "name": "一层"}, {"key": "l2", "name": "二层"}, {"key": "l3", "name": "三层"},
+        {"key": "l4", "name": "四层"}, {"key": "l5", "name": "五层"}, {"key": "l6", "name": "六层"},
+        {"key": "l7", "name": "七层"}, {"key": "l8", "name": "八层"}, {"key": "l9", "name": "九层"},
+        {"key": "perfect", "name": "大圆满"}
+      ],
+      "lifespan_years": 120,
+      "can": [
+        "感知并吸纳灵气，打坐恢复法力",
+        "施展火球术、御物术等基础术法，每次只能维持片刻",
+        "驱使下品法器，炼气后期可勉强驱使中品法器",
+        "体力和反应略强于常人"
+      ],
+      "cannot": [
+        "御器飞行",
+        "神识离体探查",
+        "长时间辟谷而不进食",
+        "正面击败筑基修士"
+      ],
+      "breakthrough": {
+        "requires": ["身具灵根", "修习入门功法", "首次引气入体成功"],
+        "aids": ["juqi-dan"],
+        "risk": "引气失败会气血翻涌、卧床数日；强行冲关可能损伤经脉。"
+      }
+    }
+  ],
+  "items": [
+    {
+      "key": "spirit-stone-low",
+      "name": "下品灵石",
+      "aliases": ["灵石"],
+      "description": "蕴含少量灵气的晶石，修士之间最常用的货币。",
+      "usage": "交易结算；也可握在手中吸取灵气辅助打坐，吸尽后化为普通石头。",
+      "limitations": "凡人无法感知其价值；与凡俗银两没有固定汇率。",
+      "source": "通用修仙设定",
+      "category": "spirit_stone",
+      "grade": "下品",
+      "rarity": "common",
+      "realm": "lianqi",
+      "price": {"currency": "spirit_stone", "min": 1, "max": 1, "unit": "下品灵石"},
+      "obtain": ["market", "sect", "reward", "monster"],
+      "found_in": ["cultivator-market"],
+      "stackable": true,
+      "effect": {"type": "currency", "note": "一百枚下品灵石可兑换一枚中品灵石。"}
+    },
+    {
+      "key": "juqi-dan",
+      "name": "聚气丹",
+      "description": "以青灵草为主材炼成的一品丹药，色泽青白，带淡淡草香。",
+      "usage": "炼气期修士服用后打坐一夜，修为进展明显快于平时。",
+      "limitations": "对筑基及以上修士几乎无效；不能直接让人突破小境界。",
+      "source": "通用修仙设定",
+      "category": "pill",
+      "grade": "一品",
+      "rarity": "common",
+      "realm": "lianqi",
+      "price": {"currency": "spirit_stone", "min": 3, "max": 5, "unit": "下品灵石"},
+      "obtain": ["market", "sect", "craft"],
+      "found_in": ["cultivator-market"],
+      "stackable": true,
+      "effect": {"type": "cultivation_boost", "note": "加快一夜打坐的修炼进展。"},
+      "side_effects": "短期内连续服用会积累丹毒，效果逐次递减。"
+    },
+    {
+      "key": "flying-sword-low",
+      "name": "下品飞剑",
+      "description": "以精铁掺少量灵材锻成的长剑，剑身刻有简单的驱使符纹。",
+      "usage": "注入法力后可离手飞出攻击数丈内的目标，是炼气修士最常见的攻击法器。",
+      "limitations": "炼气初期只能驱使片刻；不能载人飞行；遇到中品以上法器容易受损。",
+      "source": "通用修仙设定",
+      "category": "artifact",
+      "grade": "下品法器",
+      "rarity": "uncommon",
+      "realm": "lianqi",
+      "price": {"currency": "spirit_stone", "min": 30, "max": 60, "unit": "下品灵石"},
+      "obtain": ["market", "sect", "reward"],
+      "found_in": ["cultivator-market"],
+      "stackable": false,
+      "effect": {"type": "attack", "note": "驱使飞剑攻击数丈内的目标。"}
+    }
+  ]
+}

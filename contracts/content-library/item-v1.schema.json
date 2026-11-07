@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wenxian.local/contracts/content-library/item-v1.schema.json",
+  "title": "问仙录物品定义 v1",
+  "description": "只收录修行物品；凡物由运行时管理，不进入资料库。",
+  "type": "object",
+  "allOf": [
+    { "$ref": "common-v1.schema.json#/$defs/commonFields" },
+    {
+      "if": { "properties": { "category": { "const": "spirit_stone" } } },
+      "then": { "properties": { "grade": { "enum": ["下品", "中品", "上品", "极品"] }, "effect": { "properties": { "type": { "const": "currency" } } } } }
+    },
+    {
+      "if": { "properties": { "category": { "enum": ["pill", "talisman", "herb", "material"] } } },
+      "then": { "properties": { "grade": { "enum": ["一品", "二品", "三品", "四品", "五品", "六品", "七品", "八品", "九品"] } } }
+    },
+    {
+      "if": { "properties": { "category": { "const": "artifact" } } },
+      "then": { "properties": { "grade": { "enum": ["下品法器", "中品法器", "上品法器", "极品法器", "法宝", "灵宝"] } } }
+    },
+    {
+      "if": { "properties": { "category": { "const": "manual" } } },
+      "then": { "properties": { "grade": { "pattern": "^[黄玄地天]阶[下中上]品$" } } }
+    },
+    {
+      "if": { "properties": { "category": { "const": "material" } } },
+      "then": { "properties": { "effect": { "properties": { "type": { "const": "material" } } } } }
+    }
+  ],
+  "required": ["category", "grade", "rarity", "realm", "price", "obtain", "found_in", "stackable", "effect"],
+  "properties": {
+    "key": true, "name": true, "aliases": true, "description": true, "usage": true,
+    "limitations": true, "source": true, "revision": true, "content_hash": true,
+    "category": { "type": "string", "enum": ["spirit_stone", "pill", "talisman", "herb", "material", "artifact", "manual"] },
+    "grade": { "type": "string" },
+    "rarity": { "$ref": "common-v1.schema.json#/$defs/rarity" },
+    "realm": { "$ref": "common-v1.schema.json#/$defs/key", "description": "主要适用境界 key（背景参考，不是使用门槛）" },
+    "price": {
+      "type": "object",
+      "required": ["currency", "min", "max", "unit"],
+      "properties": {
+        "currency": { "type": "string", "enum": ["spirit_stone", "silver"] },
+        "min": { "type": "number", "minimum": 0 },
+        "max": { "type": "number", "minimum": 0 },
+        "unit": { "type": "string", "enum": ["下品灵石", "两"] }
+      },
+      "additionalProperties": false
+    },
+    "obtain": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "enum": ["market", "sect", "gather", "craft", "monster", "secret_realm", "reward"] }
+    },
+    "found_in": { "type": "array", "items": { "$ref": "common-v1.schema.json#/$defs/key" }, "minItems": 1 },
+    "stackable": { "type": "boolean" },
+    "effect": {
+      "type": "object",
+      "required": ["type", "note"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["cultivation_boost", "breakthrough_aid", "heal", "restore_spirit", "sustenance", "protect",
+                   "attack", "movement", "storage", "utility", "material", "currency"]
+        },
+        "note": { "$ref": "common-v1.schema.json#/$defs/text" }
+      },
+      "additionalProperties": false
+    },
+    "side_effects": { "type": "string", "maxLength": 500 }
+  },
+  "additionalProperties": false
+}
