@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wenxian.local/contracts/content-library/common-v1.schema.json",
+  "title": "问仙录资料库通用定义 v1",
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+      "maxLength": 80,
+      "description": "稳定编号，创建后不可修改"
+    },
+    "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "shortText": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "rarity": {
+      "type": "string",
+      "enum": ["common", "uncommon", "rare", "precious"],
+      "description": "常见 / 少见 / 稀有 / 珍稀"
+    },
+    "commonFields": {
+      "type": "object",
+      "required": ["key", "name", "description", "usage", "limitations", "source"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "name": { "$ref": "#/$defs/shortText" },
+        "aliases": { "type": "array", "items": { "$ref": "#/$defs/shortText" }, "uniqueItems": true, "maxItems": 10 },
+        "description": { "$ref": "#/$defs/text" },
+        "usage": { "$ref": "#/$defs/text" },
+        "limitations": { "$ref": "#/$defs/text" },
+        "source": { "$ref": "#/$defs/shortText" },
+        "revision": { "type": "integer", "minimum": 1, "description": "由资料库维护" },
+        "content_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "由资料库计算" }
+      }
+    }
+  }
+}
