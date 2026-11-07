@@ -54,7 +54,7 @@ Schema：[`realm-v1.schema.json`](realm-v1.schema.json)
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `order` | integer | 大境界顺序，凡人为 0，炼气为 1，依次递增。服务端用它比较强弱 |
-| `detail` | `full` / `placeholder` | 第一版只把凡人、炼气、筑基写成 `full`，其余为占位 |
+| `detail` | `full` / `placeholder` | 第一个大版本覆盖凡人到飞升；内容分阶段上线，阶段一先把凡人、炼气、筑基写成 `full`，其余随后续阶段补齐（见 `docs/v1-game-design.md` 第 12 节） |
 | `stages` | `{key, name}[]` | 小阶段，按顺序排列 |
 | `lifespan_years` | integer | 参考寿元（岁），供叙事与 NPC 衰老使用 |
 | `can` | string[] | 这个境界**能做到**的事；AI 只能在此范围内描写主角能力 |
