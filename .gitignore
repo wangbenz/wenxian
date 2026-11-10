@@ -13,6 +13,8 @@ backups/
 .idea/
 .vscode/
 *.iml
+# 旧工坊已退出源码；保留本机未跟踪的数据库、备份和依赖。
+/loreforge/
 .codex-audit/
 apps/admin-web/qa/
 apps/admin-web/design-qa.md

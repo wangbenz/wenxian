@@ -2,7 +2,7 @@
 
 > 公开代码快照：2026-10-29。源码取自本地开发检查点 `fb250d8`，公开分支为 `codex/public-code-2026-10-29`。本次仅同步应用代码、运行资源、测试及必要运行说明；内部设计稿、营销素材、回放证据和未公开提交历史未随本次新增。保留的旧文档与素材来自此前已公开的父提交，不能当作本轮新设计或验收结论。
 >
-> Python 玩家运行时已包含在 `apps/game-runtime`，H5 在 `apps/player-h5`。出生至入道第一章和 D20 判定尚未接入当前主流程；运行时资料服务当前为独立的 `wenxianlu-library`，不能直接用本仓库 Loreforge/Open5e 服务替代。详细配置见 `apps/game-runtime/README.md`。快照不包含本地凭证、数据库或玩家存档；内部文档链接可能不在此公开快照内。
+> Python 玩家运行时已包含在 `apps/game-runtime`，H5 在 `apps/player-h5`。出生至入道第一章和 D20 判定尚未接入当前主流程；运行时资料服务当前为独立的 `wenxianlu-library`，旧 Loreforge/Open5e 服务已退出本仓库。详细配置见 `apps/game-runtime/README.md`。快照不包含本地凭证、数据库或玩家存档；内部文档链接可能不在此公开快照内。
 
 《问仙录》是一个响应式、对话驱动的单人修仙叙事应用。玩家通过推荐行动或自由输入推进命卷；服务端负责账号、模型路由、额度、权威事实、回合事务和长期存档，模型只生成结构化意图与叙事，不直接修改数据库。
 
@@ -30,6 +30,8 @@ wenxian/
 ```
 
 各应用独立运行。Python 本地玩家库与原 Java/MySQL、资料库分开；原管理台不能代替游戏服务推进命卷或修改回合事实。
+
+公共资料服务位于独立仓库 [wenxianlu-library](https://github.com/wangbenz/wenxianlu-library)。旧 Loreforge 工坊已于 2026-11-10 从源码移除，其消费者原型 `prototypes/loreforge-dm` 停用；历史实现由 Git 保留。本机遗留的旧数据库、备份和依赖继续忽略，不随此次源码清理删除。JSON 资料库重构是否合并及游戏接口兼容，须分别核对，不能将工坊移除视为新资料服务已完成切换。
 
 详细目录边界见 [项目结构说明](docs/project-structure.md)。
 
