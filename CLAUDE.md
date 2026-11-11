@@ -35,7 +35,7 @@ GitHub 拉取分支为 `codex/public-code-2026-10-29`，不是默认 `main`。�
 | `apps/game-runtime/` | Codex 负责的 Python 玩家后端；FastAPI、LangChain、独立 SQLite |
 | `apps/game-api/`、`apps/admin-api/` | 原 Java 21、Spring Boot 游戏后端与管理台后端；由 Codex 按任务处理 |
 | `database/migrations/` | 原 MySQL 迁移；Python 迁移位于 `apps/game-runtime/migrations/` |
-| `loreforge/` | 开物内容工坊，职责独立；不属于本次前端分工自动扩展的范围 |
+| 独立仓库 `wenxianlu-library` | 公共资料服务，通过 HTTP 读取；旧 `loreforge/` 已于 2026-11-10 移除，`prototypes/loreforge-dm` 停用，历史代码可由 Git 追溯 |
 | `contracts/`、`docs/` | 共享契约和说明；修改时与另一方对齐，阅读时区分适用阶段 |
 
 服务端和数据库负责身份、权限、命卷归属、可信事实、幂等、并发、版本与回合事务。模型提出叙事和结构化建议，服务端校验后提交；H5 展示后端已确认结果，不从正文推算物品、余额、境界或人物事实。

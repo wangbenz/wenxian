@@ -52,7 +52,7 @@
 - 原游戏后端：`apps/game-api`；新增 Python 游戏运行时：`apps/game-runtime`（当前独立本地试玩，尚未替换正式入口）
 - 管理台前端：`apps/admin-web`
 - 管理台后端：`apps/admin-api`
-- 开物（Loreforge，修仙内容工坊）：`loreforge/`。用户于 2026-09-15 确认先放在当前目录和 Git 仓库中，后续再调整；代码、专属内容和文档在该子目录内组织，产品与服务职责保持独立，不提前拆仓库或初始化嵌套仓库。目录入口见 `loreforge/README.md`。
+- 公共资料由独立仓库 `wenxianlu-library` 提供，经 HTTP 读取；不得与玩家状态共库。用户于 2026-11-10 确认移除旧 `loreforge/` 工坊；不再作为开发或启动入口，历史代码由 Git 追溯。本机遗留数据库和备份不随源码清理删除；`prototypes/loreforge-dm` 仅作停用的历史实验保留。
 - 原数据库迁移：`database/migrations`；独立 Python 试玩 SQLite 迁移：`apps/game-runtime/migrations`，不得写入旧游戏或资料库数据库。
 - 新业务使用稳定领域名称，不使用 V0.14、V0.15、V0.16 等发布版本号命名包、接口或数据表。
 - 新增或修改的 MySQL 表、关键字段和业务保护索引必须有中文注释。
